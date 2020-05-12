@@ -1,0 +1,844 @@
+using LinearAlgebra
+using NPZ
+using Distributed
+using SparseArrays
+using Random
+using MatrixNetworks
+
+PROJECT_PATH = "/Users/ccolley/PycharmProjects/heresWaldo"
+SST_PATH = "/Users/ccolley/Documents/Research/SSSTensor/src/SSSTensor.jl" # local path
+#SST_PATH = "/homes/ccolley/Documents/Software/SSSTensor/src/SSSTensor.jl" #Nilpotent path
+include(SST_PATH)
+
+# https://github.com/eikmeier/TGPA.git
+#TGPA_PATH = "Users/ccolley/Code/TGPA"
+#include(TGPA_PATH*"/TGPA_generator.jl")
+
+#local graph repos
+MULTIMAGNA="/Users/ccolley/PycharmProjects/Graph_Data/MultiMagnaExamples/MultiMagna_TAME"
+PROTEIN_TENSORS = PROJECT_PATH*"/data/Protein_structure_data"
+
+
+function pairwise_alignment(dir)
+
+    #align all .ssten files
+    ssten_files = sort([f for f in readdir(dir) if occursin(".ssten",f)])
+
+    Best_alignment_ratio = Array{Float64}(undef,length(ssten_files),length(ssten_files))
+
+    for i in 1:length(ssten_files)
+        for j in i+1:length(ssten_files)
+            Best_alignment_ratio[i,j] = align_from_files(dir*"/"*ssten_files[i],dir*"/"*ssten_files[j])
+            Best_alignment_ratio[i,j] = Best_alignment_ratio[j,i]
+        end
+    end
+
+    return ssten_files, Best_alignment_ratio
+end
+
+function distributed_pairwise_alignment(dir)
+
+
+    @everywhere include_string(Main,$(read("TAME++.jl",String)),"TAME++.jl")
+    #align all .ssten files
+    ssten_files = sort([f for f in readdir(dir) if occursin(".ssten",f)])
+
+    futures = []
+    exp_results = zeros(Float64,length(ssten_files),length(ssten_files),3)
+#    Best_alignment_ratio = Array{Float64}(undef,length(ssten_files),length(ssten_files))
+
+    for i in 1:length(ssten_files)
+        for j in i+1:length(ssten_files)
+
+            future = @spawn align_tensors(dir*"/"*ssten_files[i],dir*"/"*ssten_files[j])
+            push!(futures,((i,j),future))
+        end
+    end
+
+    for ((i,j), future) in futures
+
+        ratio, TAME_timings, Krylov_timings = fetch(future)
+        exp_results[i,j,1] = ratio
+        exp_results[j,i,1] = ratio
+        exp_results[i,j,2] = TAME_timings
+        exp_results[j,i,2] = TAME_timings
+        exp_results[i,j,3] = Krylov_timings
+        exp_results[j,i,3] = Krylov_timings
+    end
+
+    return ssten_files, exp_results
+end
+
+function self_alignment(dir::String)
+
+    #align all .ssten files
+    ssten_files = sort([dir*"/"*f for f in readdir(dir) if occursin(".ssten",f)])
+    return self_alignment(ssten_files)
+
+end
+
+function self_alignment(ssten_files::Array{String,1})
+
+    Best_alignment_ratio = Array{Float64}(undef,length(ssten_files))
+
+    for f in ssten_files
+        A = ssten.load(f,false,"COOTen")
+
+        #permute tensor to align against
+        p = sort(1:A.cubical_dimension,by=i->rand())
+        A_permuted = ssten.COOTen(A.indices,A.vals,A.cubical_dimension)
+        ssten.permute_tensor!(A_permuted,p)
+
+        best_score, _, _ = align_tensors(A,A_permuted)
+
+        println("$f aligned with $best_score")
+    end
+
+
+end
+
+"""-----------------------------------------------------------------------------
+    assumes that the files passed in are the absolute paths to the ssten files
+  for the two proteins
+-----------------------------------------------------------------------------"""
+function protein_alignment(protein_A, protein_B)
+
+    #find the alignment
+    matched_ratio, u, v = align_tensors(protein_A,protein_B)
+    println("triangle ratio: $matched_ratio")
+    Matching ,_ = rank_one_matching(u,v)
+
+
+
+    #load coordinates
+    coord_file = file_loc->PROTEIN_TENSORS*"/coordinates/"*split(split(file_loc,"/")[end],".ssten")[1]*"_coord.npy"
+    protein_A_coords = NPZ.npzread(coord_file(protein_A))
+    protein_B_coords = NPZ.npzread(coord_file(protein_B))
+
+    solve_restricted_othorgonal_procrustes_problem(protein_A_coords,protein_B_coords,Matching)
+end
+
+function solve_restricted_othorgonal_procrustes_problem(A::Array{F,2},B::Array{F,2},Map) where {F <: AbstractFloat}
+
+    _,d = size(A)
+    _,p = size(B)
+
+    @assert d == p
+
+    C = zeros(F,d,d)
+
+    #TODO: could sort to improve accuracy
+    for (i,j) in Map
+        C += B[j,:]*A[i,:]'
+    end
+
+    U,_,V = svd(C)
+
+    return U*V'
+end
+
+
+function print_latex_table(ssten_files,Best_alignment_ratio)
+   #print basic components of a latex table
+    root_names = [split(f,".ssten")[1] for f in ssten_files]
+    println("&"*join(root_names))
+    for i in 1:length(ssten_files)
+        println(root_names[i]*"&"*join(round.(Best_alignment_ratio[i,:],digits=6),"&")*"\\\\")
+    end
+
+end
+
+function align_tensors(graph_A_file::String,graph_B_file::String)
+
+    A = ssten.load(graph_A_file,false,"COOTen")
+    B = ssten.load(graph_B_file,false,"COOTen")
+
+    return align_tensors(A,B)
+end
+
+function align_tensors(A::ssten.COOTen,B::ssten.COOTen)
+    iter =15
+    tol=1e-6
+    rank = 10
+    alphas = [.15,.5,.85]
+    betas =[1000.0,100.0,10.0,1.0,0.0,0.1,0.01,0.001]
+
+    max_triangle_match = min(size(A.indices,1),size(B.indices,1))
+
+    TAME_timings = Array{Float64,1}(undef,length(alphas)*length(betas))
+    Krylov_Search_timings = Array{Float64,1}(undef,length(alphas)*length(betas))
+
+    U = Array{Float64,2}(undef,A.cubical_dimension,iter)
+    V = Array{Float64,2}(undef,B.cubical_dimension,iter)
+    best_TAME_PP_tris = -1
+    best_i  = -1
+    best_j = -1
+    exp_index = 1
+
+    for α in alphas
+        for beta in betas
+ #           ((TAME_u, TAME_v, U, V),runtime) = @timed TAME(A,B,beta,iter,tol,α)
+
+
+            ((_, best_U, best_V, best_triangle_count),runtime) = @timed low_rank_TAME(A, B,ones(A.cubical_dimension,B.cubical_dimension),rank,beta, 15,tol,α)
+            ((U,V),runtime) = @timed TAME(A,B,beta,iter,tol,α)
+            TAME_timings[exp_index] = runtime
+            search_tris, _  = TAME_score(A,B,best_U,Matrix(best_V'))
+            #TAME_tris, _= TAME_score(A,B,TAME_u,TAME_v)
+
+            #search the Krylov Subspace
+ #           ((search_tris, i, j),runtime) = @timed search_Krylov_space(A,B,U,V)
+ #           Krylov_Search_timings[exp_index] = runtime
+#            println("α: $α -- β:$beta -- OG TAME: $TAME_tris -- TAME++: $search_tris")
+
+            if search_tris > best_TAME_PP_tris
+                best_TAME_PP_tris = search_tris
+                best_i = i
+                best_j = j
+            end
+            exp_index += 1
+        end
+
+    end
+
+    avg_TAME_timings = sum(TAME_timings)/length(TAME_timings)
+    avg_Krylov_timings = sum(Krylov_Search_timings)/length(Krylov_Search_timings)
+
+    return best_TAME_PP_tris,max_triangle_match, avg_TAME_timings, avg_Krylov_timings
+end
+
+function align_tensors(A::ssten.COOTen,B::ssten.COOTen,rank::Int)
+    iter =15
+    tol=1e-6
+    alphas = [.15,.5,.85]
+    betas =[1000.0,100.0,10.0,1.0,0.0,0.1,0.01,0.001]
+
+    max_triangle_match = min(size(A.indices,1),size(B.indices,1))
+
+    TAME_timings = Array{Float64,1}(undef,length(alphas)*length(betas))
+    Krylov_Search_timings = Array{Float64,1}(undef,length(alphas)*length(betas))
+
+    U = Array{Float64,2}(undef,A.cubical_dimension,iter)
+    V = Array{Float64,2}(undef,B.cubical_dimension,iter)
+
+    best_TAME_PP_tris = -1
+    best_i  = -1
+    best_j = -1
+    exp_index = 1
+
+    for α in alphas
+        for beta in betas
+            ((_, best_U, best_V, best_triangle_count),runtime) = @timed low_rank_TAME(A, B, ones(A.cubical_dimension,B.cubical_dimension),rank,beta, 15,tol,α)
+            TAME_timings[exp_index] = runtime
+            search_tris, _  = TAME_score(A,B,best_U,Matrix(best_V'))
+
+            if search_tris > best_TAME_PP_tris
+                best_TAME_PP_tris = search_tris
+                best_i = i
+                best_j = j
+            end
+            exp_index += 1
+        end
+
+    end
+
+    avg_TAME_timings = sum(TAME_timings)/length(TAME_timings)
+    avg_Krylov_timings = sum(Krylov_Search_timings)/length(Krylov_Search_timings)
+
+    return best_TAME_PP_tris,max_triangle_match, avg_TAME_timings, avg_Krylov_timings
+end
+
+function TAME(A::ssten.COOTen, B::ssten.COOTen, β::Float64, max_iter::Int,tol::Float64,α::Float64) where {Ten <: ssten.AbstractSSTen}
+
+    U = zeros(A.cubical_dimension,max_iter)
+    V = zeros(B.cubical_dimension,max_iter)
+
+   # u = initialize_initial(A)
+   # v = initialize_initial(B)
+    u_0 = ones(A.cubical_dimension)
+    u_0 /=norm(u_0)
+
+    v_0 = ones(B.cubical_dimension)
+    v_0 /=norm(v_0)
+
+
+    u = copy(u_0)
+    v = copy(v_0)
+
+    sqrt_β = β^(.5)
+
+    u /= norm(u)
+    v /= norm(v)
+
+    lambda = Inf
+
+    #initialize space for the best solutions
+    best_u = zeros(Float64,A.cubical_dimension)
+    best_v = zeros(Float64,B.cubical_dimension)
+    best_triangle_count = 0
+    best_iterate = -1
+
+    i = 1
+
+    while true
+        u_new = ssten.contract_k_1(A,u)
+        v_new = ssten.contract_k_1(B,v)
+
+        lambda_A = (u_new'*u)
+        lambda_B = (v_new'*v)
+        new_lambda = lambda_A*lambda_B
+
+        if β != 0.0
+            u_new .+= sqrt_β*u
+            v_new .+= sqrt_β*v
+        end
+
+        if α != 1.0
+            u_new = α*u_new + (1 -α)*u_0
+            v_new = α*v_new + (1 -α)*v_0
+        end
+
+        u_new ./= norm(u_new)
+        v_new ./= norm(v_new)
+#        triangles, gaped_triangles = TAME_score(A,B,u,v)
+
+   #     println("finished iterate $(i):tris:$(triangles) -- gaped_t:$(gaped_triangles)")
+
+#        if triangles > best_triangle_count
+#            best_u = copy(u)
+#            best_v = copy(v)
+#            best_triangle_count = triangles
+#            best_iterate = i
+#        end
+
+   #     println("λ_A: $(lambda_A) -- λ_B: $(lambda_B) -- newλ: $(new_lambda)")
+
+        U[:,i] = u
+        V[:,i] = v
+        if abs(new_lambda - lambda) < tol || i >= max_iter
+            return U, V#,best_u , best_v ,
+        else
+
+            lambda = new_lambda
+            u = copy(u_new)
+            v = copy(v_new)
+            i += 1
+        end
+
+    end
+
+end
+
+
+function low_rank_matching(U::Array{Float64,2},V::Array{Float64,2})
+    n,d1 = size(U)
+    m,d2 = size(V)
+    @assert d1 == d2
+
+    matching_weights = zeros(d1)
+    matchings = Array{Dict{Int,Int},1}(undef,d1)
+
+    for i = 1:d1
+        matchings[i],matching_weights[i] = rank_one_matching(U[:,i],V[:,i])
+    end
+
+    D = (matching_weights.^(-1))*matching_weights'
+
+    d_j = maximum(D,dims= 1)
+    opt_j = argmin(d_j).I[2]
+
+    return matchings[opt_j]
+
+end
+
+
+function rank_one_matching(u::Array{Float64,1},v::Array{Float64,1})
+
+    #get maximum matching by rearrangement theorem
+    u_perm = sortperm(u,rev=true)
+    v_perm = sortperm(v,rev=true)
+
+    matching_weight = 0
+    Match_mapping = Dict{Int,Int}()
+    for (i,j) in zip(u_perm,v_perm)
+
+        #only match positive to positive and negative to negative
+        if (u[i] > 0 && v[j] > 0 ) || (u[i] < 0 && v[j] < 0)
+            Match_mapping[i] = j
+            matching_weight += u[i]*v[j]
+        end
+    end
+    return Match_mapping, matching_weight
+
+end
+
+function search_Krylov_space(A,B,U::Array{Float64,2},V::Array{Float64,2})
+
+    best_score = -1
+    best_i = -1
+    best_j = -1
+
+    for i in 1:size(U,2)
+       for j in 1:size(V,2)
+            matched_tris,gaped_tris = TAME_score(A,B,U[:,i],V[:,j])
+            if matched_tris > best_score
+                best_score = matched_tris
+                best_i = i
+                best_j = j
+            end
+        end
+    end
+    return best_score, best_i, best_j
+end
+
+#Computes the TAME score for this iterate by
+function TAME_score(A::ssten.COOTen,B::ssten.COOTen,u::Array{Float64,1},v::Array{Float64,1}) where {Ten <: ssten.AbstractSSTen}
+
+    Match_mapping, _ = rank_one_matching(u,v)
+    TAME_score(A,B,Match_mapping)
+
+end
+
+function TAME_score(A::ssten.COOTen,B::ssten.COOTen,
+                    U::Array{Float64,2},V::Array{Float64,2}) where {Ten <: ssten.AbstractSSTen}
+    println(size(U),"  ",size(V))
+    Match_mapping = low_rank_matching(U,V)
+  #  println(Match_mapping)
+    TAME_score(A,B,Match_mapping)
+
+end
+
+function TAME_score(A::ssten.COOTen,B::ssten.COOTen,Match_mapping::Dict{Int,Int}) where {Ten <: ssten.AbstractSSTen}
+
+    match_len = length(Match_mapping)
+
+    Triangle_check = Dict{Array{Int,1},Int}()
+    gaped_triangles = 0
+    triangle_count = 0
+
+    if A.unique_nnz > B.unique_nnz
+
+        for i in 1:A.unique_nnz
+            Triangle_check[A.indices[i,:]] = 1
+        end
+
+        #invert to map v indices to u
+        Match_mapping = Dict(value => key for (key, value) in Match_mapping)
+
+        for i in 1:B.unique_nnz
+            v_i,v_j,v_k = B.indices[i,:]
+
+            matched_triangle =
+              sort([get(Match_mapping,v_i,-1),get(Match_mapping,v_j,-1),get(Match_mapping,v_k,-1)])
+    #        println(B.indices[i,:]," -> ",matched_triangle)
+            match = get(Triangle_check,matched_triangle,0)
+            if match == 1
+                triangle_count += 1
+            else
+                gaped_triangles += 1
+            end
+        end
+
+    else
+        for i in 1:B.unique_nnz
+            Triangle_check[B.indices[i,:]] = 1
+        end
+
+        for i in 1:A.unique_nnz
+            v_i,v_j,v_k = A.indices[i,:]
+            matched_triangle =
+               sort([get(Match_mapping,v_i,-1), get(Match_mapping,v_j,-1),get(Match_mapping,v_k,-1)])
+
+            match = get(Triangle_check,matched_triangle,0)
+            if match == 1
+                triangle_count += 1
+            else
+                gaped_triangles += 1
+            end
+        end
+    end
+
+   # triangles, triangle_weight = count_triangles(sub_A,sub_B)
+
+    return triangle_count, gaped_triangles #sub_A, sub_B
+
+end
+
+
+function produce_ssten_from_triangles(file)
+
+    A = MatrixNetworks.readSMAT(file)
+    (n,m) = size(A)
+    if(n != m)
+        println("recatangular")
+    end
+
+    T = collect(MatrixNetworks.triangles(A))
+
+    output_file = alterfilename(file,".ssten",".",false)
+
+    open(output_file,"w") do f
+        write(f,"$(3)\t$(n)\t$(length(T))\n")
+
+        for (v_i,v_j,v_k) in T
+            write(f,"$(v_i)\t$(v_j)\t$(v_k)\t1.0\n")
+        end
+    end
+
+end
+
+function low_rank_TAME(A::ssten.COOTen, B::ssten.COOTen,W::Array{F,2},rank::Int,
+                       β::F, max_iter::Int,tol::F,α::F) where {Ten <: ssten.AbstractSSTen,F <:AbstractFloat}
+
+    #low rank factorization
+    #U,S,VT = svd(W)
+    #U = U[:,1:rank]
+    #V = diagm(S)*VT'[:,1:rank]
+    #TODO: fix this to compute top k vectors
+    U,V = NMF.randinit(W,rank)
+    V = Matrix(V')
+
+    best_triangle_count,_ = TAME_score(A,B,U,V)
+    best_U = copy(U)
+    best_V = copy(V)
+    best_index = 1
+
+
+    #w = reshape(W, A.cubical_dimension,B.cubical_dimension)
+    #get the low rank factors of W
+
+    x_k = copy(W)
+    i = 1
+    lambda = Inf
+    while true
+
+        x_k_1 = kron_contract(A,B,U,V)
+        new_lambda = dot(x_k_1,x_k)
+
+        if β != 0.0
+            println(size(x_k))
+            println(size(x_k_1))
+            x_k_1 .+= β * x_k
+        end
+
+        if α != 1.0
+            x_k_1 = α * x_k_1 + (1 - α) * W
+        end
+
+        x_k_1 ./= norm(x_k_1)
+
+        #low rank factorization
+        #TODO: fix this to compute top k vectors
+
+        U,V = NMF.randinit(x_k_1,rank)
+        V = Matrix(V')
+#        U,S,VT = svd(reshape(x_k_1,A.cubical_dimension,B.cubical_dimension))
+#        U = U[:,1:rank]
+#        V = diagm(S)*VT'[:,1:rank]
+
+        triangles, gaped_triangles = TAME_score(A,B,U,V)
+
+        println("finished iterate $(i):tris:$(triangles) -- gaped_t:$(gaped_triangles)")
+
+        if triangles > best_triangle_count
+            best_x = copy(x_k_1)
+            best_triangle_count = triangles
+            best_iterate = i
+            best_U = copy(U)
+            best_V = copy(V)
+        end
+
+        println("λ: $(new_lambda)")
+
+        if abs(new_lambda - lambda) < tol || i >= max_iter
+            return x_k_1, best_U, best_V, best_triangle_count
+        else
+
+            lambda = new_lambda
+            i += 1
+        end
+
+    end
+
+end
+
+function kron_contract(A::ssten.COOTen,B::ssten.COOTen,
+                       U::Array{Float64,2},V::Array{Float64,2})
+    n,d1 = size(U)
+    m,d2 = size(V)
+#    @assert d1 == d2
+#    @assert A.cubical_dimension == n
+#    @assert B.cubical_dimension == m
+
+#    result = zeros(A.cubical_dimension * B.cubical_dimension)
+
+    max_rank = Int((d1-1)*d1/2+d1)
+    result = zeros(n,m)
+
+    for i in 1:d1
+
+        sub_A_i = ssten.tri_sub_tensor(A,U[:,i])
+        sub_B_i = ssten.tri_sub_tensor(B,V[:,i])
+        for j in 1:i
+
+            A_update = (sub_A_i*U[:,j])
+            B_update = (sub_B_i*V[:,j])
+
+
+            if i == j
+                for i_1=1:n
+                    for i_2=1:m
+                        result[i_1,i_2] += A_update[i_1]*B_update[i_2]
+                     end
+                 end
+            else
+                for i_1=1:n
+                    for i_2=1:m
+                        result[i_1,i_2] += 2*A_update[i_1]*B_update[i_2]
+                    end
+                end
+            end
+
+        end
+    end
+
+    return result
+end
+
+#=------------------------------------------------------------------------------
+                      Random Graph Experiments Routines
+------------------------------------------------------------------------------=#
+
+function distributed_random_trials(trial_count::Int,graph_type::String="ER")
+
+    #ensure file is loaded on all processes
+    @everywhere include_string(Main,$(read("TAME++.jl",String)),"TAME++.jl")
+
+    n_sizes = [10, 50, 100, 500, 1000, 5000, 10000]
+    p_remove = [.01,.05]
+
+    exp_results = zeros(Float64,length(p_remove),length(n_sizes),trial_count,4)
+
+    p_index = 1
+
+    for p in p_remove
+
+        n_index = 1
+
+        for n in n_sizes
+
+            futures = []
+
+            for i in 1:trial_count
+
+                if graph_type == "ER"
+                    future = @spawn full_ER_TAME_test(n,p)
+                elseif graph_type == "HyperKron"
+                    future = @spawn full_HyperKron_TAME_test(n,p)
+                else
+                    error("invalid graph type: $graph_type\n must be either ER or HyperKron")
+                end
+                push!(futures,(i,future))
+            end
+
+            for (i,future) in futures
+
+                mached_tris, max_tris, TAME_time, Krylov_time = fetch(future)
+                exp_results[p_index,n_index,i,1] = mached_tris
+                exp_results[p_index,n_index,i,2] = max_tris
+                exp_results[p_index,n_index,i,3] = TAME_time
+                exp_results[p_index,n_index,i,4] = Krylov_time
+
+            end
+
+#            exp_results[p_index,n_index,1] /= trial_count
+#            exp_results[p_index,n_index,2] /= trial_count
+#            exp_results[p_index,n_index,3] /= trial_count
+
+            n_index += 1
+        end
+        p_index += 1
+    end
+
+    return exp_results
+
+end
+
+
+function full_ER_TAME_test(n::Int,p_remove::Float64)
+
+    p = 2*log(n)/n
+    p_add = p*p_remove/(1-p)
+    A, B = synthetic_erdos_problem(n,p,p_remove,p_add)
+
+    #permute the rows of B
+    perm = shuffle(1:n)
+    B = B[perm,perm]
+
+    #build COOTens from graphs
+    A_tris = collect(MatrixNetworks.triangles(A))
+    B_tris = collect(MatrixNetworks.triangles(B))
+
+    A_nnz = length(A_tris)
+    B_nnz = length(B_tris)
+
+    A_indices = Array{Int,2}(undef,A_nnz,3)
+    B_indices = Array{Int,2}(undef,B_nnz,3)
+    for i =1:A_nnz
+        A_indices[i,1]= A_tris[i][1]
+        A_indices[i,2]= A_tris[i][2]
+        A_indices[i,3]= A_tris[i][3]
+    end
+
+    for i =1:B_nnz
+        B_indices[i,1]= B_tris[i][1]
+        B_indices[i,2]= B_tris[i][2]
+        B_indices[i,3]= B_tris[i][3]
+    end
+
+    A_vals = ones(A_nnz)
+    B_vals = ones(B_nnz)
+
+    A_ten = ssten.COOTen(A_indices,A_vals,n)
+    B_ten = ssten.COOTen(B_indices,B_vals,n)
+    return align_tensors(A_ten,B_ten)
+
+
+end
+
+function full_HyperKron_TAME_test(n::Int,p_remove::Float64)
+
+    p = .4#2*log(n)/n
+    r = .4
+    p_add = p*p_remove/(1-p)
+    A, B = synthetic_HyperKron_problem(n,p,r,p_remove,p_add)
+
+    #permute the rows of B
+    perm = shuffle(1:n)
+    B = B[perm,perm]
+
+    #build COOTens from graphs
+    A_tris = collect(MatrixNetworks.triangles(A))
+    B_tris = collect(MatrixNetworks.triangles(B))
+
+    A_nnz = length(A_tris)
+    B_nnz = length(B_tris)
+
+    A_indices = Array{Int,2}(undef,A_nnz,3)
+    B_indices = Array{Int,2}(undef,B_nnz,3)
+    for i =1:A_nnz
+        A_indices[i,1]= A_tris[i][1]
+        A_indices[i,2]= A_tris[i][2]
+        A_indices[i,3]= A_tris[i][3]
+    end
+
+    for i =1:B_nnz
+        B_indices[i,1]= B_tris[i][1]
+        B_indices[i,2]= B_tris[i][2]
+        B_indices[i,3]= B_tris[i][3]
+    end
+
+    A_vals = ones(A_nnz)
+    B_vals = ones(B_nnz)
+
+    A_ten = ssten.COOTen(A_indices,A_vals,n)
+    B_ten = ssten.COOTen(B_indices,B_vals,n)
+    return align_tensors(A_ten,B_ten)
+
+
+end
+
+"""-----------------------------------------------------------------------------
+    synthetic_erdos_problem(n,p,p_remove,p_add)
+
+    Creates two graphs to be aligned against one another to enumerate triangles
+  between the two graphs.
+
+Inputs:
+-------
+* n - (Int):
+    the number of nodes in the graphs.
+
+* p - (float):
+    The probability of including an edge in the original graph.
+
+* p_remove - (float):
+    The probability of removing an edge from the original graph to produce the
+    second graph.
+* p_add - (float):
+    The probability of adding in a new edge in the new graph.
+-----------------------------------------------------------------------------"""
+function synthetic_erdos_problem(n,p,p_remove,p_add)
+    A = erdos_renyi(n,p)
+    B = copy(A)
+
+
+    is,js,_ = findnz(erdos_renyi(n,p_remove))
+    for (i,j) in zip(is,js)
+        if A[i,j] > 0
+            B[i,j] = 0
+            B[j,i] = 0
+        end
+    end
+
+    is,js,_ = findnz(erdos_renyi(n,p_add))
+    for (i,j) in zip(is,js)
+        if A[i,j] == 0.0
+            B[i,j] = 1
+            B[j,i] = 1
+        end
+    end
+
+    return A, B
+end
+
+function erdos_renyi(n,p)
+    A = sprand(n,n,p)
+    U = triu(A,1)
+    is,js,_ = findnz(max.(U,U'))
+    return sparse(is,js,ones(length(is)),n,n)
+end
+
+"""-----------------------------------------------------------------------------
+    synthetic_erdos_problem(n,p,p_remove,p_add)
+
+    Creates two graphs to be aligned against one another to enumerate triangles
+  between the two graphs.
+
+Inputs:
+-------
+* n - (Int):
+    the number of nodes in the graphs.
+
+* p - (float):
+    The probability of including an edge in the original graph.
+
+* p_remove - (float):
+    The probability of removing an edge from the original graph to produce the
+    second graph.
+* p_add - (float):
+    The probability of adding in a new edge in the new graph.
+-----------------------------------------------------------------------------"""
+function synthetic_HyperKron_problem(n,p,r,p_remove,p_add)
+    A = sparse(gpa_graph(n,p,r,5))
+    B = copy(A)
+
+
+    is,js,_ = findnz(erdos_renyi(n,p_remove))
+    for (i,j) in zip(is,js)
+        if A[i,j] > 0
+            B[i,j] = 0
+            B[j,i] = 0
+        end
+    end
+
+    is,js,_ = findnz(erdos_renyi(n,p_add))
+    for (i,j) in zip(is,js)
+        if A[i,j] == 0.0
+            B[i,j] = 1
+            B[j,i] = 1
+        end
+    end
+
+    return A, B
+end
