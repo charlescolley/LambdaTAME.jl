@@ -99,7 +99,7 @@ function distributed_random_trials(trial_count::Int,graph_type::String="ER")
     n_sizes = [10, 50, 100, 500, 1000, 5000, 10000]
     p_remove = [.01,.05]
 
-    exp_results = zeros(Float64,length(p_remove),length(n_sizes),trial_count,4)
+    exp_results = zeros(Float64,length(p_remove),length(n_sizes),trial_count,5)
 
     p_index = 1
 
@@ -125,11 +125,12 @@ function distributed_random_trials(trial_count::Int,graph_type::String="ER")
 
             for (i,future) in futures
 
-                mached_tris, max_tris, TAME_time, Krylov_time = fetch(future)
+                mached_tris, max_tris, total_triangles, TAME_time, Krylov_time = fetch(future)
                 exp_results[p_index,n_index,i,1] = mached_tris
                 exp_results[p_index,n_index,i,2] = max_tris
-                exp_results[p_index,n_index,i,3] = TAME_time
-                exp_results[p_index,n_index,i,4] = Krylov_time
+                exp_results[p_index,n_index,i,3] = total_triangles
+                exp_results[p_index,n_index,i,4] = TAME_time
+                exp_results[p_index,n_index,i,5] = Krylov_time
 
             end
 
@@ -183,7 +184,6 @@ function full_ER_TAME_test(n::Int,p_remove::Float64)
 
     A_ten = ssten.COOTen(A_indices,A_vals,n)
     B_ten = ssten.COOTen(B_indices,B_vals,n)
-    return A_ten, B_ten
     return align_tensors(A_ten,B_ten)
 
 end
@@ -226,8 +226,6 @@ function full_HyperKron_TAME_test(n::Int,p_remove::Float64)
     A_ten = ssten.COOTen(A_indices,A_vals,n)
     B_ten = ssten.COOTen(B_indices,B_vals,n)
     return align_tensors(A_ten,B_ten)
-
-
 end
 
 """-----------------------------------------------------------------------------

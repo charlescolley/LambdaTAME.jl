@@ -19,4 +19,5 @@ MULTIMAGNA="/Users/ccolley/PycharmProjects/Graph_Data/MultiMagnaExamples/MultiMa
 PROTEIN_TENSORS = PROJECT_PATH*"/data/Protein_structure_data"
 
 include("TAME_Implementations.jl")
+include("Matchings.jl")
 include("Experiments.jl")
