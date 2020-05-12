@@ -132,7 +132,7 @@ function ΛTAME(A::ssten.COOTen, B::ssten.COOTen, β::Float64, max_iter::Int,tol
         U[:,i+1] ./= norm(U[:,i+1])
         V[:,i+1] ./= norm(V[:,i+1])
 
-        println("iteration $(i)    λ_A: $(lambda_A) -- λ_B: $(lambda_B) -- newλ: $(new_lambda)")
+       # println("iteration $(i)    λ_A: $(lambda_A) -- λ_B: $(lambda_B) -- newλ: $(new_lambda)")
 
         if abs(new_lambda - lambda) < tol || i >= max_iter
             return U[:,1:i], V[:,1:i]
@@ -218,7 +218,7 @@ function low_rank_TAME(A::ssten.COOTen, B::ssten.COOTen,W::Array{F,2},rank::Int,
 
         triangles, gaped_triangles = TAME_score(A,B,U,V)
 
-        println("finished iterate $(i):tris:$(triangles) -- gaped_t:$(gaped_triangles)")
+      #  println("finished iterate $(i):tris:$(triangles) -- gaped_t:$(gaped_triangles)")
 
         if triangles > best_triangle_count
             best_x = copy(x_k_1)
