@@ -97,7 +97,7 @@ function distributed_random_trials(trial_count::Int,process_count::Int,graph_typ
     @assert trial_count % process_count == 0
 
     #ensure file is loaded on all processes
-    @everywhere include_string(Main,$(read("LambdaTAMEjl",String)),"LambdaTAME.jl")
+    @everywhere include_string(Main,$(read("LambdaTAME.jl",String)),"LambdaTAME.jl")
 
     n_sizes = [10, 50, 100, 500, 1000, 5000, 10000]
     p_remove = [.01,.05]
@@ -113,7 +113,7 @@ function distributed_random_trials(trial_count::Int,process_count::Int,graph_typ
         for n in n_sizes
 
 
-            for batch in 1:(trial_count/process_count)
+            for batch in 1:Int(trial_count/process_count)
                 futures = []
 
                 for i in 1:trial_count
