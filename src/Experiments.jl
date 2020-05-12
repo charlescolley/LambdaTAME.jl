@@ -91,10 +91,13 @@ end
                       Generated Graph Experiments Routines
 ------------------------------------------------------------------------------=#
 
-function distributed_random_trials(trial_count::Int,graph_type::String="ER")
+function distributed_random_trials(trial_count::Int,process_count::Int,graph_type::String="ER")
+
+    #only handling even batch sizes
+    @assert trial_count % process_count == 0
 
     #ensure file is loaded on all processes
-    @everywhere include_string(Main,$(read("TAME++.jl",String)),"TAME++.jl")
+    @everywhere include_string(Main,$(read("LambdaTAMEjl",String)),"LambdaTAME.jl")
 
     n_sizes = [10, 50, 100, 500, 1000, 5000, 10000]
     p_remove = [.01,.05]
@@ -109,29 +112,33 @@ function distributed_random_trials(trial_count::Int,graph_type::String="ER")
 
         for n in n_sizes
 
-            futures = []
 
-            for i in 1:trial_count
+            for batch in 1:(trial_count/process_count)
+                futures = []
 
-                if graph_type == "ER"
-                    future = @spawn full_ER_TAME_test(n,p)
-                elseif graph_type == "HyperKron"
-                    future = @spawn full_HyperKron_TAME_test(n,p)
-                else
-                    error("invalid graph type: $graph_type\n must be either ER or HyperKron")
+                for i in 1:trial_count
+
+                    if graph_type == "ER"
+                        future = @spawn full_ER_TAME_test(n,p)
+                    elseif graph_type == "HyperKron"
+                        future = @spawn full_HyperKron_TAME_test(n,p)
+                    else
+                        error("invalid graph type: $graph_type\n must be either ER or HyperKron")
+                    end
+                    push!(futures,(i,future))
                 end
-                push!(futures,(i,future))
-            end
 
-            for (i,future) in futures
+                for (i,future) in futures
+                    exp_index = (batch-1)*process_count + i
+                    mached_tris, max_tris, total_triangles, TAME_time, Krylov_time = fetch(future)
 
-                mached_tris, max_tris, total_triangles, TAME_time, Krylov_time = fetch(future)
-                exp_results[p_index,n_index,i,1] = mached_tris
-                exp_results[p_index,n_index,i,2] = max_tris
-                exp_results[p_index,n_index,i,3] = total_triangles
-                exp_results[p_index,n_index,i,4] = TAME_time
-                exp_results[p_index,n_index,i,5] = Krylov_time
+                    exp_results[p_index,n_index,exp_index,1] = mached_tris
+                    exp_results[p_index,n_index,exp_index,2] = max_tris
+                    exp_results[p_index,n_index,exp_index,3] = total_triangles
+                    exp_results[p_index,n_index,exp_index,4] = TAME_time
+                    exp_results[p_index,n_index,exp_index,5] = Krylov_time
 
+                end
             end
 
 #            exp_results[p_index,n_index,1] /= trial_count
