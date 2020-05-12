@@ -114,9 +114,10 @@ function distributed_random_trials(trial_count::Int,process_count::Int,graph_typ
 
 
             for batch in 1:Int(trial_count/process_count)
+
                 futures = []
 
-                for i in 1:trial_count
+                for i in 1:process_count
 
                     if graph_type == "ER"
                         future = @spawn full_ER_TAME_test(n,p)
