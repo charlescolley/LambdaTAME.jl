@@ -27,7 +27,11 @@ Dependencies
 
 
 [DataStructures](https://github.com/JuliaCollections/DataStructures.jl) used in postprocessing algorithm for finding swap candidates efficiently. 
-  
+
+Data
+----
+included files are sparse matrix and sparse tensor (.smat and .ssten files respectively) representations of the PPI networks from the [MultiMAGNA++](https://www3.nd.edu/~cone/multiMAGNA++/) project. Data is included for convenience of recreating our experiments. If utilizing these files, please add appropriate citations to their original project source. 
+
 Experiments
 --------------
 * distributed_random_trials
