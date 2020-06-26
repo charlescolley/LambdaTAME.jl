@@ -1,0 +1,33 @@
+The smat and ssten are COO format representations of sparse matrix and sparse symmetric tensor files.
+
+
+
+
+
+.smat files store all the edges in a sparse matrix, the header line gives size information about the matrix, and each line has the indices and weight of each edge. Note that symmetric edges are still repeated in the formatting.
+
+Header::        {vertices::Int}\t{vertices::Int}{edges::Int}\n
+Edge_Line:      {edge_i::Int}\t{edge_j}\t{edge_weight::Float64}\n
+
+.smat Example
+-------------
+7885	7885	72542
+0	2734	1.000000
+2734	0	1.000000
+0	3556	1.000000
+
+
+
+
+
+.ssten files reduce the file size by sorting all the indices in the hyperedges (as symmetric tensors are invarient under permutation). The file formatting is similar to the smat file, using the header line to store the expected order, dimension, and number of unique hyperedges, and the rest of the lines storing the indices and weights the hyper edge
+
+Header::       {k::Int}\t{vertices::Int}\t{unique_triangles::Int}\n
+Edge_Line::    {edge_vi::Int}\t{edge_v1::Int}\t...\t{edge_vk::Int}\t{edge_weight::Float64}\n
+
+3rd Order .ssten Example
+------------------------
+
+3	456	2
+3	4	124	1.0
+3	4	169	1.0
