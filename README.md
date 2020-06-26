@@ -17,9 +17,9 @@ Contents
 * PostProcessing.jl:
   Routines for the post-processing portion of the TAME algorithm. **in developement**
   
-  Dependencies
-  ===========
-  [LinearAlgebra](https://docs.julialang.org/en/v1/stdlib/LinearAlgebra/) and  [SparseArrays](https://docs.julialang.org/en/v1/stdlib/SparseArrays/index.html) for sparse numerical linear algebra routines.  [MatrixNetworks](https://github.com/nassarhuda/MatrixNetworks.jl) for finding triangle motifs in arbitrary graphs and random graph generation ([TGPA](https://github.com/eikmeier/TGPA) source code also used for generating the HyperKron models). 
+Dependencies
+===========
+[LinearAlgebra](https://docs.julialang.org/en/v1/stdlib/LinearAlgebra/) and  [SparseArrays](https://docs.julialang.org/en/v1/stdlib/SparseArrays/index.html) for sparse numerical linear algebra routines.  [MatrixNetworks](https://github.com/nassarhuda/MatrixNetworks.jl) for finding triangle motifs in arbitrary graphs and random graph generation ([TGPA](https://github.com/eikmeier/TGPA) source code also used for generating the HyperKron models). 
 
 
 [NPZ](https://github.com/fhs/NPZ.jl), [Random](https://docs.julialang.org/en/v1/stdlib/Random/), and 
@@ -41,17 +41,6 @@ Experiments
 * distributed_pairwise_alignment
 * synthetic_HyperKron_problem
 * pairwise_alignmen
-
-
-Display
--------
-* print_latex_table
-  - remove
-* solve_restricted_othorgonal_procrustes_problem
-  - remove
-* protein_alignmen
-  - remove
-  
 
 
 TODO
