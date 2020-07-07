@@ -1,17 +1,44 @@
 #=------------------------------------------------------------------------------
+                        Formatting Routines
+------------------------------------------------------------------------------=#
+function produce_ssten_from_triangles(file)
+
+    A = MatrixNetworks.readSMAT(file)
+    (n,m) = size(A)
+    if(n != m)
+        println("rectangular")
+    end
+
+    T = collect(MatrixNetworks.triangles(A))
+
+    output_file = alterfilename(file,".ssten",".",false)
+
+    open(output_file,"w") do f
+        write(f,"$(3)\t$(n)\t$(length(T))\n")
+
+        for (v_i,v_j,v_k) in T
+            write(f,"$(v_i)\t$(v_j)\t$(v_k)\t1.0\n")
+        end
+    end
+
+end
+
+#=------------------------------------------------------------------------------
                         Local File Experiments Routines
 ------------------------------------------------------------------------------=#
+
+
 function self_alignment(ssten_files::Array{String,1})
 
     Best_alignment_ratio = Array{Float64}(undef,length(ssten_files))
 
     for f in ssten_files
-        A = ssten.load(f,false,"COOTen")
+        A = load(f;type="COOTen")
 
         #permute tensor to align against
         p = sort(1:A.cubical_dimension,by=i->rand())
-        A_permuted = ssten.COOTen(A.indices,A.vals,A.cubical_dimension)
-        ssten.permute_tensor!(A_permuted,p)
+        A_permuted = COOTen(A.indices,A.vals,A.cubical_dimension)
+        permute_tensor!(A_permuted,p)
 
         best_score, _, _ = align_tensors(A,A_permuted)
 
@@ -23,8 +50,8 @@ end
 
 function align_tensors(graph_A_file::String,graph_B_file::String)
 
-    A = ssten.load(graph_A_file,false,"COOTen")
-    B = ssten.load(graph_B_file,false,"COOTen")
+    A = load(graph_A_file,false,"COOTen")
+    B = load(graph_B_file,false,"COOTen")
 
     return align_tensors(A,B)
 end
@@ -190,8 +217,8 @@ function full_ER_TAME_test(n::Int,p_remove::Float64)
     A_vals = ones(A_nnz)
     B_vals = ones(B_nnz)
 
-    A_ten = ssten.COOTen(A_indices,A_vals,n)
-    B_ten = ssten.COOTen(B_indices,B_vals,n)
+    A_ten = COOTen(A_indices,A_vals,n)
+    B_ten = COOTen(B_indices,B_vals,n)
     return align_tensors(A_ten,B_ten)
 
 end
@@ -231,8 +258,8 @@ function full_HyperKron_TAME_test(n::Int,p_remove::Float64)
     A_vals = ones(A_nnz)
     B_vals = ones(B_nnz)
 
-    A_ten = ssten.COOTen(A_indices,A_vals,n)
-    B_ten = ssten.COOTen(B_indices,B_vals,n)
+    A_ten = COOTen(A_indices,A_vals,n)
+    B_ten = COOTen(B_indices,B_vals,n)
     return align_tensors(A_ten,B_ten)
 end
 

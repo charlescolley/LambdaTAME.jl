@@ -1,5 +1,6 @@
 
 
+
 function low_rank_matching(U::Array{Float64,2},V::Array{Float64,2})
     n,d1 = size(U)
     m,d2 = size(V)
@@ -42,8 +43,46 @@ function rank_one_matching(u::Array{Float64,1},v::Array{Float64,1})
 
 end
 
+function search_Krylov_space(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor,U::Array{Float64,2},V::Array{Float64,2})
 
-function search_Krylov_space(A::ssten.COOTen,B::ssten.COOTen,U::Array{Float64,2},V::Array{Float64,2})
+    best_score = -1
+    best_i = -1
+    best_j = -1
+
+    Triangle_check = Dict{Array{Int,1},Int}()
+
+    if A.unique_nnz > B.unique_nnz
+        for i in 1:A.unique_nnz
+            Triangle_check[A.indices[i,:]] = 1
+        end
+        Input_tensor = B
+    else
+        for i in 1:B.unique_nnz
+            Triangle_check[B.indices[i,:]] = 1
+        end
+        Input_tensor = A
+    end
+
+    for i in 1:size(U,2)
+       for j in 1:size(V,2)
+
+            if A.unique_nnz > B.unique_nnz
+                matched_tris,gaped_tris = TAME_score(Triangle_check,Input_tensor,V[:,j],U[:,i])
+            else
+                matched_tris,gaped_tris = TAME_score(Triangle_check,Input_tensor,U[:,i],V[:,i])
+            end
+
+            if matched_tris > best_score
+                best_score = matched_tris
+                best_i = i
+                best_j = j
+            end
+        end
+    end
+    return best_score, best_i, best_j
+end
+
+function search_Krylov_space(A::COOTen,B::COOTen,U::Array{Float64,2},V::Array{Float64,2})
 
     best_score = -1
     best_i = -1
@@ -83,8 +122,8 @@ function search_Krylov_space(A::ssten.COOTen,B::ssten.COOTen,U::Array{Float64,2}
 end
 
 #used when we don't want to recreate the triangle matching dictionary multiple times
-function TAME_score(Triangle_Dict::Dict{Array{Int,1},Int},Input_tensor::ssten.COOTen,
-                    u::Array{Float64,1},v::Array{Float64,1}) where {Ten <: ssten.AbstractSSTen}
+function TAME_score(Triangle_Dict::Dict{Array{Int,1},Int},Input_tensor::COOTen,
+                    u::Array{Float64,1},v::Array{Float64,1})
 
     Match_mapping, _ = rank_one_matching(u,v)
     TAME_score(Triangle_Dict,Input_tensor,Match_mapping)
@@ -92,23 +131,21 @@ function TAME_score(Triangle_Dict::Dict{Array{Int,1},Int},Input_tensor::ssten.CO
 end
 
 #Computes the TAME score for this iterate by
-function TAME_score(A::ssten.COOTen,B::ssten.COOTen,u::Array{Float64,1},v::Array{Float64,1}) where {Ten <: ssten.AbstractSSTen}
+function TAME_score(A::COOTen,B::COOTen,u::Array{Float64,1},v::Array{Float64,1})
 
     Match_mapping, _ = rank_one_matching(u,v)
     TAME_score(A,B,Match_mapping)
 
 end
 
-function TAME_score(A::ssten.COOTen,B::ssten.COOTen,
-                    U::Array{Float64,2},V::Array{Float64,2}) where {Ten <: ssten.AbstractSSTen}
-    println(size(U),"  ",size(V))
+function TAME_score(A::COOTen,B::COOTen,U::Array{Float64,2},V::Array{Float64,2})
+
     Match_mapping = low_rank_matching(U,V)
-  #  println(Match_mapping)
     TAME_score(A,B,Match_mapping)
 
 end
 
-function TAME_score(A::ssten.COOTen,B::ssten.COOTen,Match_mapping::Dict{Int,Int}) where {Ten <: ssten.AbstractSSTen}
+function TAME_score(A::COOTen,B::COOTen,Match_mapping::Dict{Int,Int})
 
     match_len = length(Match_mapping)
 
@@ -164,8 +201,8 @@ function TAME_score(A::ssten.COOTen,B::ssten.COOTen,Match_mapping::Dict{Int,Int}
 
 end
 
-function TAME_score(Triangle_Dict::Dict{Array{Int,1},Int},Input_tensor::ssten.COOTen,
-                    Match_mapping::Dict{Int,Int}) where {Ten <: ssten.AbstractSSTen}
+function TAME_score(Triangle_Dict::Dict{Array{Int,1},Int},Input_tensor::COOTen,
+                    Match_mapping::Dict{Int,Int}) where
 
     triangle_count = 0
     gaped_triangles = 0
