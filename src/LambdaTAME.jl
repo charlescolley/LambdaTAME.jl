@@ -5,6 +5,10 @@ using SparseArrays
 using Random
 using MatrixNetworks
 using DataStructures
+using Hungarian
+
+import Combinatorics: permutations
+
 
 #store path to project repo here
 PROJECT_PATH = "."
@@ -31,8 +35,14 @@ struct ThirdOrderSymTensor
     values::Array{Float64,1}
 end
 
+#TODO:
+#   Note that to use SparseSymmetricTensors.jl, must update experiment drivers to
+#   take a flag that use the local load function
+
+
 include("Contraction.jl")
 include("Matchings.jl")
 include("PostProcessing.jl")
 include("TAME_Implementations.jl")
+include("Experimental_code.jl")
 include("Experiments.jl")

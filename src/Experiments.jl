@@ -23,12 +23,55 @@ function produce_ssten_from_triangles(file)
 
 end
 
+function load_ThirdOrderSymTensor(filepath;enforceFormatting = true)
+
+	#check path validity
+	@assert filepath[end-5:end] == ".ssten"
+
+    open(filepath) do file
+		#preallocate from the header line
+		order, n, m =
+			[parse(Int,elem) for elem in split(chomp(readline(file)),'\t')]
+        @assert order == 3
+
+		indices = Array{Int,2}(undef,m,order)
+		values = Array{Float64,1}(undef,m)
+
+		i = 1
+		@inbounds for line in eachline(file)
+			entries = split(chomp(line),'\t')
+			indices[i,:] = [parse(Int,elem) for elem in entries[1:end-1]]
+			if enforceFormatting
+				sort!(indices[i,:])
+			end
+			values[i] = parse(Float64,entries[end])
+			i += 1
+		end
+
+		#check for 0 indexing
+		zero_indexed = false
+
+		@inbounds for i in 1:m
+		    if indices[i,1] == 0
+    			zero_indexed = true
+				break
+			end
+	    end
+
+		if zero_indexed
+			indices .+= 1
+		end
+
+        return ThirdOrderSymTensor(n,indices,values)
+    end
+end
+
 #=------------------------------------------------------------------------------
                         Local File Experiments Routines
 ------------------------------------------------------------------------------=#
 
 
-function self_alignment(ssten_files::Array{String,1})
+function self_alignment(ssten_files::Array{String,1};method="LambdaTAME")
 
     Best_alignment_ratio = Array{Float64}(undef,length(ssten_files))
 
@@ -40,7 +83,7 @@ function self_alignment(ssten_files::Array{String,1})
         A_permuted = COOTen(A.indices,A.vals,A.cubical_dimension)
         permute_tensor!(A_permuted,p)
 
-        best_score, _, _ = align_tensors(A,A_permuted)
+        best_score, _, _ = align_tensors(A,A_permuted;method=method)
 
         println("$f aligned with $best_score")
     end
@@ -48,12 +91,28 @@ function self_alignment(ssten_files::Array{String,1})
 
 end
 
-function align_tensors(graph_A_file::String,graph_B_file::String)
+function align_tensors(graph_A_file::String,graph_B_file::String;
+                       ThirdOrderSparse=true,method="LambdaTAME")
 
-    A = load(graph_A_file,false,"COOTen")
-    B = load(graph_B_file,false,"COOTen")
+    if ThirdOrderSparse
+        A = load_ThirdOrderSymTensor(graph_A_file)
+        B = load_ThirdOrderSymTensor(graph_B_file)
+    else
 
-    return align_tensors(A,B)
+        A = load(graph_A_file,false,"COOTen")
+        B = load(graph_B_file,false,"COOTen")
+    end
+
+    if method == "LambdaTAME"
+        return align_tensors(A,B)
+    elseif method =="LowRankTAME"
+        return align_tensors_with_TAME(A,B)
+    elseif method == "TAME"
+        return align_tensors_with_TAME(A,B;low_rank=false)
+    else
+        error("method must be one of 'LambdaTAME','LowRankTAME', or 'TAME'.")
+    end
+
 end
 
 function pairwise_alignment(dir)
@@ -73,34 +132,47 @@ function pairwise_alignment(dir)
     return ssten_files, Best_alignment_ratio
 end
 
-function distributed_pairwise_alignment(dir)
+function distributed_pairwise_alignment(dir,method="LambdaTAME")
 
 
-    @everywhere include_string(Main,$(read("TAME++.jl",String)),"TAME++.jl")
+    @everywhere include_string(Main,$(read("LambdaTAME.jl",String)),"LambdaTAME.jl")
     #align all .ssten files
     ssten_files = sort([f for f in readdir(dir) if occursin(".ssten",f)])
 
     futures = []
-    exp_results = zeros(Float64,length(ssten_files),length(ssten_files),3)
+
+    if method == "LambdaTAME"
+        exp_results = zeros(Float64,length(ssten_files),length(ssten_files),3)
+    else
+        exp_results = zeros(Float64,length(ssten_files),length(ssten_files),2)
+    end
 #    Best_alignment_ratio = Array{Float64}(undef,length(ssten_files),length(ssten_files))
 
     for i in 1:length(ssten_files)
         for j in i+1:length(ssten_files)
 
-            future = @spawn align_tensors(dir*"/"*ssten_files[i],dir*"/"*ssten_files[j])
+            future = @spawn align_tensors(dir*"/"*ssten_files[i],dir*"/"*ssten_files[j],method=method)
             push!(futures,((i,j),future))
         end
     end
 
     for ((i,j), future) in futures
 
-        ratio, TAME_timings, Krylov_timings = fetch(future)
-        exp_results[i,j,1] = ratio
-        exp_results[j,i,1] = ratio
-        exp_results[i,j,2] = TAME_timings
-        exp_results[j,i,2] = TAME_timings
-        exp_results[i,j,3] = Krylov_timings
-        exp_results[j,i,3] = Krylov_timings
+        if method=="LambdaTAME"
+            ratio, TAME_timings, Krylov_timings = fetch(future)
+            exp_results[i,j,1] = ratio
+            exp_results[j,i,1] = ratio
+            exp_results[i,j,2] = TAME_timings
+            exp_results[j,i,2] = TAME_timings
+            exp_results[i,j,3] = Krylov_timings
+            exp_results[j,i,3] = Krylov_timings
+        else
+            ratio, TAME_timings = fetch(future)
+            exp_results[i,j,1] = ratio
+            exp_results[j,i,1] = ratio
+            exp_results[i,j,2] = TAME_timings
+            exp_results[j,i,2] = TAME_timings
+        end
     end
 
     return ssten_files, exp_results

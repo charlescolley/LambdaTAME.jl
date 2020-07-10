@@ -1,6 +1,4 @@
 
-
-
 function low_rank_matching(U::Array{Float64,2},V::Array{Float64,2})
     n,d1 = size(U)
     m,d2 = size(V)
@@ -130,6 +128,7 @@ function TAME_score(Triangle_Dict::Dict{Array{Int,1},Int},Input_tensor::COOTen,
 
 end
 
+
 #Computes the TAME score for this iterate by
 function TAME_score(A::COOTen,B::COOTen,u::Array{Float64,1},v::Array{Float64,1})
 
@@ -142,6 +141,136 @@ function TAME_score(A::COOTen,B::COOTen,U::Array{Float64,2},V::Array{Float64,2})
 
     Match_mapping = low_rank_matching(U,V)
     TAME_score(A,B,Match_mapping)
+
+end
+
+function TAME_score(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor,U::Array{Float64,2},V::Array{Float64,2})
+
+    Match_mapping = low_rank_matching(U,V)
+    TAME_score(A,B,Match_mapping)
+
+end
+
+function TAME_score(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor, X::SparseMatrixCSC{Float64,Int64};return_timings=false)
+
+    if return_timings
+        x ,bipartite_matching_time = @timed bipartite_matching(X) #negate because hungarian finds minimum weight matching
+        (triangle_count, gaped_triangles), matching_time = @timed TAME_score(A,B,Dict(i => j for (i,j) in enumerate(x.match)))
+        return triangle_count, gaped_triangles, bipartite_matching_time, bipartite_matching_time
+    else
+        x = bipartite_matching(X) #negate because hungarian finds minimum weight matching
+        return TAME_score(A,B,Dict(i => j for (i,j) in enumerate(x.match)))
+    end
+
+end
+
+#run the Hungarian algorithm on an iterate
+function TAME_score(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor,X::Array{Float64,2};return_timings=false)
+
+    if return_timings
+        (matching, _) ,hungarian_time = @timed hungarian(-X) #negate because hungarian finds minimum weight matching
+        (triangle_count, gaped_triangles), matching_time = @timed TAME_score(A,B,Dict(i => j for (i,j) in enumerate(matching)))
+        return triangle_count, gaped_triangles, hungarian_time, matching_time
+    else
+        matching, _  = hungarian(-X) #negate because hungarian finds minimum weight matching
+        return TAME_score(A,B,Dict(i => j for (i,j) in enumerate(matching)))
+    end
+end
+
+function TAME_score(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor,x::Array{Float64,1};return_timings=false)
+
+
+    if return_timings
+        (matching, _) ,hungarian_time = @timed hungarian(reshape(-x,A.n,B.n)) #negate because hungarian finds minimum weight matching
+        (triangle_count, gaped_triangles), matching_time = @timed TAME_score(A,B,Dict(i => j for (i,j) in enumerate(matching)))
+        return triangle_count, gaped_triangles, hungarian_time, matching_time
+    else
+        matching, _  = hungarian(reshape(-x,A.n,B.n)) #negate because hungarian finds minimum weight matching
+        return TAME_score(A,B,Dict(i => j for (i,j) in enumerate(matching)))
+    end
+
+end
+
+function TAME_score(A::COOTen,B::COOTen,X::Array{Float64,2};return_timings=false)
+
+
+   if return_timings
+        (matching, _) ,hungarian_time = @timed hungarian(-X) #negate because hungarian finds minimum weight matching
+        (triangle_count, gaped_triangles), matching_time = @timed TAME_score(A,B,Dict(i => j for (i,j) in enumerate(matching)))
+        return triangle_count, gaped_triangles, hungarian_time, matching_time
+    else
+        matching, _  = hungarian(-X) #negate because hungarian finds minimum weight matching
+        return TAME_score(A,B,Dict(i => j for (i,j) in enumerate(matching)))
+    end
+
+end
+
+function TAME_score(A::COOTen,B::COOTen,x::Array{Float64,1};return_timings=false)
+
+   if return_timings
+        (matching, _) ,hungarian_time = @timed hungarian(-reshape(-x,A.cubical_dimension,B.cubical_dimension)) #negate because hungarian finds minimum weight matching
+        (triangle_count, gaped_triangles), matching_time = @timed TAME_score(A,B,Dict(i => j for (i,j) in enumerate(matching)))
+        return triangle_count, gaped_triangles, hungarian_time, matching_time
+    else
+        matching, _  = hungarian(reshape(-x,A.cubical_dimension,B.cubical_dimension)) #negate because hungarian finds minimum weight matching
+        return TAME_score(A,B,Dict(i => j for (i,j) in enumerate(matching)))
+    end
+
+end
+
+function TAME_score(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor,Match_mapping::Dict{Int,Int})
+
+    match_len = length(Match_mapping)
+
+    Triangle_check = Dict{Array{Int,1},Int}()
+    gaped_triangles = 0
+    triangle_count = 0
+
+    if size(A.indices,1) > size(B.indices,1)
+
+        for i in 1:size(A.indices,1)
+            Triangle_check[A.indices[i,:]] = 1
+        end
+
+        #invert to map v indices to u
+        Match_mapping = Dict(value => key for (key, value) in Match_mapping)
+
+        for i in 1:size(B.indices,1)
+            v_i,v_j,v_k = B.indices[i,:]
+
+            matched_triangle =
+              sort([get(Match_mapping,v_i,-1),get(Match_mapping,v_j,-1),get(Match_mapping,v_k,-1)])
+    #        println(B.indices[i,:]," -> ",matched_triangle)
+            match = get(Triangle_check,matched_triangle,0)
+            if match == 1
+                triangle_count += 1
+            else
+                gaped_triangles += 1
+            end
+        end
+
+    else
+        for i in 1:size(B.indices,1)
+            Triangle_check[B.indices[i,:]] = 1
+        end
+
+        for i in 1:size(A.indices,1)
+            v_i,v_j,v_k = A.indices[i,:]
+            matched_triangle =
+               sort([get(Match_mapping,v_i,-1), get(Match_mapping,v_j,-1),get(Match_mapping,v_k,-1)])
+
+            match = get(Triangle_check,matched_triangle,0)
+            if match == 1
+                triangle_count += 1
+            else
+                gaped_triangles += 1
+            end
+        end
+    end
+
+   # triangles, triangle_weight = count_triangles(sub_A,sub_B)
+
+    return triangle_count, gaped_triangles #sub_A, sub_B
 
 end
 
@@ -202,7 +331,7 @@ function TAME_score(A::COOTen,B::COOTen,Match_mapping::Dict{Int,Int})
 end
 
 function TAME_score(Triangle_Dict::Dict{Array{Int,1},Int},Input_tensor::COOTen,
-                    Match_mapping::Dict{Int,Int}) where
+                    Match_mapping::Dict{Int,Int})
 
     triangle_count = 0
     gaped_triangles = 0
