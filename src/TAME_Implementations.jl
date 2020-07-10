@@ -3,6 +3,7 @@
               Routines for searching over alpha/beta parameters
 ------------------------------------------------------------------------------=#
 
+#TODO: update name
 function align_tensors(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor)
     iter =15
     tol=1e-6
@@ -101,8 +102,8 @@ function align_tensors_with_TAME(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor,l
 
     iter =15
     tol=1e-6
-    alphas = [.15,.5,.85]
-    betas =[1000.0,100.0,10.0,1.0,0.0,0.1,0.01,0.001]
+    alphas = [.15,.5]#,.85]
+    betas =[1000.0,100.0]#,10.0,1.0,0.0,0.1,0.01,0.001]
 
     max_triangle_match = min(size(A.indices,1),size(B.indices,1))
     total_triangles = size(A.indices,1) + size(B.indices,1)
@@ -140,10 +141,9 @@ function align_tensors_with_TAME(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor,l
 
     end
 
-    avg_TAME_timings = sum(TAME_timings)/length(TAME_timings)
-    avg_Krylov_timings = sum(Krylov_Search_timings)/length(Krylov_Search_timings)
+    avg_Timings = sum(Timings)/length(Timings)
 
-    return best_TAME_PP_tris,max_triangle_match,total_triangles, avg_TAME_timings, avg_Krylov_timings
+    return best_TAME_PP_tris,max_triangle_match,total_triangles, avg_Timings
 
 end
 #=------------------------------------------------------------------------------

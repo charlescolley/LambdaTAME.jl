@@ -132,20 +132,27 @@ function pairwise_alignment(dir)
     return ssten_files, Best_alignment_ratio
 end
 
-function distributed_pairwise_alignment(dir,method="LambdaTAME")
+function distributed_pairwise_alignment(dir::String,method="LambdaTAME")
 
-
-    @everywhere include_string(Main,$(read("LambdaTAME.jl",String)),"LambdaTAME.jl")
     #align all .ssten files
     ssten_files = sort([f for f in readdir(dir) if occursin(".ssten",f)])
+    distributed_pairwise_alignment(ssten_files,method)
+
+end
+
+function distributed_pairwise_alignment(files::Array{String,1},method="LambdaTAME")
+
+    @everywhere include_string(Main,$(read("LambdaTAME.jl",String)),"LambdaTAME.jl")
 
     futures = []
 
     if method == "LambdaTAME"
         exp_results = zeros(Float64,length(ssten_files),length(ssten_files),3)
     else
-        exp_results = zeros(Float64,length(ssten_files),length(ssten_files),2)
+        exp_results = zeros(Float64,length(ssten_files),length(ssten_files),4)
     end
+
+
 #    Best_alignment_ratio = Array{Float64}(undef,length(ssten_files),length(ssten_files))
 
     for i in 1:length(ssten_files)
@@ -158,6 +165,7 @@ function distributed_pairwise_alignment(dir,method="LambdaTAME")
 
     for ((i,j), future) in futures
 
+        #TODO:update this code
         if method=="LambdaTAME"
             ratio, TAME_timings, Krylov_timings = fetch(future)
             exp_results[i,j,1] = ratio
@@ -167,11 +175,18 @@ function distributed_pairwise_alignment(dir,method="LambdaTAME")
             exp_results[i,j,3] = Krylov_timings
             exp_results[j,i,3] = Krylov_timings
         else
-            ratio, TAME_timings = fetch(future)
-            exp_results[i,j,1] = ratio
-            exp_results[j,i,1] = ratio
-            exp_results[i,j,2] = TAME_timings
-            exp_results[j,i,2] = TAME_timings
+            matched_tris, max_tris, total_triangles, TAME_timing = fetch(future)
+            exp_results[i,j,1] = matched_tris
+            exp_results[j,i,1] = matched_tris
+
+            exp_results[i,j,2] = max_tris
+            exp_results[j,i,2] = max_tris
+
+            exp_results[i,j,3] = total_triangles
+            exp_results[j,i,3] = total_triangles
+
+            exp_results[i,j,4] = TAME_timing
+            exp_results[j,i,4] = TAME_timing
         end
     end
 
