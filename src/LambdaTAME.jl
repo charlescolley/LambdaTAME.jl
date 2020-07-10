@@ -5,7 +5,7 @@ using SparseArrays
 using Random
 using MatrixNetworks
 using DataStructures
-using Hungarian
+#using Hungarian  #TODO: remove
 
 import Combinatorics: permutations
 
@@ -16,7 +16,7 @@ PROJECT_PATH = "."
 
 
 SST_PATH = "/Users/ccolley/Documents/Research/SparseSymmetricTensors.jl/src/SparseSymmetricTensors.jl" # local path
-#SST_PATH = "/homes/ccolley/Documents/Software/SSSTensor/src/SSSTensor.jl" #Nilpotent path
+#SST_PATH = "/homes/ccolley/Documents/Software/SSSTensor/SparseSymmetricTensors.jl/src/SparseSymmetricTensors.jl" #Nilpotent path
 include(SST_PATH)
 using Main.SparseSymmetricTensors
 

@@ -140,7 +140,7 @@ function distributed_pairwise_alignment(dir::String,method="LambdaTAME")
 
 end
 
-function distributed_pairwise_alignment(files::Array{String,1},method="LambdaTAME")
+function distributed_pairwise_alignment(files::Array{String,1};method="LambdaTAME")
 
     @everywhere include_string(Main,$(read("LambdaTAME.jl",String)),"LambdaTAME.jl")
 
@@ -158,7 +158,8 @@ function distributed_pairwise_alignment(files::Array{String,1},method="LambdaTAM
     for i in 1:length(ssten_files)
         for j in i+1:length(ssten_files)
 
-            future = @spawn align_tensors(dir*"/"*ssten_files[i],dir*"/"*ssten_files[j],method=method)
+            #TODO: make this more robust
+            future = @spawn align_tensors(MULTIMAGNA*"/"*files[i],MULTIMAGNA*"/"*files[j],method=method)
             push!(futures,((i,j),future))
         end
     end
