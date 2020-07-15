@@ -155,8 +155,8 @@ function TAME_score(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor, X::SparseMat
 
     if return_timings
         x ,bipartite_matching_time = @timed bipartite_matching(X) #negate because hungarian finds minimum weight matching
-        (triangle_count, gaped_triangles), matching_time = @timed TAME_score(A,B,Dict(i => j for (i,j) in enumerate(x.match)))
-        return triangle_count, gaped_triangles, bipartite_matching_time, bipartite_matching_time
+        (triangle_count, gaped_triangles), scoring_time = @timed TAME_score(A,B,Dict(i => j for (i,j) in enumerate(x.match)))
+        return triangle_count, gaped_triangles, bipartite_matching_time, scoring_time
     else
         x = bipartite_matching(X) #negate because hungarian finds minimum weight matching
         return TAME_score(A,B,Dict(i => j for (i,j) in enumerate(x.match)))

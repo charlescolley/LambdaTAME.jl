@@ -5,8 +5,9 @@ using SparseArrays
 using Random
 using MatrixNetworks
 using DataStructures
-#using Hungarian  #TODO: remove
 
+#using Hungarian  #TODO: remove
+import Arpack: svds
 import Combinatorics: permutations
 
 
@@ -26,7 +27,7 @@ using Main.SparseSymmetricTensors
 
 #TODO: Check to see if this can be run straight out of the box.
 #local graph repos
-MULTIMAGNA=PROJECT_PATH*"/data/sparse_tensors"
+MULTIMAGNA=PROJECT_PATH*"/data/sparse_tensors/"
 
 #no checks are run, will lead to undefined behavior if variables aren't as specified
 struct ThirdOrderSymTensor

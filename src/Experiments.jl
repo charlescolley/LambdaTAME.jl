@@ -115,6 +115,36 @@ function align_tensors(graph_A_file::String,graph_B_file::String;
 
 end
 
+function get_TAME_ranks(graph_A_file::String,graph_B_file::String)
+
+    A = load_ThirdOrderSymTensor(graph_A_file)
+    B = load_ThirdOrderSymTensor(graph_B_file)
+
+    rank_results = Dict()
+
+    max_iter = 15
+    tol = 1e-6
+    U_0 = ones(A.n,1)
+    V_0 = ones(B.n,1)
+
+    U_0 ./= norm(U_0)
+    V_0 ./= norm(V_0)
+
+    alphas = [.15,.5]#,.85]
+    betas =[1000.0,100.0]#,10.0,1.0,0.0,0.1,0.01,0.001]
+
+    for α in alphas
+        for β in betas
+            experiment_string = "α:$(α)_β:$(β)"
+            _,ranks = lowest_rank_TAME_original_svd_for_ranks(A,B,U_0,V_0,β, max_iter,tol,α)
+            rank_results[experiment_string] = ranks
+            println("finished $(split(graph_A_file,"/")[end])--$(split(graph_B_file,"/")[end]):$experiment_string")
+        end
+    end
+
+    return rank_results
+end
+
 function pairwise_alignment(dir)
 
     #align all .ssten files
@@ -124,7 +154,7 @@ function pairwise_alignment(dir)
 
     for i in 1:length(ssten_files)
         for j in i+1:length(ssten_files)
-            Best_alignment_ratio[i,j] = align_from_files(dir*"/"*ssten_files[i],dir*"/"*ssten_files[j])
+            Best_alignment_ratio[i,j] = align_from_files(dir*ssten_files[i],dir*ssten_files[j])
             Best_alignment_ratio[i,j] = Best_alignment_ratio[j,i]
         end
     end
@@ -136,30 +166,30 @@ function distributed_pairwise_alignment(dir::String,method="LambdaTAME")
 
     #align all .ssten files
     ssten_files = sort([f for f in readdir(dir) if occursin(".ssten",f)])
-    distributed_pairwise_alignment(ssten_files,method)
+    distributed_pairwise_alignment(ssten_files,dir ,method)
 
 end
 
-function distributed_pairwise_alignment(files::Array{String,1};method="LambdaTAME")
+function distributed_pairwise_alignment(files::Array{String,1},dirpath::String;method="LambdaTAME")
 
     @everywhere include_string(Main,$(read("LambdaTAME.jl",String)),"LambdaTAME.jl")
 
     futures = []
 
     if method == "LambdaTAME"
-        exp_results = zeros(Float64,length(ssten_files),length(ssten_files),3)
+        exp_results = zeros(Float64,length(files),length(files),3)
     else
-        exp_results = zeros(Float64,length(ssten_files),length(ssten_files),4)
+        exp_results = zeros(Float64,length(files),length(files),4)
     end
 
 
 #    Best_alignment_ratio = Array{Float64}(undef,length(ssten_files),length(ssten_files))
 
-    for i in 1:length(ssten_files)
-        for j in i+1:length(ssten_files)
+    for i in 1:length(files)
+        for j in i+1:length(files)
 
             #TODO: make this more robust
-            future = @spawn align_tensors(MULTIMAGNA*"/"*files[i],MULTIMAGNA*"/"*files[j],method=method)
+            future = @spawn align_tensors(dirpath*files[i],dirpath*files[j],method=method)
             push!(futures,((i,j),future))
         end
     end
@@ -191,8 +221,35 @@ function distributed_pairwise_alignment(files::Array{String,1};method="LambdaTAM
         end
     end
 
-    return ssten_files, exp_results
+    return files, exp_results
 end
+
+
+function distributed_TAME_rank_experiment(files::Array{String,1},dirpath::String)#;method="LambdaTAME")
+
+    @everywhere include_string(Main,$(read("LambdaTAME.jl",String)),"LambdaTAME.jl")
+
+    futures = []
+    exp_results = []
+
+#    Best_alignment_ratio = Array{Float64}(undef,length(ssten_files),length(ssten_files))
+
+    for i in 1:length(files)
+        for j in i+1:length(files)
+
+            #TODO: make this more robust
+            future = @spawn get_TAME_ranks(dirpath*files[i],dirpath*files[j])
+            push!(futures,((i,j),future))
+        end
+    end
+
+    for ((i,j), future) in futures
+        push!(exp_results,(files[i],files[j],fetch(future)))
+    end
+
+    return files, exp_results
+end
+
 
 function self_alignment(dir::String)
 

@@ -101,9 +101,9 @@ end
 function align_tensors_with_TAME(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor,low_rank=true)
 
     iter =15
-    tol=1e-6
-    alphas = [.15,.5]#,.85]
-    betas =[1000.0,100.0]#,10.0,1.0,0.0,0.1,0.01,0.001]
+    tol=1e-12
+    alphas = [.15,.5,.85]
+    betas =[1000.0,100.0,10.0,1.0,0.0,0.1,0.01,0.001]
 
     max_triangle_match = min(size(A.indices,1),size(B.indices,1))
     total_triangles = size(A.indices,1) + size(B.indices,1)
@@ -270,7 +270,6 @@ function lowest_rank_TAME(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor,W::Arra
 	return lowest_rank_TAME(A,B,U,V,β,max_iter,tol,α;profile=profile)
 end
 
-#runs TAME, but reduces down to lowest rank form first
 function lowest_rank_TAME(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor,
                           U_0::Array{F,2},V_0::Array{F,2},
                           β::F, max_iter::Int,tol::F,α::F;profile=false) where {F <:AbstractFloat}
@@ -284,12 +283,19 @@ function lowest_rank_TAME(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor,
     best_index = -1
 
 
+
+
 	X_k = U_0 * V_0'
 	X_0 = copy(X_k)
-#    X_k = copy(W)
- #   X_k_1 = copy(W)
- 	rank_0 = size(U_0,2)
-    i = 1
+
+	U_k = copy(U_0)
+	V_k = copy(V_0)
+
+	U_k ./= norm(U_k)
+	V_k ./= norm(V_k)
+
+
+	i = 1
     lambda = Inf
 
     if profile
@@ -302,30 +308,44 @@ function lowest_rank_TAME(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor,
         )
     end
 
-	U_k = copy(U_0)
-	V_k = copy(V_0)
-
     while true
 
         if profile
-            X_k_1,t = @timed kron_contract(A,B,U_k,V_k)
+            #X_k_1,t = @timed kron_contract(A,B,U_k,V_k)
+		    (A_comps, B_comps),t = @timed get_kron_contract_comps(A,B,U_k,V_k)
             push!(experiment_profile["contraction_timings"],t)
         else
-            X_k_1 = kron_contract(A,B,U_k,V_k)
+            A_comps, B_comps = get_kron_contract_comps(A,B,U_k,V_k)
         end
 
-        new_lambda = dot(X_k_1,X_k)
+		U_temp = hcat(sqrt(α)*A_comps,sqrt(α*β)*U_k, sqrt(1-α)*U_0)
+		V_temp = hcat(sqrt(α)*B_comps,sqrt(α*β)*V_k, sqrt(1-α)*V_0)
 
-        if β != 0.0
-            X_k_1 .+= β * X_k
-        end
+	    if profile
+            #X_k_1,t = @timed kron_contract(A,B,U_k,V_k)
+			(result_A),t_A = @timed svd(U_temp)
+			#println(typeof(result_A))
+			A_U,A_S,A_Vt = result_A.U,result_A.S,result_A.Vt
+			(result_B),t_B = @timed svd(V_temp)
+			B_U,B_S,B_Vt = result_B.U,result_B.S,result_B.Vt
+            push!(experiment_profile["svd_timings"],t_A + t_B)
+        else
+			A_U,A_S,A_Vt = svd(U_temp)
+			B_U,B_S,B_Vt = svd(V_temp)
+		end
+		singular_indexes_A = [i for i in 1:length(A_S) if A_S[i] > A_S[1]*eps(Float64)*dimension]
+		singular_indexes_B = [i for i in 1:length(B_S) if B_S[i] > B_S[1]*eps(Float64)*dimension]
 
-        if α != 1.0
-            X_k_1 = α * X_k_1 + (1 - α) * X_0
-        end
+		U_k_1 = A_U[:,singular_indexes_A]*diagm(A_S[singular_indexes_A])
+		V_k_1 = (B_U[:,singular_indexes_B]*diagm(B_S[singular_indexes_B]))*(B_Vt[:,singular_indexes_B]'*A_Vt[:,singular_indexes_A])
 
-        X_k_1 ./= norm(X_k_1)
 
+		new_lambda = dot(V_k_1'*V_k, U_k_1'*U_k)
+
+		U_k_1 ./= norm(U_k_1)
+		V_k_1 ./= norm(V_k_1)
+
+		X_k_1 = U_k_1*V_k_1'
 		sparse_X_k_1 = sparse(X_k_1)
 
         if profile
@@ -355,22 +375,8 @@ function lowest_rank_TAME(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor,
         else
 
 			#get the low rank factorization for the next one
-
-			rank_k = size(U_k,2)
-			rank_k_1 = rank_k^2 + rank_k + rank_0
-
-			if profile
-				(result,t) = @timed svds(sparse_X_k_1,nsv = rank_k_1)
-				push!(experiment_profile["svd_timings"],t)
-			else
-				result = @timed svds(sparse_X_k_1,nsv = rank_k_1)
-			end
-
-			U,S,VT = result[1][1]
-			singular_indexes = [i for i in 1:length(S) if S[i] > S[1]*eps(Float64)*dimension]
-
-			U_k = U[:,singular_indexes]
-			V_k = VT[:,singular_indexes]*diagm(S[singular_indexes])
+			U_k = copy(U_k_1)
+			V_k = copy(V_k_1)
 
 			X_k = copy(X_k_1)
 			lambda = new_lambda
@@ -391,13 +397,15 @@ function TAME(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor,W::Array{F,2},
         experiment_profile = Dict(
             "contraction_timings"=>[],
             "matching_timings"=>[],
-            "hungarian_timings"=>[],
+            "scoring_timings"=>[],
         )
     end
 
+	best_x = Array{Float64,1}(undef,A.n*B.n)
     best_triangle_count = -Inf
     best_index = -1
     x0 = reshape(W,A.n*B.n)
+	x0 ./=norm(x0)
     x_k = copy(x0)
 
     i = 1
@@ -424,13 +432,14 @@ function TAME(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor,W::Array{F,2},
         end
 
         x_k_1 ./= norm(x_k_1)
+		sparse_X_k_1 = sparse(reshape(x_k_1,A.n,B.n))
 
         if profile
-            triangles, gaped_triangles, hungarian_time, matching_time = TAME_score(A,B,x_k_1;return_timings=true)
-            push!(experiment_profile["hungarian_timings"],hungarian_time)
-            push!(experiment_profile["matching_timings"],matching_time)
+            triangles, gaped_triangles, bipartite_matching_time, scoring_time = TAME_score(A,B,sparse_X_k_1;return_timings=true)
+            push!(experiment_profile["matching_timings"],bipartite_matching_time)
+            push!(experiment_profile["scoring_timings"],scoring_time)
         else
-            triangles, gaped_triangles =  TAME_score(A,B,x_k_1)
+            triangles, gaped_triangles =  TAME_score(A,B,sparse_X_k_1)
         end
 
         println("finished iterate $(i):tris:$(triangles) -- gaped_t:$(gaped_triangles)")
