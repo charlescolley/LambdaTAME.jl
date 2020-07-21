@@ -120,29 +120,31 @@ function get_TAME_ranks(graph_A_file::String,graph_B_file::String)
     A = load_ThirdOrderSymTensor(graph_A_file)
     B = load_ThirdOrderSymTensor(graph_B_file)
 
-    rank_results = Dict()
+    results = Dict()
 
     max_iter = 15
-    tol = 1e-6
-    U_0 = ones(A.n,1)
-    V_0 = ones(B.n,1)
+    tol = 1e-12
+    X_0 = ones(A.n,B.n)
+    X_0 ./=norm(X_0)
+    #V_0 = ones(B.n,1)
 
-    U_0 ./= norm(U_0)
-    V_0 ./= norm(V_0)
+   # U_0 ./= norm(U_0)
+    #V_0 ./= norm(V_0)
 
-    alphas = [.15,.5]#,.85]
-    betas =[1000.0,100.0]#,10.0,1.0,0.0,0.1,0.01,0.001]
+    alphas = [.15,.5,.85]
+    betas =[1000.0,100.0,10.0,1.0,0.0,0.1,0.01,0.001]
 
     for α in alphas
         for β in betas
             experiment_string = "α:$(α)_β:$(β)"
-            _,ranks = lowest_rank_TAME_original_svd_for_ranks(A,B,U_0,V_0,β, max_iter,tol,α)
-            rank_results[experiment_string] = ranks
+            #_,ranks = lowest_rank_TAME_original_svd_for_ranks(A,B,U_0,V_0,β, max_iter,tol,α)
+            _,_,profile = TAME(A,B,X_0,β, max_iter,tol,α;profile=true)
+            results[experiment_string] = profile
             println("finished $(split(graph_A_file,"/")[end])--$(split(graph_B_file,"/")[end]):$experiment_string")
         end
     end
 
-    return rank_results
+    return results
 end
 
 function pairwise_alignment(dir)

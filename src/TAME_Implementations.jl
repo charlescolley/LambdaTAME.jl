@@ -282,9 +282,6 @@ function lowest_rank_TAME(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor,
     best_x = zeros(size(U_0,1),size(V_0,1))
     best_index = -1
 
-
-
-
 	X_k = U_0 * V_0'
 	X_0 = copy(X_k)
 
@@ -398,6 +395,8 @@ function TAME(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor,W::Array{F,2},
             "contraction_timings"=>[],
             "matching_timings"=>[],
             "scoring_timings"=>[],
+			"matched/gaped triangles"=>[],
+			"ranks"=>[]
         )
     end
 
@@ -415,7 +414,6 @@ function TAME(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor,W::Array{F,2},
 
         if profile
             x_k_1,t = @timed implicit_contraction(A,B,x_k)
-            implicit_contraction(A,B,U,V)
             push!(experiment_profile["contraction_timings"],t)
         else
             x_k_1 = implicit_contraction(A,B,x_k)
@@ -432,12 +430,18 @@ function TAME(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor,W::Array{F,2},
         end
 
         x_k_1 ./= norm(x_k_1)
+
+		if profile
+			push!(experiment_profile["ranks"],rank(reshape(x_k_1,(A.n,B.n))))
+		end
+
 		sparse_X_k_1 = sparse(reshape(x_k_1,A.n,B.n))
 
         if profile
             triangles, gaped_triangles, bipartite_matching_time, scoring_time = TAME_score(A,B,sparse_X_k_1;return_timings=true)
             push!(experiment_profile["matching_timings"],bipartite_matching_time)
             push!(experiment_profile["scoring_timings"],scoring_time)
+			push!(experiment_profile["matched/gaped triangles"],(triangles, gaped_triangles))
         else
             triangles, gaped_triangles =  TAME_score(A,B,sparse_X_k_1)
         end
