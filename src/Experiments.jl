@@ -122,7 +122,7 @@ function get_TAME_ranks(graph_A_file::String,graph_B_file::String)
 
     results = Dict()
 
-    max_iter = 15
+    max_iter = 30
     tol = 1e-12
     X_0 = ones(A.n,B.n)
     X_0 ./=norm(X_0)
@@ -131,8 +131,8 @@ function get_TAME_ranks(graph_A_file::String,graph_B_file::String)
    # U_0 ./= norm(U_0)
     #V_0 ./= norm(V_0)
 
-    alphas = [.15,.5,.85]
-    betas =[1000.0,100.0,10.0,1.0,0.0,0.1,0.01,0.001]
+    alphas = [1.0,.5]
+    betas =[0.0,1.0]
 
     for α in alphas
         for β in betas
