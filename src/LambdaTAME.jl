@@ -5,6 +5,7 @@ using SparseArrays
 using Random
 using MatrixNetworks
 using DataStructures
+using NearestNeighbors
 
 #using Hungarian  #TODO: remove
 import Arpack: svds
@@ -17,7 +18,7 @@ PROJECT_PATH = "."
 
 
 SST_PATH = "/Users/ccolley/Documents/Research/SparseSymmetricTensors.jl/src/SparseSymmetricTensors.jl" # local path
-#SST_PATH = "/homes/ccolley/Documents/Software/SSSTensor/SparseSymmetricTensors.jl/src/SparseSymmetricTensors.jl" #Nilpotent path
+#SST_PATH = "/homes/ccolley/Documents/Software/SparseSymmetricTensors.jl/src/SparseSymmetricTensors.jl" #Nilpotent path
 include(SST_PATH)
 using Main.SparseSymmetricTensors
 
