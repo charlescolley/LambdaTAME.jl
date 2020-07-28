@@ -70,7 +70,7 @@ end
                         Local File Experiments Routines
 ------------------------------------------------------------------------------=#
 
-
+#TODO: update to use kwargs properly
 function self_alignment(ssten_files::Array{String,1};method="LambdaTAME")
 
     Best_alignment_ratio = Array{Float64}(undef,length(ssten_files))
@@ -92,7 +92,7 @@ function self_alignment(ssten_files::Array{String,1};method="LambdaTAME")
 end
 
 function align_tensors(graph_A_file::String,graph_B_file::String;
-                       ThirdOrderSparse=true,method="LambdaTAME")
+                       ThirdOrderSparse=true,kwargs...)
 
     if ThirdOrderSparse
         A = load_ThirdOrderSymTensor(graph_A_file)
@@ -103,15 +103,7 @@ function align_tensors(graph_A_file::String,graph_B_file::String;
         B = load(graph_B_file,false,"COOTen")
     end
 
-    if method == "LambdaTAME"
-        return align_tensors(A,B)
-    elseif method =="LowRankTAME"
-        return align_tensors_with_TAME(A,B)
-    elseif method == "TAME"
-        return align_tensors_with_TAME(A,B;low_rank=false)
-    else
-        error("method must be one of 'LambdaTAME','LowRankTAME', or 'TAME'.")
-    end
+	return align_tensors(A,B;kwargs...)
 
 end
 
@@ -132,7 +124,7 @@ function get_TAME_ranks(graph_A_file::String,graph_B_file::String)
     #V_0 ./= norm(V_0)
 
     alphas = [1.0,.5]
-    betas =[0.0,1.0]
+    betas =[0.0,1.0,10]
 
     for α in alphas
         for β in betas
@@ -147,6 +139,7 @@ function get_TAME_ranks(graph_A_file::String,graph_B_file::String)
     return results
 end
 
+#TODO: put in kwargs
 function pairwise_alignment(dir)
 
     #align all .ssten files
@@ -164,15 +157,16 @@ function pairwise_alignment(dir)
     return ssten_files, Best_alignment_ratio
 end
 
-function distributed_pairwise_alignment(dir::String,method="LambdaTAME")
+
+function distributed_pairwise_alignment(dir::String;kwargs...)
 
     #align all .ssten files
     ssten_files = sort([f for f in readdir(dir) if occursin(".ssten",f)])
-    distributed_pairwise_alignment(ssten_files,dir ,method)
+    distributed_pairwise_alignment(ssten_files,dir;kwargs...)
 
 end
 
-function distributed_pairwise_alignment(files::Array{String,1},dirpath::String;method="LambdaTAME")
+function distributed_pairwise_alignment(files::Array{String,1},dirpath::String;kwargs...)
 
     @everywhere include_string(Main,$(read("LambdaTAME.jl",String)),"LambdaTAME.jl")
 
@@ -191,7 +185,7 @@ function distributed_pairwise_alignment(files::Array{String,1},dirpath::String;m
         for j in i+1:length(files)
 
             #TODO: make this more robust
-            future = @spawn align_tensors(dirpath*files[i],dirpath*files[j],method=method)
+            future = @spawn align_tensors(dirpath*files[i],dirpath*files[j];kwargs...)
             push!(futures,((i,j),future))
         end
     end
@@ -227,9 +221,10 @@ function distributed_pairwise_alignment(files::Array{String,1},dirpath::String;m
 end
 
 
-function distributed_TAME_rank_experiment(files::Array{String,1},dirpath::String)#;method="LambdaTAME")
+function distributed_TAME_rank_experiment(files::Array{String,1},dirpath::String;kwargs...)
 
     @everywhere include_string(Main,$(read("LambdaTAME.jl",String)),"LambdaTAME.jl")
+
 
     futures = []
     exp_results = []
@@ -240,7 +235,7 @@ function distributed_TAME_rank_experiment(files::Array{String,1},dirpath::String
         for j in i+1:length(files)
 
             #TODO: make this more robust
-            future = @spawn get_TAME_ranks(dirpath*files[i],dirpath*files[j])
+            future = @spawn get_TAME_ranks(dirpath*files[i],dirpath*files[j];kwargs...)
             push!(futures,((i,j),future))
         end
     end
@@ -253,11 +248,11 @@ function distributed_TAME_rank_experiment(files::Array{String,1},dirpath::String
 end
 
 
-function self_alignment(dir::String)
+function self_alignment(dir::String;kwargs...)
 
     #align all .ssten files
     ssten_files = sort([dir*"/"*f for f in readdir(dir) if occursin(".ssten",f)])
-    return self_alignment(ssten_files)
+    return self_alignment(ssten_files;kwargs...)
 
 end
 
@@ -297,6 +292,8 @@ function distributed_random_trials(trial_count::Int,process_count::Int,graph_typ
                         future = @spawn full_ER_TAME_test(n,p)
                     elseif graph_type == "HyperKron"
                         future = @spawn full_HyperKron_TAME_test(n,p)
+					elseif graph_type == "RandomGeometric"
+    					future = @spawn full_Random_Geometric_Graph_TAME_test(n,p)
                     else
                         error("invalid graph type: $graph_type\n must be either ER or HyperKron")
                     end
@@ -316,10 +313,6 @@ function distributed_random_trials(trial_count::Int,process_count::Int,graph_typ
                 end
             end
 
-#            exp_results[p_index,n_index,1] /= trial_count
-#            exp_results[p_index,n_index,2] /= trial_count
-#            exp_results[p_index,n_index,3] /= trial_count
-
             n_index += 1
         end
         p_index += 1
@@ -336,38 +329,7 @@ function full_ER_TAME_test(n::Int,p_remove::Float64)
     p_add = p*p_remove/(1-p)
     A, B = synthetic_erdos_problem(n,p,p_remove,p_add)
 
-    #permute the rows of B
-    perm = shuffle(1:n)
-    B = B[perm,perm]
-
-    #build COOTens from graphs
-    A_tris = collect(MatrixNetworks.triangles(A))
-    B_tris = collect(MatrixNetworks.triangles(B))
-
-    A_nnz = length(A_tris)
-    B_nnz = length(B_tris)
-
-    A_indices = Array{Int,2}(undef,A_nnz,3)
-    B_indices = Array{Int,2}(undef,B_nnz,3)
-    for i =1:A_nnz
-        A_indices[i,1]= A_tris[i][1]
-        A_indices[i,2]= A_tris[i][2]
-        A_indices[i,3]= A_tris[i][3]
-    end
-
-    for i =1:B_nnz
-        B_indices[i,1]= B_tris[i][1]
-        B_indices[i,2]= B_tris[i][2]
-        B_indices[i,3]= B_tris[i][3]
-    end
-
-    A_vals = ones(A_nnz)
-    B_vals = ones(B_nnz)
-
-    A_ten = COOTen(A_indices,A_vals,n)
-    B_ten = COOTen(B_indices,B_vals,n)
-    return align_tensors(A_ten,B_ten)
-
+	return set_up_tensor_alignment(A, B)
 end
 
 function full_HyperKron_TAME_test(n::Int,p_remove::Float64)
@@ -377,7 +339,23 @@ function full_HyperKron_TAME_test(n::Int,p_remove::Float64)
     p_add = p*p_remove/(1-p)
     A, B = synthetic_HyperKron_problem(n,p,r,p_remove,p_add)
 
-    #permute the rows of B
+	return set_up_tensor_alignment(A, B)
+end
+
+function full_Random_Geometric_Graph_TAME_test(n::Int,p_remove::Float64)
+
+    k = 4
+	p = k/n
+    p_add = p*p_remove/(1-p)
+    A, B = synthetic_Random_Geometric_problem(n,k,p_remove,p_add)
+
+	return set_up_tensor_alignment(A, B)
+end
+
+function set_up_tensor_alignment(A::SparseMatrixCSC{Float64,Int64},B::SparseMatrixCSC{Float64,Int64})
+
+	n,n = size(A)
+	#permute the rows of B
     perm = shuffle(1:n)
     B = B[perm,perm]
 
@@ -405,10 +383,12 @@ function full_HyperKron_TAME_test(n::Int,p_remove::Float64)
     A_vals = ones(A_nnz)
     B_vals = ones(B_nnz)
 
-    A_ten = COOTen(A_indices,A_vals,n)
-    B_ten = COOTen(B_indices,B_vals,n)
+    A_ten = ThirdOrderSymTensor(n,A_indices,A_vals)
+    B_ten = ThirdOrderSymTensor(n,B_indices,B_vals)
     return align_tensors(A_ten,B_ten)
 end
+
+
 
 """-----------------------------------------------------------------------------
     synthetic_erdos_problem(n,p,p_remove,p_add)
@@ -481,7 +461,8 @@ Inputs:
 * p_add - (float):
     The probability of adding in a new edge in the new graph.
 -----------------------------------------------------------------------------"""
-function synthetic_HyperKron_problem(n,p,r,p_remove,p_add)
+function synthetic_HyperKron_problem(n,r,p_remove,p_add)
+
     A = sparse(gpa_graph(n,p,r,5))
     B = copy(A)
 
@@ -503,4 +484,73 @@ function synthetic_HyperKron_problem(n,p,r,p_remove,p_add)
     end
 
     return A, B
+end
+
+
+"""-----------------------------------------------------------------------------
+    synthetic_Random_Geometric_problem(n,p,p_remove,p_add)
+
+    Creates two graphs to be aligned against one another to enumerate triangles
+  between the two graphs. First graph is created using a random geometric graph,
+  with a given n, and number of nearest neighbors k. The second graph is created
+  by
+
+Inputs:
+-------
+* n - (Int):
+    the number of nodes in the graphs.
+
+* k - (float):
+    The number of nearest neighbors to connected in the graph.
+
+* p_remove - (float):
+    The probability of removing an edge from the original graph to produce the
+    second graph.
+
+* p_add - (float):
+    The probability of adding in a new edge in the new graph.
+-----------------------------------------------------------------------------"""
+function synthetic_Random_Geometric_problem(n,k,p_remove,p_add)
+	_, ei, ej = random_geometric_graph(n,k)
+    C = sparse(ei,ej,1.0,n,n)
+	is,js,_ = findnz(max.(C,C')) #symmetrize output
+
+	A = sparse(is,js,1.0,n,n)
+    B = copy(A)
+
+    is,js,_ = findnz(erdos_renyi(n,p_remove))
+    for (i,j) in zip(is,js)
+        if A[i,j] > 0
+            B[i,j] = 0
+            B[j,i] = 0
+        end
+    end
+
+    is,js,_ = findnz(erdos_renyi(n,p_add))
+    for (i,j) in zip(is,js)
+        if A[i,j] == 0.0
+            B[i,j] = 1
+            B[j,i] = 1
+        end
+    end
+
+    return A, B
+end
+
+function random_geometric_graph(n,k)
+  xy = rand(2,n)
+  T = BallTree(xy)
+  idxs = knn(T, xy, k)[1]
+  # form the edges for sparse
+  ei = Int[]
+  ej = Int[]
+  for i=1:n
+    for j=idxs[i]
+      if i != j
+        push!(ei,i)
+        push!(ej,j)
+      end
+    end
+  end
+  return xy, ei, ej
 end

@@ -2,14 +2,26 @@
 #=------------------------------------------------------------------------------
               Routines for searching over alpha/beta parameters
 ------------------------------------------------------------------------------=#
+#TODO: add in kwargs for variables
 
-#TODO: update name
-function align_tensors(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor)
-    iter =15
-    tol=1e-6
-    rank = 10
-    alphas = [.15,.5,.85]
-    betas =[1000.0,100.0,10.0,1.0,0.0,0.1,0.01,0.001]
+function align_tensors(A,B;method::String="LambdaTAME",kwargs...)
+
+	if method == "LambdaTAME"
+		return ΛTAME_param_search(A,B;kwargs...)
+	elseif method == "LowRankTAME"
+		return TAME_param_search(A,B,true;kwargs...)
+	elseif method == "TAME"
+		return TAME_param_search(A,B,false;kwargs...)
+	else
+		raise(ArgumentError("method must be one of 'LambdaTAME', 'LowRankTAME', or 'TAME'."))
+	end
+end
+
+function ΛTAME_param_search(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor;
+                            iter::Int = 15,tol::Float64=1e-6,
+							alphas::Array{Float64,1}=[.5,0],
+							betas::Array{Float64,1} =[1000.0,100.0,10.0,1.0,0.0,0.1,0.01,0.001],
+							kwargs...)
 
     max_triangle_match = min(size(A.indices,1),size(B.indices,1))
     total_triangles = size(A.indices,1) + size(B.indices,1)
@@ -51,12 +63,9 @@ function align_tensors(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor)
 end
 
 
-function align_tensors(A::COOTen,B::COOTen)
-    iter =15
-    tol=1e-6
-    rank = 10
-    alphas = [.15,.5,.85]
-    betas =[1000.0,100.0,10.0,1.0,0.0,0.1,0.01,0.001]
+function ΛTAME_param_search(A::COOTen,B::COOTen; iter::Int = 15,tol::Float64=1e-6,
+							alphas::Array{Float64,1}=[.5,0],
+							betas::Array{Float64,1} =[1000.0,100.0,10.0,1.0,0.0,0.1,0.01,0.001])
 
     max_triangle_match = min(size(A.indices,1),size(B.indices,1))
     total_triangles = size(A.indices,1) + size(B.indices,1)
@@ -98,21 +107,58 @@ function align_tensors(A::COOTen,B::COOTen)
 end
 
 #add in SparseSymmetricTensors.jl function definitions
-function align_tensors_with_TAME(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor,low_rank=true)
-
-    iter =15
-    tol=1e-12
-    alphas = [.15,.5,.85]
-    betas =[1000.0,100.0,10.0,1.0,0.0,0.1,0.01,0.001]
+function TAME_param_search(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor,low_rank=true;
+                           iter::Int = 15,tol::Float64=1e-6,
+						   alphas::Array{Float64,1}=[.5,0],
+						   betas::Array{Float64,1} =[1000.0,100.0,10.0,1.0,0.0,0.1,0.01,0.001],
+						   kwargs...)
 
     max_triangle_match = min(size(A.indices,1),size(B.indices,1))
     total_triangles = size(A.indices,1) + size(B.indices,1)
 
     Timings = Array{Float64,1}(undef,length(alphas)*length(betas))
-#    Krylov_Search_timings = Array{Float64,1}(undef,length(alphas)*length(betas))
+    best_TAME_PP_tris = -1
+    best_i  = -1
+    best_j = -1
+    exp_index = 1
 
- #   U = Array{Float64,2}(undef,A.n,iter)
- #   V = Array{Float64,2}(undef,B.n,iter)
+    for α in alphas
+        for beta in betas
+            if low_rank
+                (_, triangle_count),runtime =
+                    @timed LowRankTAME(A,B,ones(A.n,1),ones(B.n,1),
+                                            beta,iter,tol,α;kwargs...)
+            else
+                (_, triangle_count),runtime =
+                    @timed TAME(A,B,ones(A.n,B.n),beta,iter,tol,α;kwargs...)
+
+            end
+
+            Timings[exp_index] = runtime
+
+            if triangle_count > best_TAME_PP_tris
+                best_TAME_PP_tris = triangle_count
+            end
+            exp_index += 1
+        end
+
+    end
+
+    avg_Timings = sum(Timings)/length(Timings)
+
+    return best_TAME_PP_tris,max_triangle_match,total_triangles, avg_Timings
+
+end
+
+function TAME_param_search(A::COOTen,B::COOTen,low_rank=true; iter::Int = 15,tol::Float64=1e-6,
+						   alphas::Array{Float64,1}=[.5,0],
+						   betas::Array{Float64,1} =[1000.0,100.0,10.0,1.0,0.0,0.1,0.01,0.001],
+						   kwargs...)
+
+    max_triangle_match = min(size(A.indices,1),size(B.indices,1))
+    total_triangles = size(A.indices,1) + size(B.indices,1)
+
+    Timings = Array{Float64,1}(undef,length(alphas)*length(betas))
 
     best_TAME_PP_tris = -1
     best_i  = -1
@@ -123,11 +169,11 @@ function align_tensors_with_TAME(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor,l
         for beta in betas
             if low_rank
                 (_, triangle_count),runtime =
-                    @timed lowest_rank_TAME(A,B,ones(A.n,1),ones(B.n,1),
-                                            beta,iter,tol,α;profile=false)
+                    @timed LowRankTAME(A,B,ones(A.n,1),ones(B.n,1),
+                                            beta,iter,tol,α;kwargs...)
             else
                 (_, triangle_count),runtime =
-                    @timed TAME(A,B,ones(A.n,B.n),beta,iter,tol,α;profile=false)
+                    @timed TAME(A,B,ones(A.n,B.n),beta,iter,tol,α;kwargs...)
 
             end
 
@@ -147,7 +193,7 @@ function align_tensors_with_TAME(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor,l
 
 end
 #=------------------------------------------------------------------------------
-              Routines for searching over alpha/beta parameters
+             		    Spectral Relaxation Routines
 ------------------------------------------------------------------------------=#
 
 function ΛTAME(A::COOTen, B::COOTen, β::Float64, max_iter::Int,
@@ -256,7 +302,7 @@ end
 
 
 #runs TAME, but reduces down to lowest rank form first
-function lowest_rank_TAME(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor,W::Array{F,2},
+function LowRankTAME(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor,W::Array{F,2},
                        β::F, max_iter::Int,tol::F,α::F;profile=false) where {F <:AbstractFloat}
 
     dimension = minimum((A.n,B.n))
@@ -270,7 +316,7 @@ function lowest_rank_TAME(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor,W::Arra
 	return lowest_rank_TAME(A,B,U,V,β,max_iter,tol,α;profile=profile)
 end
 
-function lowest_rank_TAME(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor,
+function LowRankTAME(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor,
                           U_0::Array{F,2},V_0::Array{F,2},
                           β::F, max_iter::Int,tol::F,α::F;profile=false) where {F <:AbstractFloat}
 
