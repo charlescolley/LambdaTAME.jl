@@ -48,14 +48,16 @@ function search_Krylov_space(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor,U::Ar
     best_j = -1
 
     Triangle_check = Dict{Array{Int,1},Int}()
+    A_unique_nnz = length(A.values)
+    B_unique_nnz = length(B.values)
 
-    if A.unique_nnz > B.unique_nnz
-        for i in 1:A.unique_nnz
+    if A_unique_nnz > B_unique_nnz
+        for i in 1:A_unique_nnz
             Triangle_check[A.indices[i,:]] = 1
         end
         Input_tensor = B
     else
-        for i in 1:B.unique_nnz
+        for i in 1:B_unique_nnz
             Triangle_check[B.indices[i,:]] = 1
         end
         Input_tensor = A
@@ -64,7 +66,7 @@ function search_Krylov_space(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor,U::Ar
     for i in 1:size(U,2)
        for j in 1:size(V,2)
 
-            if A.unique_nnz > B.unique_nnz
+            if A_unique_nnz > B_unique_nnz
                 matched_tris,gaped_tris = TAME_score(Triangle_check,Input_tensor,V[:,j],U[:,i])
             else
                 matched_tris,gaped_tris = TAME_score(Triangle_check,Input_tensor,U[:,i],V[:,i])
@@ -120,7 +122,7 @@ function search_Krylov_space(A::COOTen,B::COOTen,U::Array{Float64,2},V::Array{Fl
 end
 
 #used when we don't want to recreate the triangle matching dictionary multiple times
-function TAME_score(Triangle_Dict::Dict{Array{Int,1},Int},Input_tensor::COOTen,
+function TAME_score(Triangle_Dict::Dict{Array{Int,1},Int},Input_tensor,
                     u::Array{Float64,1},v::Array{Float64,1})
 
     Match_mapping, _ = rank_one_matching(u,v)
@@ -352,3 +354,24 @@ function TAME_score(Triangle_Dict::Dict{Array{Int,1},Int},Input_tensor::COOTen,
     return triangle_count, gaped_triangles
 end
 
+function TAME_score(Triangle_Dict::Dict{Array{Int,1},Int},Input_tensor::ThirdOrderSymTensor,
+                    Match_mapping::Dict{Int,Int})
+
+    triangle_count = 0
+    gaped_triangles = 0
+
+    for i in 1:length(Input_tensor.values)
+        v_i,v_j,v_k = Input_tensor.indices[i,:]
+
+        matched_triangle =
+          sort([get(Match_mapping,v_i,-1),get(Match_mapping,v_j,-1),get(Match_mapping,v_k,-1)])
+
+        match = get(Triangle_Dict,matched_triangle,0)
+        if match == 1
+            triangle_count += 1
+        else
+            gaped_triangles += 1
+        end
+    end
+    return triangle_count, gaped_triangles
+end
