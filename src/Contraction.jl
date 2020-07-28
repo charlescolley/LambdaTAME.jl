@@ -98,12 +98,15 @@ function kron_contract(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor,
                        X::SparseMatrixCSC{Float64,Int64},rank::Int=minimum(size(X)))
 
 	(U,S,VT),_ = svds(X,nsv = rank)
+	println("input rank: ",rank)
+	println("output rank:",length(S))
 
-	singular_indexes = [i for i in 1:length(S) if S[i] > S[1]*eps(Float64)*minimum(size(X))]
 
-	#println("rank is",length(singular_indexes))
+	#singular_indexes = [i for i in 1:length(S) if S[i] > S[1]*eps(Float64)*minimum(size(X))]
 
-    kron_contract(A,B,U[:,singular_indexes],VT[:,singular_indexes]*diagm(S[singular_indexes]))
+	#println("rank in kron contract is",length(singular_indexes))
+
+    kron_contract(A,B,U,VT*diagm(S))
 end
 
 function kron_contract(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor,
@@ -169,8 +172,8 @@ function get_kron_contract_comps(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor,
 				B_comps[:,index] = (sub_B_i*V[:,j])
 			else
 
-				A_comps[:,index] = 2*(sub_A_i*U[:,j])
-				B_comps[:,index] = (sub_B_i*V[:,j])
+				A_comps[:,index] = sqrt(2)*(sub_A_i*U[:,j])
+				B_comps[:,index] = sqrt(2)*(sub_B_i*V[:,j])
 			end
 			index += 1
         end
