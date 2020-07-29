@@ -8,6 +8,7 @@ using DataStructures
 using NearestNeighbors
 
 #using Hungarian  #TODO: remove
+import Statistics: mean
 import Arpack: svds
 import Combinatorics: permutations
 

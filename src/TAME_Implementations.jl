@@ -1,4 +1,4 @@
-
+#TODO: convert two function calls into Union{COOTen,ThirdOrderSymTensor}
 #=------------------------------------------------------------------------------
               Routines for searching over alpha/beta parameters
 ------------------------------------------------------------------------------=#
@@ -54,7 +54,7 @@ function ΛTAME_param_search(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor;
 			    exp_index += 1
 			else
 				U,V = ΛTAME(A,B,beta,iter,tol,α)
-				search_tris, i, j = earch_Krylov_space(A,B,U,V)
+				search_tris, i, j = search_Krylov_space(A,B,U,V)
 			end
 
             if search_tris > best_TAME_PP_tris
@@ -67,19 +67,23 @@ function ΛTAME_param_search(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor;
 
 
 	if profile
-	    return best_TAME_PP_tris,max_triangle_match,total_triangles, results
+	    return best_TAME_PP_tris, max_triangle_match, U[best_i,:], V[best_j,:], results
 	else
-		return best_TAME_PP_tris,max_triangle_match,total_triangles
+		return best_TAME_PP_tris, max_triangle_match, U[best_i,:], V[best_j,:]
 	end
 end
 
 
 function ΛTAME_param_search(A::COOTen,B::COOTen; iter::Int = 15,tol::Float64=1e-6,
 							alphas::Array{Float64,1}=[.5,0],
-							betas::Array{Float64,1} =[1000.0,100.0,10.0,1.0,0.0,0.1,0.01,0.001])
+							betas::Array{Float64,1} =[1000.0,100.0,10.0,1.0,0.0,0.1,0.01,0.001],
+							profile=false,profile_all=false)
 
     max_triangle_match = min(size(A.indices,1),size(B.indices,1))
-    total_triangles = size(A.indices,1) + size(B.indices,1)
+    best_TAME_PP_tris = -1
+    best_i  = -1
+    best_j = -1
+
 
 	if profile
 		results = Dict(
@@ -92,9 +96,6 @@ function ΛTAME_param_search(A::COOTen,B::COOTen; iter::Int = 15,tol::Float64=1e
     U = Array{Float64,2}(undef,A.cubical_dimension,iter)
     V = Array{Float64,2}(undef,B.cubical_dimension,iter)
 
-    best_TAME_PP_tris = -1
-    best_i  = -1
-    best_j = -1
 
     for α in alphas
         for beta in betas
@@ -121,9 +122,9 @@ function ΛTAME_param_search(A::COOTen,B::COOTen; iter::Int = 15,tol::Float64=1e
     end
 
 	if profile
-	    return best_TAME_PP_tris,max_triangle_match,total_triangles, results
+	    return best_TAME_PP_tris, max_triangle_match, U[:,best_i], V[:,best_j], results
 	else
-		return best_TAME_PP_tris,max_triangle_match,total_triangles
+		return best_TAME_PP_tris, max_triangle_match, U[:,best_i], V[:,best_j]
 	end
 end
 
@@ -132,87 +133,167 @@ function TAME_param_search(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor,low_ran
                            iter::Int = 15,tol::Float64=1e-6,
 						   alphas::Array{Float64,1}=[.5,0],
 						   betas::Array{Float64,1} =[1000.0,100.0,10.0,1.0,0.0,0.1,0.01,0.001],
-						   kwargs...)
+						   profile::Bool=false,profile_aggregation="all", kwargs...)
 
     max_triangle_match = min(size(A.indices,1),size(B.indices,1))
     total_triangles = size(A.indices,1) + size(B.indices,1)
-
-    Timings = Array{Float64,1}(undef,length(alphas)*length(betas))
     best_TAME_PP_tris = -1
-    best_i  = -1
-    best_j = -1
-    exp_index = 1
+	best_profile = Dict()
+
+	if low_rank
+		best_TAME_PP_x = Array{Float64,2}(undef,A.n,B.n)
+	else
+		best_TAME_PP_U = ones(A.n,1)
+		best_TAME_PP_V = ones(B.n,1)
+	end
+
+	if  profile && profile_aggregation == "all" || profile_aggregation == "avg"
+		experiment_profiles = []
+	end
 
     for α in alphas
-        for beta in betas
-            if low_rank
-                (_, triangle_count),runtime =
-                    @timed LowRankTAME(A,B,ones(A.n,1),ones(B.n,1),
-                                            beta,iter,tol,α;kwargs...)
-            else
-                (_, triangle_count),runtime =
-                    @timed TAME(A,B,ones(A.n,B.n),beta,iter,tol,α;kwargs...)
+        for β in betas
 
-            end
+			if profile
 
-            Timings[exp_index] = runtime
+				if low_rank
+    				U, V, triangle_count, experiment_profile =
+						LowRankTAME(A,B,ones(A.n,1),ones(B.n,1), β,iter,tol,α;profile=profile,kwargs...)
+				else
+					x, triangle_count, experiment_profile = TAME(A,B,ones(A.n,B.n),β,iter,tol,α;profile=profile,kwargs...)
+				end
+
+				if profile_aggregation == "all" || profile_aggregation == "avg"
+					push!(experiment_profiles,("α:$(α)_β:$(β)",experiment_profile))
+				end
+			else
+				if low_rank
+					U, V, triangle_count =
+						LowRankTAME(A,B,ones(A.n,1),ones(B.n,1), β,iter,tol,α;profile=profile,kwargs...)
+				else
+    				x, triangle_count = TAME(A,B,ones(A.n,B.n),β,iter,tol,α;profile=profile,kwargs...)
+				end
+			end
 
             if triangle_count > best_TAME_PP_tris
                 best_TAME_PP_tris = triangle_count
+				best_profile = copy(experiment_profile)
+				if low_rank
+    				best_TAME_PP_U = copy(U)
+					best_TAME_PP_V = copy(V)
+				else
+					best_TAME_PP_x = copy(x)
+				end
             end
-            exp_index += 1
+
         end
 
     end
 
-    avg_Timings = sum(Timings)/length(Timings)
+	if profile
+		if profile_aggregation == "best"
+			experiment_profiles = best_profile
+		elseif profile_aggregation == "avg"
+			raise(error("finish aggregation"))
+		end
+	end
 
-    return best_TAME_PP_tris,max_triangle_match,total_triangles, avg_Timings
 
+	if low_rank
+		if profile
+	    	return best_TAME_PP_tris, max_triangle_match, best_TAME_PP_U, best_TAME_PP_V, experiment_profiles
+		else
+			return best_TAME_PP_tris, max_triangle_match, best_TAME_PP_U, best_TAME_PP_V
+		end
+	else
+		if profile
+			return best_TAME_PP_tris, max_triangle_match, best_TAME_PP_x, experiment_profiles
+		else
+			return best_TAME_PP_tris, max_triangle_match, best_TAME_PP_x
+		end
+	end
 end
 
 function TAME_param_search(A::COOTen,B::COOTen,low_rank=true; iter::Int = 15,tol::Float64=1e-6,
 						   alphas::Array{Float64,1}=[.5,0],
 						   betas::Array{Float64,1} =[1000.0,100.0,10.0,1.0,0.0,0.1,0.01,0.001],
+						   profile=false,profile_all=false,
 						   kwargs...)
 
     max_triangle_match = min(size(A.indices,1),size(B.indices,1))
     total_triangles = size(A.indices,1) + size(B.indices,1)
-
-    Timings = Array{Float64,1}(undef,length(alphas)*length(betas))
-
     best_TAME_PP_tris = -1
-    best_i  = -1
-    best_j = -1
-    exp_index = 1
+	best_profile = Dict()
+
+	if profile_all
+		experiment_profiles = []
+	end
+
+	if low_rank
+		best_TAME_PP_x = Array{Float64,2}(undef,A.n,B.n)
+	else
+		best_TAME_PP_U = ones(A.n,1)
+		best_TAME_PP_V = ones(B.n,1)
+	end
+
+	experiment_profiles = []
 
     for α in alphas
-        for beta in betas
-            if low_rank
-                (_, triangle_count),runtime =
-                    @timed LowRankTAME(A,B,ones(A.cubical_dimension,1),ones(B.cubical_dimension,1),
-                                            beta,iter,tol,α;kwargs...)
-            else
-                (_, triangle_count),runtime =
-                    @timed TAME(A,B,ones(A.cubical_dimension,B.cubical_dimension),
-					            beta,iter,tol,α;kwargs...)
+        for β in betas
 
-            end
+			if profile
 
-            Timings[exp_index] = runtime
+				if low_rank
+					U, V, triangle_count, experiment_profile =
+						LowRankTAME(A,B,ones(A.n,1),ones(B.n,1), β,iter,tol,α;profile=profile,kwargs...)
+				else
+					x, triangle_count, experiment_profile = TAME(A,B,ones(A.n,B.n),β,iter,tol,α;profile=profile,kwargs...)
+				end
+
+				if profile_all
+					push!(experiment_profiles,("α:$(α)_β:$(β)",experiment_profile))
+				end
+			else
+				if low_rank
+					U, V, triangle_count =
+						LowRankTAME(A,B,ones(A.n,1),ones(B.n,1), β,iter,tol,α;kwargs...)
+				else
+    				x, triangle_count = TAME(A,B,ones(A.n,B.n),β,iter,tol,α;kwargs...)
+				end
+			end
 
             if triangle_count > best_TAME_PP_tris
+				best_profile = copy(experiment_profile)
                 best_TAME_PP_tris = triangle_count
+				if low_rank
+    				best_TAME_PP_U = copy(U)
+					best_TAME_PP_V = copy(V)
+				else
+					best_TAME_PP_x = copy(x)
+				end
             end
-            exp_index += 1
+
         end
 
     end
 
-    avg_Timings = sum(Timings)/length(Timings)
+	if !profile_all && profile
+		experiment_profiles = best_profile
+	end
 
-    return best_TAME_PP_tris,max_triangle_match,total_triangles, avg_Timings
-
+	if low_rank
+		if profile
+	    	return best_TAME_PP_tris, max_triangle_match, best_TAME_PP_U, best_TAME_PP_V, experiment_profiles
+		else
+			return best_TAME_PP_tris, max_triangle_match, best_TAME_PP_U, best_TAME_PP_V
+		end
+	else
+		if profile
+			return best_TAME_PP_tris, max_triangle_match, best_TAME_PP_x, experiment_profiles
+		else
+			return best_TAME_PP_tris, max_triangle_match, best_TAME_PP_x
+		end
+	end
 end
 #=------------------------------------------------------------------------------
              		    Spectral Relaxation Routines
@@ -325,17 +406,18 @@ end
 
 #runs TAME, but reduces down to lowest rank form first
 function LowRankTAME(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor,W::Array{F,2},
-                       β::F, max_iter::Int,tol::F,α::F;kwargs...) where {F <:AbstractFloat}
+                       β::F, max_iter::Int,tol::F,α::F;
+					   max_rank::Int = minimum((A.n,B.n)),kwargs...) where {F <:AbstractFloat}
 
     dimension = minimum((A.n,B.n))
 
 	(U_k,S,VT),t = @timed svd(W)
-	singular_indexes = [i for i in 1:length(S) if S[i] > S[1]*eps(Float64)*dimension]
+	singular_indexes = [i for i in 1:minimum((max_rank,length(C_S))) if S[i] > S[1]*eps(Float64)*dimension]
 
 	U = U_k[:,singular_indexes]
 	V = VT[:,singular_indexes]*diagm(S[singular_indexes])
 
-	return lowest_rank_TAME(A,B,U,V,β,max_iter,tol,α;kwargs...)
+	return LowRankTAME(A,B,U,V,β,max_iter,tol,α;kwargs...)
 end
 
 
@@ -366,12 +448,11 @@ function LowRankTAME(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor,
         )
     end
 
-	All_Us = []
-	All_Vs = []
-	All_singvals = []
-
 	U_k = copy(U_0)
 	V_k = copy(V_0)
+
+	best_U = copy(U_k)
+	best_V = copy(U_k)
 
 	i = 1
     lambda = Inf
@@ -417,6 +498,7 @@ function LowRankTAME(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor,
 			C_U,C_S,C_Vt = svd(core)
 		end
 
+
 		singular_indexes= [i for i in 1:1:minimum((max_rank,length(C_S))) if C_S[i] > C_S[1]*eps(Float64)*dimension]
 		if profile
 			push!(experiment_profile["ranks"],length(singular_indexes))
@@ -442,7 +524,7 @@ function LowRankTAME(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor,
 		if profile
 			triangles, gaped_triangles, matching_time, scoring_time = TAME_score(A,B,sparse_X_k_1;return_timings=true)
 			push!(experiment_profile["matching_timings"],matching_time)
-			push!(experiment_profile["scoring_timings"], scoring_times)
+			push!(experiment_profile["scoring_timings"], scoring_time)
 		else
 			triangles, gaped_triangles = TAME_score(A,B,sparse_X_k_1)
 		end
@@ -458,18 +540,15 @@ function LowRankTAME(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor,
 
         if abs(lam - lambda) < tol || i >= max_iter
     		if profile
-    			return best_triangle_count, best_U, Best_V, experiment_profile
+    			return best_U, best_V, best_triangle_count, experiment_profile
 			else
-				return best_triangle_count, best_U, Best_V
+				return best_U, best_V, best_triangle_count
 			end
         end
 
 		#get the low rank factorization for the next one
 		U_k = copy(U_k_1)
 		V_k = copy(V_k_1)
-		push!(All_singvals,C_S)
-		push!(All_Us,copy(U_k))
-		push!(All_Vs,copy(V_k))
 
 		lambda = lam
 		i += 1

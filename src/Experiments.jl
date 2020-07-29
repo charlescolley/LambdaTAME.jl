@@ -166,11 +166,13 @@ function distributed_pairwise_alignment(dir::String;kwargs...)
 
 end
 
-function distributed_pairwise_alignment(files::Array{String,1},dirpath::String;kwargs...)
+function distributed_pairwise_alignment(files::Array{String,1},dirpath::String;
+                                        method="LambdaTAME",kwargs...)
 
     @everywhere include_string(Main,$(read("LambdaTAME.jl",String)),"LambdaTAME.jl")
 
     futures = []
+	results = []
 
     if method == "LambdaTAME"
         exp_results = zeros(Float64,length(files),length(files),3)
@@ -192,8 +194,16 @@ function distributed_pairwise_alignment(files::Array{String,1},dirpath::String;k
 
     for ((i,j), future) in futures
 
+		if method == "LambdaTAME" ||  method == "LowRankTAME"
+			matched_tris, max_tris, _, _, results = fetch(future)
+		elseif method == "TAME"
+			matched_tris, max_tris, _, results = fetch(future)
+		end
+		push!(results,(files[i],files[j],matched_tris, max_tris, results))
         #TODO:update this code
         if method=="LambdaTAME"
+
+
             ratio, TAME_timings, Krylov_timings = fetch(future)
             exp_results[i,j,1] = ratio
             exp_results[j,i,1] = ratio
@@ -260,7 +270,10 @@ end
                       Generated Graph Experiments Routines
 ------------------------------------------------------------------------------=#
 
-function distributed_random_trials(trial_count::Int,process_count::Int,graph_type::String="ER")
+function distributed_random_trials(trial_count::Int,process_count::Int,seed_exps::Bool=false
+                                   ;method="LambdaTAME",graph_type::String="ER",
+								   n_sizes = [10, 50, 100, 500, 1000, 5000, 10000],
+								   kwargs...)
 
     #only handling even batch sizes
     @assert trial_count % process_count == 0
@@ -268,11 +281,15 @@ function distributed_random_trials(trial_count::Int,process_count::Int,graph_typ
     #ensure file is loaded on all processes
     @everywhere include_string(Main,$(read("LambdaTAME.jl",String)),"LambdaTAME.jl")
 
-    n_sizes = [10, 50, 100, 500, 1000, 5000, 10000]
     p_remove = [.01,.05]
+	batches = Int(trial_count/process_count)
 
-    exp_results = zeros(Float64,length(p_remove),length(n_sizes),trial_count,5)
-
+	if seed_exps
+		Random.seed!(0)
+		seeds = rand(UInt64, length(p_remove),length(n_sizes), trial_count)
+	end
+	seed = nothing
+	results = []
     p_index = 1
 
     for p in p_remove
@@ -282,34 +299,36 @@ function distributed_random_trials(trial_count::Int,process_count::Int,graph_typ
         for n in n_sizes
 
 
-            for batch in 1:Int(trial_count/process_count)
+            for batch in 1:batches
 
                 futures = []
 
                 for i in 1:process_count
 
+					if seed_exps
+						seed = seeds[p_index,n_index,(batch-1)*batches + i]
+					end
+
                     if graph_type == "ER"
-                        future = @spawn full_ER_TAME_test(n,p)
+                        future = @spawn full_ER_TAME_test(n,p;seed =seed,method = method,profile=true,kwargs...)
                     elseif graph_type == "HyperKron"
-                        future = @spawn full_HyperKron_TAME_test(n,p)
+                        future = @spawn full_HyperKron_TAME_test(n,p;seed =seed,method = method,profile=true,kwargs...)
 					elseif graph_type == "RandomGeometric"
-    					future = @spawn full_Random_Geometric_Graph_TAME_test(n,p)
+    					future = @spawn full_Random_Geometric_Graph_TAME_test(n,p;seed =seed,method = method,profile=true,kwargs...)
                     else
-                        error("invalid graph type: $graph_type\n must be either ER or HyperKron")
+                        error("invalid graph type: $graph_type\n must be either 'ER','RandomGeometric' or 'HyperKron'")
                     end
-                    push!(futures,(i,future))
+                    push!(futures,(i,seed,p,n,future))
                 end
 
-                for (i,future) in futures
-                    exp_index = (batch-1)*process_count + i
-                    mached_tris, max_tris, total_triangles, TAME_time, Krylov_time = fetch(future)
+                for (i,seed,p,n,future) in futures
 
-                    exp_results[p_index,n_index,exp_index,1] = mached_tris
-                    exp_results[p_index,n_index,exp_index,2] = max_tris
-                    exp_results[p_index,n_index,exp_index,3] = total_triangles
-                    exp_results[p_index,n_index,exp_index,4] = TAME_time
-                    exp_results[p_index,n_index,exp_index,5] = Krylov_time
-
+					if method == "LambdaTAME" ||  method == "LowRankTAME"
+						matched_tris, max_tris, _, _, exp_results = fetch(future)
+					elseif method == "TAME"
+    					matched_tris, max_tris, _, exp_results = fetch(future)
+					end
+					push!(results,(i, seed, p, n, matched_tris, max_tris, exp_results))
                 end
             end
 
@@ -318,41 +337,53 @@ function distributed_random_trials(trial_count::Int,process_count::Int,graph_typ
         p_index += 1
     end
 
-    return exp_results
+    return results
 
 end
 
 
-function full_ER_TAME_test(n::Int,p_remove::Float64)
+function full_ER_TAME_test(n::Int,p_remove::Float64;seed=nothing,kwargs...)
+
+	if seed !== nothing
+		Random.seed!(seed)
+	end
 
     p = 2*log(n)/n
     p_add = p*p_remove/(1-p)
     A, B = synthetic_erdos_problem(n,p,p_remove,p_add)
 
-	return set_up_tensor_alignment(A, B)
+	return set_up_tensor_alignment(A, B;kwargs...)
 end
 
-function full_HyperKron_TAME_test(n::Int,p_remove::Float64)
+function full_HyperKron_TAME_test(n::Int,p_remove::Float64;seed=nothing,kwargs...)
+
+	if seed !== nothing
+		Random.seed!(seed)
+	end
 
     p = .4#2*log(n)/n
     r = .4
     p_add = p*p_remove/(1-p)
     A, B = synthetic_HyperKron_problem(n,p,r,p_remove,p_add)
 
-	return set_up_tensor_alignment(A, B)
+	return set_up_tensor_alignment(A, B;kwargs...)
 end
 
-function full_Random_Geometric_Graph_TAME_test(n::Int,p_remove::Float64)
+function full_Random_Geometric_Graph_TAME_test(n::Int,p_remove::Float64;seed=nothing,kwargs...)
+
+	if seed !== nothing
+		Random.seed!(seed)
+	end
 
     k = 4
 	p = k/n
     p_add = p*p_remove/(1-p)
     A, B = synthetic_Random_Geometric_problem(n,k,p_remove,p_add)
 
-	return set_up_tensor_alignment(A, B)
+	return set_up_tensor_alignment(A, B;kwargs...)
 end
 
-function set_up_tensor_alignment(A::SparseMatrixCSC{Float64,Int64},B::SparseMatrixCSC{Float64,Int64})
+function set_up_tensor_alignment(A::SparseMatrixCSC{Float64,Int64},B::SparseMatrixCSC{Float64,Int64};kwargs...)
 
 	n,n = size(A)
 	#permute the rows of B
@@ -385,7 +416,7 @@ function set_up_tensor_alignment(A::SparseMatrixCSC{Float64,Int64},B::SparseMatr
 
     A_ten = ThirdOrderSymTensor(n,A_indices,A_vals)
     B_ten = ThirdOrderSymTensor(n,B_indices,B_vals)
-    return align_tensors(A_ten,B_ten)
+    return align_tensors(A_ten,B_ten;kwargs...)
 end
 
 
@@ -461,7 +492,7 @@ Inputs:
 * p_add - (float):
     The probability of adding in a new edge in the new graph.
 -----------------------------------------------------------------------------"""
-function synthetic_HyperKron_problem(n,r,p_remove,p_add)
+function synthetic_HyperKron_problem(n,p,r,p_remove,p_add)
 
     A = sparse(gpa_graph(n,p,r,5))
     B = copy(A)
