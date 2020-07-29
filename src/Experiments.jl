@@ -375,7 +375,7 @@ function full_Random_Geometric_Graph_TAME_test(n::Int,p_remove::Float64;seed=not
 		Random.seed!(seed)
 	end
 
-    k = 4
+    k = 10
 	p = k/n
     p_add = p*p_remove/(1-p)
     A, B = synthetic_Random_Geometric_problem(n,k,p_remove,p_add)
