@@ -172,14 +172,7 @@ function distributed_pairwise_alignment(files::Array{String,1},dirpath::String;
     @everywhere include_string(Main,$(read("LambdaTAME.jl",String)),"LambdaTAME.jl")
 
     futures = []
-	results = []
-
-    if method == "LambdaTAME"
-        exp_results = zeros(Float64,length(files),length(files),3)
-    else
-        exp_results = zeros(Float64,length(files),length(files),4)
-    end
-
+	exp_results = []
 
 #    Best_alignment_ratio = Array{Float64}(undef,length(ssten_files),length(ssten_files))
 
@@ -199,32 +192,9 @@ function distributed_pairwise_alignment(files::Array{String,1},dirpath::String;
 		elseif method == "TAME"
 			matched_tris, max_tris, _, results = fetch(future)
 		end
-		push!(results,(files[i],files[j],matched_tris, max_tris, results))
+		push!(exp_results,(files[i],files[j],matched_tris, max_tris, results))
         #TODO:update this code
-        if method=="LambdaTAME"
 
-
-            ratio, TAME_timings, Krylov_timings = fetch(future)
-            exp_results[i,j,1] = ratio
-            exp_results[j,i,1] = ratio
-            exp_results[i,j,2] = TAME_timings
-            exp_results[j,i,2] = TAME_timings
-            exp_results[i,j,3] = Krylov_timings
-            exp_results[j,i,3] = Krylov_timings
-        else
-            matched_tris, max_tris, total_triangles, TAME_timing = fetch(future)
-            exp_results[i,j,1] = matched_tris
-            exp_results[j,i,1] = matched_tris
-
-            exp_results[i,j,2] = max_tris
-            exp_results[j,i,2] = max_tris
-
-            exp_results[i,j,3] = total_triangles
-            exp_results[j,i,3] = total_triangles
-
-            exp_results[i,j,4] = TAME_timing
-            exp_results[j,i,4] = TAME_timing
-        end
     end
 
     return files, exp_results
@@ -272,7 +242,7 @@ end
 
 function distributed_random_trials(trial_count::Int,process_count::Int,seed_exps::Bool=false
                                    ;method="LambdaTAME",graph_type::String="ER",
-								   n_sizes = [10, 50, 100, 500, 1000, 5000, 10000],
+								   n_sizes = [10, 50, 100, 500, 1000, 2000,5000],
 								   kwargs...)
 
     #only handling even batch sizes
@@ -318,7 +288,7 @@ function distributed_random_trials(trial_count::Int,process_count::Int,seed_exps
                     else
                         error("invalid graph type: $graph_type\n must be either 'ER','RandomGeometric' or 'HyperKron'")
                     end
-                    push!(futures,(i,seed,p,n,future))
+                    push!(futures,((batch-1)*batches + i,seed,p,n,future))
                 end
 
                 for (i,seed,p,n,future) in futures

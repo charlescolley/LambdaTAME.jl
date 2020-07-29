@@ -177,7 +177,9 @@ function TAME_param_search(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor,low_ran
 
             if triangle_count > best_TAME_PP_tris
                 best_TAME_PP_tris = triangle_count
-				best_profile = copy(experiment_profile)
+				if profile
+					best_profile = copy(experiment_profile)
+				end
 				if low_rank
     				best_TAME_PP_U = copy(U)
 					best_TAME_PP_V = copy(V)
