@@ -57,6 +57,7 @@ function ΛTAME_param_search(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor;
 				search_tris, i, j = search_Krylov_space(A,B,U,V)
 			end
 
+			println("α:$(α) -- β:$beta finished")
             if search_tris > best_TAME_PP_tris
                 best_TAME_PP_tris = search_tris
                 best_i = i
@@ -118,6 +119,8 @@ function ΛTAME_param_search(A::COOTen,B::COOTen; iter::Int = 15,tol::Float64=1e
                 best_i = i
                 best_j = j
             end
+
+			println("α:$(α) -- β:$beta finished")
         end
     end
 
@@ -167,7 +170,7 @@ function TAME_param_search(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor;
 				end
 				best_TAME_PP_x = copy(x)
             end
-
+			println("α:$(α) -- β:$beta finished")
         end
 
     end
@@ -233,7 +236,7 @@ function LowRankTAME_param_search(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor;
 				best_TAME_PP_V = copy(V)
 
             end
-
+			println("α:$(α) -- β:$beta finished")
         end
 
     end
