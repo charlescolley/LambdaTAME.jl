@@ -6,6 +6,7 @@ using Random
 using MatrixNetworks
 using DataStructures
 using NearestNeighbors
+using Distributions
 
 #using Hungarian  #TODO: remove
 import Statistics: mean

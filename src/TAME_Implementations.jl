@@ -4,14 +4,15 @@
 ------------------------------------------------------------------------------=#
 #TODO: add in kwargs for variables
 
-function align_tensors(A,B;method::String="LambdaTAME",kwargs...)
+function align_tensors(A,B;method::String="LambdaTAME",no_matching=false,kwargs...)
 
 	if method == "LambdaTAME"
+		println(no_matching)
 		return ΛTAME_param_search(A,B;kwargs...)
 	elseif method == "LowRankTAME"
-		return LowRankTAME_param_search(A,B;kwargs...)
+		return LowRankTAME_param_search(A,B;no_matching = no_matching,kwargs...)
 	elseif method == "TAME"
-		return TAME_param_search(A,B;kwargs...)
+		return TAME_param_search(A,B;no_matching = no_matching,kwargs...)
 	else
 		raise(ArgumentError("method must be one of 'LambdaTAME', 'LowRankTAME', or 'TAME'."))
 	end
@@ -194,7 +195,7 @@ end
 
 function LowRankTAME_param_search(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor;
                            iter::Int = 15,tol::Float64=1e-6,
-						   alphas::Array{F,1}=[.5,0],
+						   alphas::Array{F,1}=[.5,1.0],
 						   betas::Array{F,1} =[1000.0,100.0,10.0,1.0,0.0,0.1,0.01,0.001],
 						   profile::Bool=false,profile_aggregation="all", kwargs...) where {F <: AbstractFloat} #::Union{Tuple{Int,Int,Array{F,2}},Tuple{Int,Int,Array{F,2},Dict{String}{Array{Number,1}}}}
 
