@@ -9,9 +9,9 @@ function align_tensors(A,B;method::String="LambdaTAME",kwargs...)
 	if method == "LambdaTAME"
 		return ΛTAME_param_search(A,B;kwargs...)
 	elseif method == "LowRankTAME"
-		return TAME_param_search(A,B,true;kwargs...)
+		return LowRankTAME_param_search(A,B;kwargs...)
 	elseif method == "TAME"
-		return TAME_param_search(A,B,false;kwargs...)
+		return TAME_param_search(A,B;kwargs...)
 	else
 		raise(ArgumentError("method must be one of 'LambdaTAME', 'LowRankTAME', or 'TAME'."))
 	end
@@ -19,9 +19,9 @@ end
 
 function ΛTAME_param_search(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor;
                             iter::Int = 15,tol::Float64=1e-6,
-							alphas::Array{Float64,1}=[.5,0],
-							betas::Array{Float64,1} =[1000.0,100.0,10.0,1.0,0.0,0.1,0.01,0.001],
-							profile=false)
+							alphas::Array{F,1}=[.5,0],
+							betas::Array{F,1} =[1000.0,100.0,10.0,1.0,0.0,0.1,0.01,0.001],
+							profile=false) where {F <: AbstractFloat}#::Union{Tuple{Int,Int,Array{F,1},Array{F,1}},Tuple{Int,Int,Array{F,1},Array{F,1},Dict{String}{Array{Number,1}}}} where {F <: AbstractFloat}
 
     max_triangle_match = min(size(A.indices,1),size(B.indices,1))
     total_triangles = size(A.indices,1) + size(B.indices,1)
@@ -75,9 +75,9 @@ end
 
 
 function ΛTAME_param_search(A::COOTen,B::COOTen; iter::Int = 15,tol::Float64=1e-6,
-							alphas::Array{Float64,1}=[.5,0],
-							betas::Array{Float64,1} =[1000.0,100.0,10.0,1.0,0.0,0.1,0.01,0.001],
-							profile=false,profile_all=false)
+							alphas::Array{F,1}=[.5,0],
+							betas::Array{F,1} =[1000.0,100.0,10.0,1.0,0.0,0.1,0.01,0.001],
+							profile=false,profile_all=false) where {F <: AbstractFloat}#::Union{Tuple{Int,Int,Array{F,1},Array{F,1}},Tuple{Int,Int,Array{F,1},Array{F,1},Dict{String}{Array{Number,1}}}} where {F <: AbstractFloat}
 
     max_triangle_match = min(size(A.indices,1),size(B.indices,1))
     best_TAME_PP_tris = -1
@@ -129,23 +129,18 @@ function ΛTAME_param_search(A::COOTen,B::COOTen; iter::Int = 15,tol::Float64=1e
 end
 
 #add in SparseSymmetricTensors.jl function definitions
-function TAME_param_search(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor,low_rank=true;
+function TAME_param_search(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor;
                            iter::Int = 15,tol::Float64=1e-6,
-						   alphas::Array{Float64,1}=[.5,0],
-						   betas::Array{Float64,1} =[1000.0,100.0,10.0,1.0,0.0,0.1,0.01,0.001],
-						   profile::Bool=false,profile_aggregation="all", kwargs...)
+						   alphas::Array{F,1}=[.5,0],
+						   betas::Array{F,1} =[1000.0,100.0,10.0,1.0,0.0,0.1,0.01,0.001],
+						   profile::Bool=false,profile_aggregation="all", kwargs...) where {F <: AbstractFloat}#::Union{Tuple{Int,Int,Array{F,1}},Tuple{Int,Int,Array{F,1},Dict{String}{Array{Number,1}}}}
 
     max_triangle_match = min(size(A.indices,1),size(B.indices,1))
     total_triangles = size(A.indices,1) + size(B.indices,1)
     best_TAME_PP_tris = -1
 	best_profile = Dict()
 
-	if low_rank
-		best_TAME_PP_x = Array{Float64,2}(undef,A.n,B.n)
-	else
-		best_TAME_PP_U = ones(A.n,1)
-		best_TAME_PP_V = ones(B.n,1)
-	end
+	best_TAME_PP_x = Array{Float64,2}(undef,A.n,B.n)
 
 	if  profile && profile_aggregation == "all" || profile_aggregation == "avg"
 		experiment_profiles = []
@@ -156,23 +151,13 @@ function TAME_param_search(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor,low_ran
 
 			if profile
 
-				if low_rank
-    				U, V, triangle_count, experiment_profile =
-						LowRankTAME(A,B,ones(A.n,1),ones(B.n,1), β,iter,tol,α;profile=profile,kwargs...)
-				else
-					x, triangle_count, experiment_profile = TAME(A,B,ones(A.n,B.n),β,iter,tol,α;profile=profile,kwargs...)
-				end
+				x, triangle_count, experiment_profile = TAME(A,B,ones(A.n,B.n),β,iter,tol,α;profile=profile,kwargs...)
 
 				if profile_aggregation == "all" || profile_aggregation == "avg"
 					push!(experiment_profiles,("α:$(α)_β:$(β)",experiment_profile))
 				end
 			else
-				if low_rank
-					U, V, triangle_count =
-						LowRankTAME(A,B,ones(A.n,1),ones(B.n,1), β,iter,tol,α;profile=profile,kwargs...)
-				else
-    				x, triangle_count = TAME(A,B,ones(A.n,B.n),β,iter,tol,α;profile=profile,kwargs...)
-				end
+				x, triangle_count = TAME(A,B,ones(A.n,B.n),β,iter,tol,α;profile=profile,kwargs...)
 			end
 
             if triangle_count > best_TAME_PP_tris
@@ -180,12 +165,7 @@ function TAME_param_search(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor,low_ran
 				if profile
 					best_profile = copy(experiment_profile)
 				end
-				if low_rank
-    				best_TAME_PP_U = copy(U)
-					best_TAME_PP_V = copy(V)
-				else
-					best_TAME_PP_x = copy(x)
-				end
+				best_TAME_PP_x = copy(x)
             end
 
         end
@@ -201,26 +181,84 @@ function TAME_param_search(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor,low_ran
 	end
 
 
-	if low_rank
-		if profile
-	    	return best_TAME_PP_tris, max_triangle_match, best_TAME_PP_U, best_TAME_PP_V, experiment_profiles
-		else
-			return best_TAME_PP_tris, max_triangle_match, best_TAME_PP_U, best_TAME_PP_V
-		end
+	if profile
+		return best_TAME_PP_tris, max_triangle_match, best_TAME_PP_x, experiment_profiles
 	else
-		if profile
-			return best_TAME_PP_tris, max_triangle_match, best_TAME_PP_x, experiment_profiles
-		else
-			return best_TAME_PP_tris, max_triangle_match, best_TAME_PP_x
-		end
+		return best_TAME_PP_tris, max_triangle_match, best_TAME_PP_x
 	end
 end
 
+
+function LowRankTAME_param_search(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor;
+                           iter::Int = 15,tol::Float64=1e-6,
+						   alphas::Array{F,1}=[.5,0],
+						   betas::Array{F,1} =[1000.0,100.0,10.0,1.0,0.0,0.1,0.01,0.001],
+						   profile::Bool=false,profile_aggregation="all", kwargs...) where {F <: AbstractFloat} #::Union{Tuple{Int,Int,Array{F,2}},Tuple{Int,Int,Array{F,2},Dict{String}{Array{Number,1}}}}
+
+    max_triangle_match = min(size(A.indices,1),size(B.indices,1))
+    total_triangles = size(A.indices,1) + size(B.indices,1)
+    best_TAME_PP_tris = -1
+	best_profile = Dict()
+
+
+	best_TAME_PP_U = ones(A.n,1)
+	best_TAME_PP_V = ones(B.n,1)
+
+
+	if  profile && profile_aggregation == "all" || profile_aggregation == "avg"
+		experiment_profiles = []
+	end
+
+    for α in alphas
+        for β in betas
+
+			if profile
+				U, V, triangle_count, experiment_profile =
+					LowRankTAME(A,B,ones(A.n,1),ones(B.n,1), β,iter,tol,α;profile=profile,kwargs...)
+
+				if profile_aggregation == "all" || profile_aggregation == "avg"
+					push!(experiment_profiles,("α:$(α)_β:$(β)",experiment_profile))
+				end
+			else
+				U, V, triangle_count =
+					LowRankTAME(A,B,ones(A.n,1),ones(B.n,1), β,iter,tol,α;profile=profile,kwargs...)
+			end
+
+            if triangle_count > best_TAME_PP_tris
+                best_TAME_PP_tris = triangle_count
+				if profile
+					best_profile = copy(experiment_profile)
+				end
+				best_TAME_PP_U = copy(U)
+				best_TAME_PP_V = copy(V)
+
+            end
+
+        end
+
+    end
+
+	if profile
+		if profile_aggregation == "best"
+			experiment_profiles = best_profile
+		elseif profile_aggregation == "avg"
+			raise(error("finish aggregation"))
+		end
+	end
+
+	if profile
+		return best_TAME_PP_tris, max_triangle_match, best_TAME_PP_U, best_TAME_PP_V, experiment_profiles
+	else
+		return best_TAME_PP_tris, max_triangle_match, best_TAME_PP_U, best_TAME_PP_V
+	end
+end
+
+#=
 function TAME_param_search(A::COOTen,B::COOTen,low_rank=true; iter::Int = 15,tol::Float64=1e-6,
-						   alphas::Array{Float64,1}=[.5,0],
-						   betas::Array{Float64,1} =[1000.0,100.0,10.0,1.0,0.0,0.1,0.01,0.001],
+						   alphas::Array{F,1}=[.5,0],
+						   betas::Array{F,1} =[1000.0,100.0,10.0,1.0,0.0,0.1,0.01,0.001],
 						   profile=false,profile_all=false,
-						   kwargs...)
+						   kwargs...)::Union{Tuple{Int,Int,Array{F,2},Array{F,2}},Tuple{Int,Int,Array{F,2},Array{F,2},Dict{String}{Array{Number,1}}}} where {F <:AbstractFloat}
 
     max_triangle_match = min(size(A.indices,1),size(B.indices,1))
     total_triangles = size(A.indices,1) + size(B.indices,1)
@@ -297,6 +335,7 @@ function TAME_param_search(A::COOTen,B::COOTen,low_rank=true; iter::Int = 15,tol
 		end
 	end
 end
+=#
 #=------------------------------------------------------------------------------
              		    Spectral Relaxation Routines
 ------------------------------------------------------------------------------=#
@@ -425,13 +464,13 @@ end
 
 function LowRankTAME(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor,
                           U_0::Array{F,2},V_0::Array{F,2}, β::F, max_iter::Int,tol::F,α::F;
-						  max_rank::Int = minimum((A.n,B.n)),profile=false) where {F <:AbstractFloat}
+						  max_rank::Int = minimum((A.n,B.n)),profile=false,update_user::Int=-1) where {F <:AbstractFloat} #::Union{Tuple{Array{F,2},Array{F,2},Int},Tuple{Array{F,2},Array{F,2},Int,Dict{String}{Array{Number,1}}}}where {F <:AbstractFloat}
 
 	@assert size(U_0,2) == size(V_0,2)
 
 	dimension = minimum((A.n,B.n))
 
-    best_triangle_count = -Inf
+    best_triangle_count::Int = -1
     best_x = zeros(size(U_0,1),size(V_0,1))
     best_index = -1
 
@@ -440,7 +479,7 @@ function LowRankTAME(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor,
 	V_0 ./= sqrt(normalization_factor)
 
      if profile
-        experiment_profile = Dict(
+        experiment_profile::Dict{String}{Array{Number,1}} = Dict(
             "ranks"=>[],
             "contraction_timings"=>[],
             "svd_timings"=>[],
@@ -453,8 +492,8 @@ function LowRankTAME(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor,
 	U_k = copy(U_0)
 	V_k = copy(V_0)
 
-	best_U = copy(U_k)
-	best_V = copy(U_k)
+	best_U::Array{F,2} = copy(U_k)
+	best_V::Array{F,2} = copy(U_k)
 
 	i = 1
     lambda = Inf
@@ -562,7 +601,7 @@ end
 
 
 function TAME(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor,W::Array{F,2},
-                       β::F, max_iter::Int,tol::F,α::F;profile=false) where {F <:AbstractFloat}
+                       β::F, max_iter::Int,tol::F,α::F;profile=false) where {F <:AbstractFloat}#::Union{Tuple{Array{F,2},Int},Tuple{Array{F,2},Int,Dict{String}{Array{Number,1}}}} where {F <:AbstractFloat}
 
     dimension = minimum((A.n,B.n))
 
@@ -577,7 +616,7 @@ function TAME(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor,W::Array{F,2},
     end
 
 	best_x = Array{Float64,1}(undef,A.n*B.n)
-    best_triangle_count = -Inf
+    best_triangle_count = -1
     best_index = -1
     x0 = reshape(W,A.n*B.n)
 	x0 ./=norm(x0)
