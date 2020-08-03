@@ -341,7 +341,7 @@ end
 ------------------------------------------------------------------------------=#
 
 function ΛTAME(A::COOTen, B::COOTen, β::Float64, max_iter::Int,
-               tol::Float64,α::Float64)
+               tol::Float64,α::Float64;update_user::Int=-1)
 
     U = zeros(A.cubical_dimension,max_iter+1)
     V = zeros(B.cubical_dimension,max_iter+1) #store initial in first column
@@ -379,7 +379,9 @@ function ΛTAME(A::COOTen, B::COOTen, β::Float64, max_iter::Int,
         U[:,i+1] ./= norm(U[:,i+1])
         V[:,i+1] ./= norm(V[:,i+1])
 
-       # println("iteration $(i)    λ_A: $(lambda_A) -- λ_B: $(lambda_B) -- newλ: $(new_lambda)")
+		if update_user != -1 && i % update_user == 0
+			println("iteration $(i)    λ_A: $(lambda_A) -- λ_B: $(lambda_B) -- newλ: $(new_lambda)")
+		end
 
         if abs(new_lambda - lambda) < tol || i >= max_iter
             return U[:,1:i], V[:,1:i]
@@ -393,7 +395,7 @@ function ΛTAME(A::COOTen, B::COOTen, β::Float64, max_iter::Int,
 end
 
 function ΛTAME(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor, β::Float64,
-               max_iter::Int,tol::Float64,α::Float64)
+               max_iter::Int,tol::Float64,α::Float64;update_user::Int= -1 )
 
     U = zeros(A.n,max_iter+1)
     V = zeros(B.n,max_iter+1) #store initial in first column
@@ -431,7 +433,9 @@ function ΛTAME(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor, β::Float64,
         U[:,i+1] ./= norm(U[:,i+1])
         V[:,i+1] ./= norm(V[:,i+1])
 
-       # println("iteration $(i)    λ_A: $(lambda_A) -- λ_B: $(lambda_B) -- newλ: $(new_lambda)")
+		if update_user != -1 && i % update_user == 0
+            println("iteration $(i)    λ_A: $(lambda_A) -- λ_B: $(lambda_B) -- newλ: $(new_lambda)")
+		end
 
         if abs(new_lambda - lambda) < tol || i >= max_iter
             return U[:,1:i], V[:,1:i]
@@ -576,8 +580,9 @@ function LowRankTAME(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor,
 			best_V = copy(U_k_1)
 		end
 
-
-		println("λ_$i: $(lam) -- rank:$(length(singular_indexes)) -- tris:$(triangles) -- gaped_t:$(gaped_triangles)")
+		if update_user != -1 && i % update_user == 0
+			println("λ_$i: $(lam) -- rank:$(length(singular_indexes)) -- tris:$(triangles) -- gaped_t:$(gaped_triangles)")
+		end
 
         if abs(lam - lambda) < tol || i >= max_iter
     		if profile
@@ -601,7 +606,7 @@ end
 
 
 function TAME(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor,W::Array{F,2},
-                       β::F, max_iter::Int,tol::F,α::F;profile=false) where {F <:AbstractFloat}#::Union{Tuple{Array{F,2},Int},Tuple{Array{F,2},Int,Dict{String}{Array{Number,1}}}} where {F <:AbstractFloat}
+                       β::F, max_iter::Int,tol::F,α::F;profile=false,update_user::Int=-1) where {F <:AbstractFloat}#::Union{Tuple{Array{F,2},Int},Tuple{Array{F,2},Int,Dict{String}{Array{Number,1}}}} where {F <:AbstractFloat}
 
     dimension = minimum((A.n,B.n))
 
@@ -661,14 +666,17 @@ function TAME(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor,W::Array{F,2},
             triangles, gaped_triangles =  TAME_score(A,B,sparse_X_k_1)
         end
 
-        println("finished iterate $(i):tris:$(triangles) -- gaped_t:$(gaped_triangles)")
+		if update_user != -1 && i % update_user == 0
+        	println("finished iterate $(i):tris:$(triangles) -- gaped_t:$(gaped_triangles)")
+			println("λ: $(new_lambda)")
+		end
 
         if triangles > best_triangle_count
             best_x = copy(x_k_1)
             best_triangle_count = triangles
             best_iterate = i
         end
-        println("λ: $(new_lambda)")
+
 
         if abs(new_lambda - lambda) < tol || i >= max_iter
             if profile
