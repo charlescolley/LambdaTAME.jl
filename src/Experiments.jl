@@ -180,7 +180,7 @@ function distributed_pairwise_alignment(files::Array{String,1},dirpath::String;
         for j in i+1:length(files)
 
             #TODO: make this more robust
-            future = @spawn align_tensors(dirpath*files[i],dirpath*files[j];kwargs...)
+            future = @spawn align_tensors(dirpath*files[i],dirpath*files[j];method=method,kwargs...)
             push!(futures,((i,j),future))
         end
     end
@@ -193,7 +193,6 @@ function distributed_pairwise_alignment(files::Array{String,1},dirpath::String;
 			matched_tris, max_tris, _, results = fetch(future)
 		end
 		push!(exp_results,(files[i],files[j],matched_tris, max_tris, results))
-        #TODO:update this code
 
     end
 
@@ -279,16 +278,9 @@ function distributed_random_trials(trial_count::Int,process_count::Int,seed_exps
 						seed = seeds[p_index,n_index,(batch-1)*batches + i]
 					end
 
-                    if graph_type == "ER"
-                        future = @spawn full_ER_TAME_test(n,p;seed =seed,method = method,profile=true,kwargs...)
-                    elseif graph_type == "HyperKron"
-                        future = @spawn full_HyperKron_TAME_test(n,p;seed =seed,method = method,profile=true,kwargs...)
-					elseif graph_type == "RandomGeometric"
-    					future = @spawn full_Random_Geometric_Graph_TAME_test(n,p;seed =seed,method = method,profile=true,kwargs...)
-                    else
-                        error("invalid graph type: $graph_type\n must be either 'ER','RandomGeometric' or 'HyperKron'")
-                    end
+					future = @spawn random_graph_exp(n,p,graph_type;seed=seed,method=method,kwargs...)
                     push!(futures,((batch-1)*batches + i,seed,p,n,future))
+
                 end
 
                 for (i,seed,p,n,future) in futures
@@ -310,50 +302,44 @@ function distributed_random_trials(trial_count::Int,process_count::Int,seed_exps
     return results
 
 end
-
-
-function full_ER_TAME_test(n::Int,p_remove::Float64;seed=nothing,kwargs...)
-
-	if seed !== nothing
-		Random.seed!(seed)
-	end
-
-    p = 2*log(n)/n
-    p_add = p*p_remove/(1-p)
-    A, B = synthetic_erdos_problem(n,p,p_remove,p_add)
-
-	return set_up_tensor_alignment(A, B;kwargs...)
-end
-
-function full_HyperKron_TAME_test(n::Int,p_remove::Float64;seed=nothing,kwargs...)
+#,graph_type::String="ER"
+function random_graph_exp(n::Int, p_remove::Float64;seed=nothing,degreedist=nothing,kwargs...)
 
 	if seed !== nothing
 		Random.seed!(seed)
 	end
 
-    p = .4#2*log(n)/n
-    r = .4
-    p_add = p*p_remove/(1-p)
-    A, B = synthetic_HyperKron_problem(n,p,r,p_remove,p_add)
+	if graph_type == "ER"
+		 p = 2*log(n)/n
+		 A = erdos_renyi(n,p)
 
-	return set_up_tensor_alignment(A, B;kwargs...)
-end
+	elseif graph_type == "RandomGeometric"
 
-function full_Random_Geometric_Graph_TAME_test(n::Int,p_remove::Float64;seed=nothing,kwargs...)
+		if degreedist === nothing
+			k = 10
+			p = k/n
+			A = random_geometric_graph(n,k)
+		else
+			d = 2
+			A = spatial_network(n, d;degreedist= degreedist)
+			p = nnz(A)/n^2
+		end
+	elseif graph_type == "HyperKron"
+		p = .4#2*log(n)/n
+		r = .4
 
-	if seed !== nothing
-		Random.seed!(seed)
+		A = sparse(gpa_graph(n,p,r,5))
+
+	else
+		error("invalid graph type: $graph_type\n must be either 'ER','RandomGeometric' or 'HyperKron'")
 	end
 
-    k = 10
-	p = k/n
-    p_add = p*p_remove/(1-p)
-    A, B = synthetic_Random_Geometric_problem(n,k,p_remove,p_add)
-
-	return set_up_tensor_alignment(A, B;kwargs...)
+	p_add = p*p_remove/(1-p)
+	B = ER_noise_model(A,n,p_remove,p_add)
+	return set_up_tensor_alignment(A,B;kwargs...)
 end
 
-function set_up_tensor_alignment(A::SparseMatrixCSC{Float64,Int64},B::SparseMatrixCSC{Float64,Int64};kwargs...)
+function set_up_tensor_alignment(A,B;kwargs...)
 
 	n,n = size(A)
 	#permute the rows of B
@@ -390,31 +376,8 @@ function set_up_tensor_alignment(A::SparseMatrixCSC{Float64,Int64},B::SparseMatr
 end
 
 
-
-"""-----------------------------------------------------------------------------
-    synthetic_erdos_problem(n,p,p_remove,p_add)
-
-    Creates two graphs to be aligned against one another to enumerate triangles
-  between the two graphs.
-
-Inputs:
--------
-* n - (Int):
-    the number of nodes in the graphs.
-
-* p - (float):
-    The probability of including an edge in the original graph.
-
-* p_remove - (float):
-    The probability of removing an edge from the original graph to produce the
-    second graph.
-* p_add - (float):
-    The probability of adding in a new edge in the new graph.
------------------------------------------------------------------------------"""
-function synthetic_erdos_problem(n,p,p_remove,p_add)
-    A = erdos_renyi(n,p)
+function ER_noise_model(A,n::Int,p_remove::F,p_add::F) where {F <: AbstractFloat}
     B = copy(A)
-
 
     is,js,_ = findnz(erdos_renyi(n,p_remove))
     for (i,j) in zip(is,js)
@@ -432,8 +395,14 @@ function synthetic_erdos_problem(n,p,p_remove,p_add)
         end
     end
 
-    return A, B
+    return B
 end
+
+
+
+# --------------------------------------------------------------------------- #
+#						       Random Graph Models
+# --------------------------------------------------------------------------- #
 
 function erdos_renyi(n,p)
     A = sprand(n,n,p)
@@ -442,101 +411,8 @@ function erdos_renyi(n,p)
     return sparse(is,js,ones(length(is)),n,n)
 end
 
-"""-----------------------------------------------------------------------------
-    synthetic_erdos_problem(n,p,p_remove,p_add)
 
-    Creates two graphs to be aligned against one another to enumerate triangles
-  between the two graphs.
-
-Inputs:
--------
-* n - (Int):
-    the number of nodes in the graphs.
-
-* p - (float):
-    The probability of including an edge in the original graph.
-
-* p_remove - (float):
-    The probability of removing an edge from the original graph to produce the
-    second graph.
-* p_add - (float):
-    The probability of adding in a new edge in the new graph.
------------------------------------------------------------------------------"""
-function synthetic_HyperKron_problem(n,p,r,p_remove,p_add)
-
-    A = sparse(gpa_graph(n,p,r,5))
-    B = copy(A)
-
-
-    is,js,_ = findnz(erdos_renyi(n,p_remove))
-    for (i,j) in zip(is,js)
-        if A[i,j] > 0
-            B[i,j] = 0
-            B[j,i] = 0
-        end
-    end
-
-    is,js,_ = findnz(erdos_renyi(n,p_add))
-    for (i,j) in zip(is,js)
-        if A[i,j] == 0.0
-            B[i,j] = 1
-            B[j,i] = 1
-        end
-    end
-
-    return A, B
-end
-
-
-"""-----------------------------------------------------------------------------
-    synthetic_Random_Geometric_problem(n,p,p_remove,p_add)
-
-    Creates two graphs to be aligned against one another to enumerate triangles
-  between the two graphs. First graph is created using a random geometric graph,
-  with a given n, and number of nearest neighbors k. The second graph is created
-  by
-
-Inputs:
--------
-* n - (Int):
-    the number of nodes in the graphs.
-
-* k - (float):
-    The number of nearest neighbors to connected in the graph.
-
-* p_remove - (float):
-    The probability of removing an edge from the original graph to produce the
-    second graph.
-
-* p_add - (float):
-    The probability of adding in a new edge in the new graph.
------------------------------------------------------------------------------"""
-function synthetic_Random_Geometric_problem(n,k,p_remove,p_add)
-	_, ei, ej = random_geometric_graph(n,k)
-    C = sparse(ei,ej,1.0,n,n)
-	is,js,_ = findnz(max.(C,C')) #symmetrize output
-
-	A = sparse(is,js,1.0,n,n)
-    B = copy(A)
-
-    is,js,_ = findnz(erdos_renyi(n,p_remove))
-    for (i,j) in zip(is,js)
-        if A[i,j] > 0
-            B[i,j] = 0
-            B[j,i] = 0
-        end
-    end
-
-    is,js,_ = findnz(erdos_renyi(n,p_add))
-    for (i,j) in zip(is,js)
-        if A[i,j] == 0.0
-            B[i,j] = 1
-            B[j,i] = 1
-        end
-    end
-
-    return A, B
-end
+#--                             David's graph code                          --#
 
 function random_geometric_graph(n,k)
   xy = rand(2,n)
@@ -553,5 +429,33 @@ function random_geometric_graph(n,k)
       end
     end
   end
+  A = sparse(ei,ej,1.0,n,n)
+
+  return max.(A,A')
+end
+
+function spatial_network(n::Integer, d::Integer; degreedist=LogNormal(log(4),1))
+  xy, ei, ej = spatial_graph_edges(n, d;degreedist=degreedist)
+  A = sparse(ei,ej,1.0,n,n)
+  return max.(A,A')
+end
+
+function spatial_graph_edges(n::Integer,d::Integer;degreedist=LogNormal(log(4),1))
+  xy = rand(d,n)
+  T = BallTree(xy)
+  # form the edges for sparse
+  ei = Int[]
+  ej = Int[]
+  for i=1:n
+    deg = ceil(Int,rand(degreedist))
+    idxs, dists = knn(T, xy[:,i], deg+1)
+    for j in idxs
+      if i != j
+        push!(ei,i)
+        push!(ej,j)
+      end
+    end
+  end
   return xy, ei, ej
 end
+
