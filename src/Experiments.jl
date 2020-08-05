@@ -9,6 +9,11 @@ function produce_ssten_from_triangles(file)
         println("rectangular")
     end
 
+	if !issymmetric(A)
+		A = max.(A,A')  #symmetrize for Triangles routine
+	end
+	print(issymmetric(A))
+
     T = collect(MatrixNetworks.triangles(A))
 
     output_file = alterfilename(file,".ssten",".",false)
@@ -303,7 +308,7 @@ function distributed_random_trials(trial_count::Int,process_count::Int,seed_exps
 
 end
 #,graph_type::String="ER"
-function random_graph_exp(n::Int, p_remove::Float64;seed=nothing,degreedist=nothing,kwargs...)
+function random_graph_exp(n::Int, p_remove::Float64,graph_type::String;seed=nothing,degreedist=nothing,kwargs...)
 
 	if seed !== nothing
 		Random.seed!(seed)
@@ -417,7 +422,7 @@ end
 function random_geometric_graph(n,k)
   xy = rand(2,n)
   T = BallTree(xy)
-  idxs = knn(T, xy, k)[1]
+  idxs = knn(T, xy, minimum((k,n)))[1]
   # form the edges for sparse
   ei = Int[]
   ej = Int[]
@@ -447,7 +452,7 @@ function spatial_graph_edges(n::Integer,d::Integer;degreedist=LogNormal(log(4),1
   ei = Int[]
   ej = Int[]
   for i=1:n
-    deg = ceil(Int,rand(degreedist))
+    deg = ceil(Int,minimum(rand(degreedist),n))
     idxs, dists = knn(T, xy[:,i], deg+1)
     for j in idxs
       if i != j
