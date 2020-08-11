@@ -16,7 +16,8 @@ function produce_ssten_from_triangles(file)
 
     T = collect(MatrixNetworks.triangles(A))
 
-    output_file = alterfilename(file,".ssten",".",false)
+	alterfilename = (file,postfix)-> split(file,".smat")[1]*postfix
+    output_file = alterfilename(file,".ssten")
 
     open(output_file,"w") do f
         write(f,"$(3)\t$(n)\t$(length(T))\n")
@@ -97,6 +98,25 @@ function self_alignment(ssten_files::Array{String,1};method="LambdaTAME")
 end
 
 function align_tensors(graph_A_file::String,graph_B_file::String;
+                       ThirdOrderSparse=true,profile=false,kwargs...)
+
+    if ThirdOrderSparse
+        A = load_ThirdOrderSymTensor(graph_A_file)
+        B = load_ThirdOrderSymTensor(graph_B_file)
+    else
+
+        A = load(graph_A_file,false,"COOTen")
+        B = load(graph_B_file,false,"COOTen")
+    end
+
+	if profile
+		return align_tensors_profiled(A,B;kwargs...)
+	else
+		return align_tensors(A,B;kwargs...)
+	end
+end
+
+function align_tensors_test(graph_A_file::String,graph_B_file::String;
                        ThirdOrderSparse=true,kwargs...)
 
     if ThirdOrderSparse
@@ -108,7 +128,7 @@ function align_tensors(graph_A_file::String,graph_B_file::String;
         B = load(graph_B_file,false,"COOTen")
     end
 
-	return align_tensors(A,B;kwargs...)
+	return LowRankTAME_param_search_profiled(A,B;kwargs...)
 
 end
 
@@ -172,7 +192,7 @@ function distributed_pairwise_alignment(dir::String;kwargs...)
 end
 
 function distributed_pairwise_alignment(files::Array{String,1},dirpath::String;
-                                        method="LambdaTAME",kwargs...)
+                                        method="LambdaTAME",profile=false,kwargs...)
 
     @everywhere include_string(Main,$(read("LambdaTAME.jl",String)),"LambdaTAME.jl")
 
@@ -184,8 +204,11 @@ function distributed_pairwise_alignment(files::Array{String,1},dirpath::String;
     for i in 1:length(files)
         for j in i+1:length(files)
 
-            #TODO: make this more robust
-            future = @spawn align_tensors(dirpath*files[i],dirpath*files[j];method=method,kwargs...)
+            if profile
+	            future = @spawn align_tensors_profiled(dirpath*files[i],dirpath*files[j];method=method,kwargs...)
+			else
+				future = @spawn align_tensors(dirpath*files[i],dirpath*files[j];method=method,kwargs...)
+			end
             push!(futures,((i,j),future))
         end
     end
@@ -193,12 +216,23 @@ function distributed_pairwise_alignment(files::Array{String,1},dirpath::String;
     for ((i,j), future) in futures
 
 		if method == "LambdaTAME" ||  method == "LowRankTAME"
-			matched_tris, max_tris, _, _, results = fetch(future)
+			if profile
+				matched_tris, max_tris, _, _, results = fetch(future)
+			else
+				matched_tris, max_tris, _, _ = fetch(future)
+			end
 		elseif method == "TAME"
-			matched_tris, max_tris, _, results = fetch(future)
+			if profile
+				matched_tris, max_tris, _, results = fetch(future)
+			else
+				matched_tris, max_tris, _ = fetch(future)
+			end
 		end
-		push!(exp_results,(files[i],files[j],matched_tris, max_tris, results))
-
+		if profile
+			push!(exp_results,(files[i],files[j],matched_tris, max_tris, results))
+		else
+			push!(exp_results,(files[i],files[j],matched_tris, max_tris))
+		end
     end
 
     return files, exp_results
@@ -247,7 +281,7 @@ end
 function distributed_random_trials(trial_count::Int,process_count::Int,seed_exps::Bool=false
                                    ;method="LambdaTAME",graph_type::String="ER",
 								   n_sizes = [10, 50, 100, 500, 1000, 2000,5000],
-								   kwargs...)
+								   profile=false,kwargs...)
 
     #only handling even batch sizes
     @assert trial_count % process_count == 0
@@ -262,6 +296,7 @@ function distributed_random_trials(trial_count::Int,process_count::Int,seed_exps
 		Random.seed!(0)
 		seeds = rand(UInt64, length(p_remove),length(n_sizes), trial_count)
 	end
+
 	seed = nothing
 	results = []
     p_index = 1
@@ -283,7 +318,9 @@ function distributed_random_trials(trial_count::Int,process_count::Int,seed_exps
 						seed = seeds[p_index,n_index,(batch-1)*batches + i]
 					end
 
-					future = @spawn random_graph_exp(n,p,graph_type;seed=seed,method=method,kwargs...)
+					future = @spawn random_graph_exp(n,p,graph_type;
+					                                 profile=profile,seed=seed,method=method,
+													 kwargs...)
                     push!(futures,((batch-1)*batches + i,seed,p,n,future))
 
                 end
@@ -291,9 +328,19 @@ function distributed_random_trials(trial_count::Int,process_count::Int,seed_exps
                 for (i,seed,p,n,future) in futures
 
 					if method == "LambdaTAME" ||  method == "LowRankTAME"
-						matched_tris, max_tris, _, _, exp_results = fetch(future)
+    					if profile
+							matched_tris, max_tris, _, _, exp_results = fetch(future)
+						else
+							matched_tris, max_tris, _, _ = fetch(future)
+						end
 					elseif method == "TAME"
-    					matched_tris, max_tris, _, exp_results = fetch(future)
+
+						if profile
+							matched_tris, max_tris, _,  exp_results = fetch(future)
+						else
+							matched_tris, max_tris, _  = fetch(future)
+						end
+
 					end
 					push!(results,(i, seed, p, n, matched_tris, max_tris, exp_results))
                 end
@@ -344,7 +391,7 @@ function random_graph_exp(n::Int, p_remove::Float64,graph_type::String;seed=noth
 	return set_up_tensor_alignment(A,B;kwargs...)
 end
 
-function set_up_tensor_alignment(A,B;kwargs...)
+function set_up_tensor_alignment(A,B;profile=false,kwargs...)
 
 	n,n = size(A)
 	#permute the rows of B
@@ -377,7 +424,11 @@ function set_up_tensor_alignment(A,B;kwargs...)
 
     A_ten = ThirdOrderSymTensor(n,A_indices,A_vals)
     B_ten = ThirdOrderSymTensor(n,B_indices,B_vals)
-    return align_tensors(A_ten,B_ten;kwargs...)
+	if profile
+		return align_tensors_profiled(A_ten,B_ten;kwargs...)
+	else
+	    return align_tensors(A_ten,B_ten;kwargs...)
+	end
 end
 
 
@@ -452,7 +503,7 @@ function spatial_graph_edges(n::Integer,d::Integer;degreedist=LogNormal(log(4),1
   ei = Int[]
   ej = Int[]
   for i=1:n
-    deg = ceil(Int,minimum(rand(degreedist),n))
+    deg = ceil(Int,minimum((rand(degreedist),n)))
     idxs, dists = knn(T, xy[:,i], deg+1)
     for j in idxs
       if i != j
