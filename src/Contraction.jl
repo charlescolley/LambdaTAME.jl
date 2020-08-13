@@ -195,18 +195,44 @@ function implicit_contraction(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor,x::A
     for i in 1:size(A.indices,1)
 
 		A_val = A.values[i]
+		i_1,i_2,i_3 = A.indices[i,:]
 
-        for (i_1,i_2,i_3) in permutations(A.indices[i,:])
+#        for (i_1,i_2,i_3) in permutations(A.indices[i,:])
+		for j in 1:size(B.indices,1)
+			j_1,j_2,j_3 = B.indices[j,:]
 
-            for j in 1:size(B.indices,1)
-                j_1,j_2,j_3 = B.indices[j,:]
+			#i_1,i_2,i_3
+			y[ileave(i_1,j_1)] += 2*A_val*B.values[j]*x[ileave(i_2,j_2)]*x[ileave(i_3,j_3)]
+			y[ileave(i_2,j_2)] += 2*A_val*B.values[j]*x[ileave(i_1,j_1)]*x[ileave(i_3,j_3)]
+			y[ileave(i_3,j_3)] += 2*A_val*B.values[j]*x[ileave(i_1,j_1)]*x[ileave(i_2,j_2)]
 
-                y[ileave(i_1,j_1)] += 2*A_val*B.values[j]*x[ileave(i_2,j_2)]*x[ileave(i_3,j_3)]
-                y[ileave(i_2,j_2)] += 2*A_val*B.values[j]*x[ileave(i_1,j_1)]*x[ileave(i_3,j_3)]
-                y[ileave(i_3,j_3)] += 2*A_val*B.values[j]*x[ileave(i_1,j_1)]*x[ileave(i_2,j_2)]
+			#i_1,i_3,i_2
+			y[ileave(i_1,j_1)] += 2*A_val*B.values[j]*x[ileave(i_3,j_2)]*x[ileave(i_2,j_3)]
+			y[ileave(i_3,j_2)] += 2*A_val*B.values[j]*x[ileave(i_1,j_1)]*x[ileave(i_2,j_3)]
+			y[ileave(i_2,j_3)] += 2*A_val*B.values[j]*x[ileave(i_1,j_1)]*x[ileave(i_3,j_2)]
 
-            end
-        end
+			#i_2,i_1,i_3
+			y[ileave(i_2,j_1)] += 2*A_val*B.values[j]*x[ileave(i_1,j_2)]*x[ileave(i_3,j_3)]
+			y[ileave(i_1,j_2)] += 2*A_val*B.values[j]*x[ileave(i_2,j_1)]*x[ileave(i_3,j_3)]
+			y[ileave(i_3,j_3)] += 2*A_val*B.values[j]*x[ileave(i_2,j_1)]*x[ileave(i_1,j_2)]
+
+			#i_2,i_3,i_1
+			y[ileave(i_2,j_1)] += 2*A_val*B.values[j]*x[ileave(i_3,j_2)]*x[ileave(i_1,j_3)]
+			y[ileave(i_3,j_2)] += 2*A_val*B.values[j]*x[ileave(i_2,j_1)]*x[ileave(i_1,j_3)]
+			y[ileave(i_1,j_3)] += 2*A_val*B.values[j]*x[ileave(i_2,j_1)]*x[ileave(i_3,j_2)]
+
+			#i_3,i_2,i_1
+			y[ileave(i_3,j_1)] += 2*A_val*B.values[j]*x[ileave(i_2,j_2)]*x[ileave(i_1,j_3)]
+			y[ileave(i_2,j_2)] += 2*A_val*B.values[j]*x[ileave(i_3,j_1)]*x[ileave(i_1,j_3)]
+			y[ileave(i_1,j_3)] += 2*A_val*B.values[j]*x[ileave(i_3,j_1)]*x[ileave(i_2,j_2)]
+
+			#i_3,i_1,i_2
+			y[ileave(i_3,j_1)] += 2*A_val*B.values[j]*x[ileave(i_2,j_2)]*x[ileave(i_1,j_3)]
+			y[ileave(i_1,j_2)] += 2*A_val*B.values[j]*x[ileave(i_3,j_1)]*x[ileave(i_2,j_3)]
+			y[ileave(i_2,j_3)] += 2*A_val*B.values[j]*x[ileave(i_3,j_1)]*x[ileave(i_1,j_2)]
+
+		end
+  #      end
     end
 
     return y
