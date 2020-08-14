@@ -628,12 +628,28 @@ function LowRankTAME_profiled(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor,
 	return best_U, best_V, best_triangle_count, experiment_profile
 end
 
+function setup_tame_data(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor)
+	return _index_triangles_sym(A.n,A.indices), _index_triangles_sym(B.n,B.indices)
+end
+
+function _index_triangles_sym(n,Tris::Array{Int,2})
+
+	Ti = [ Vector{Tuple{Int,Int}}(undef, 0) for i in 1:n]
+
+	for (ti,tj,tk) in eachrow(Tris)
+		push!(Ti[ti], (tj,tk))
+	end
+	sort!.(Ti)
+	return Ti
+end
 
 function TAME(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor,W::Array{F,2},
                        β::F, max_iter::Int,tol::F,α::F;update_user::Int=-1,no_matching=false,
 					   ) where {F <:AbstractFloat}
 
     dimension = minimum((A.n,B.n))
+
+	A_Ti, B_Ti = setup_tame_data(A,B)
 
 	best_x = Array{Float64,2}(undef,A.n,B.n)
     best_triangle_count = -1
@@ -647,7 +663,8 @@ function TAME(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor,W::Array{F,2},
 
     while true
 
-		x_k_1 = implicit_contraction(A,B,x_k)
+	    x_k_1 = impTTVsym(A.n, B.n, x_k, A_Ti, B_Ti)
+		#x_k_1 = implicit_contraction(A,B,x_k)
         new_lambda = dot(x_k_1,x_k)
 
         if β != 0.0
@@ -710,6 +727,9 @@ function TAME_profiled(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor,W::Array{F
 	)
 
 
+
+	A_Ti, B_Ti = setup_tame_data(A,B)
+
 	best_x = Array{Float64,2}(undef,A.n,B.n)
     best_triangle_count::Int = -1
     best_index = -1
@@ -722,6 +742,7 @@ function TAME_profiled(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor,W::Array{F
 
     while true
 
+	#	x_k_1,t = @timed impTTVsym(A.n, B.n, x_k, A_Ti, B_Ti)
 		x_k_1,t = @timed implicit_contraction(A,B,x_k)
 		push!(experiment_profile["contraction_timings"],t)
 

@@ -237,3 +237,65 @@ function implicit_contraction(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor,x::A
 
     return y
 end
+
+function _applytri_sym!(Y::Matrix,X::Matrix,i::Integer,j::Integer,k::Integer,
+		ip::Integer,jp::Integer,kp::Integer)
+	@inbounds begin
+		Y[i,ip] += X[j,jp]*X[k,kp]
+		Y[i,ip] += X[j,kp]*X[k,jp]
+		Y[i,jp] += X[j,ip]*X[k,kp]
+		Y[i,jp] += X[j,kp]*X[k,ip]
+		Y[i,kp] += X[j,ip]*X[k,jp]
+		Y[i,kp] += X[j,jp]*X[k,ip]
+		Y[i,ip] += X[k,jp]*X[j,kp]
+		Y[i,ip] += X[k,kp]*X[j,jp]
+		Y[i,jp] += X[k,ip]*X[j,kp]
+		Y[i,jp] += X[k,kp]*X[j,ip]
+		Y[i,kp] += X[k,ip]*X[j,jp]
+		Y[i,kp] += X[k,jp]*X[j,ip]
+		Y[j,ip] += X[i,jp]*X[k,kp]
+		Y[j,ip] += X[i,kp]*X[k,jp]
+		Y[j,jp] += X[i,ip]*X[k,kp]
+		Y[j,jp] += X[i,kp]*X[k,ip]
+		Y[j,kp] += X[i,ip]*X[k,jp]
+		Y[j,kp] += X[i,jp]*X[k,ip]
+		Y[j,ip] += X[k,jp]*X[i,kp]
+		Y[j,ip] += X[k,kp]*X[i,jp]
+		Y[j,jp] += X[k,ip]*X[i,kp]
+		Y[j,jp] += X[k,kp]*X[i,ip]
+		Y[j,kp] += X[k,ip]*X[i,jp]
+		Y[j,kp] += X[k,jp]*X[i,ip]
+		Y[k,ip] += X[i,jp]*X[j,kp]
+		Y[k,ip] += X[i,kp]*X[j,jp]
+		Y[k,jp] += X[i,ip]*X[j,kp]
+		Y[k,jp] += X[i,kp]*X[j,ip]
+		Y[k,kp] += X[i,ip]*X[j,jp]
+		Y[k,kp] += X[i,jp]*X[j,ip]
+		Y[k,ip] += X[j,jp]*X[i,kp]
+		Y[k,ip] += X[j,kp]*X[i,jp]
+		Y[k,jp] += X[j,ip]*X[i,kp]
+		Y[k,jp] += X[j,kp]*X[i,ip]
+		Y[k,kp] += X[j,ip]*X[i,jp]
+		Y[k,kp] += X[j,jp]*X[i,ip]
+	end
+end
+
+function impTTVsym(nG::Int,nH::Int,x::Vector{Float64},Gti, Hti)
+
+	X = reshape(x,nG,nH)
+	#Xt = copy(X’)
+	Y = similar(X)
+	Y .= 0
+
+	@inbounds for g = 1:nG
+		for h = 1:nH
+			for (jp,kp) in Hti[h]
+				for (j,k) in Gti[g]
+					_applytri_sym!(Y,X,g,j,k,h,jp,kp)
+				end
+			end
+		end
+	end
+	y = Y[:]
+	return y
+end
