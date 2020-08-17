@@ -7,6 +7,8 @@ using MatrixNetworks
 using DataStructures
 using NearestNeighbors
 using Distributions
+using Metis
+
 
 #using Hungarian  #TODO: remove
 import Statistics: mean
@@ -48,5 +50,5 @@ include("Contraction.jl")
 include("Matchings.jl")
 include("PostProcessing.jl")
 include("TAME_Implementations.jl")
-include("Experimental_code.jl")
+#include("Experimental_code.jl")
 include("Experiments.jl")

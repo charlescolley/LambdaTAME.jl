@@ -98,7 +98,8 @@ function self_alignment(ssten_files::Array{String,1};method="LambdaTAME")
 end
 
 function align_tensors(graph_A_file::String,graph_B_file::String;
-                       ThirdOrderSparse=true,profile=false,kwargs...)
+                       ThirdOrderSparse=true,profile=false,
+					   use_metis=false,kwargs...)
 
     if ThirdOrderSparse
         A = load_ThirdOrderSymTensor(graph_A_file)
@@ -108,6 +109,12 @@ function align_tensors(graph_A_file::String,graph_B_file::String;
         A = load(graph_A_file,false,"COOTen")
         B = load(graph_B_file,false,"COOTen")
     end
+
+	if use_metis
+		apply_Metis_permutation!(A,100)
+		apply_Metis_permutation!(B,100)
+	end
+
 
 	if profile
 		return align_tensors_profiled(A,B;kwargs...)
@@ -116,52 +123,14 @@ function align_tensors(graph_A_file::String,graph_B_file::String;
 	end
 end
 
-function align_tensors_test(graph_A_file::String,graph_B_file::String;
-                       ThirdOrderSparse=true,kwargs...)
 
-    if ThirdOrderSparse
-        A = load_ThirdOrderSymTensor(graph_A_file)
-        B = load_ThirdOrderSymTensor(graph_B_file)
-    else
+function apply_Metis_permutation!(A::SparseMatrixCSC,k::Int=100)
 
-        A = load(graph_A_file,false,"COOTen")
-        B = load(graph_B_file,false,"COOTen")
-    end
+	n = size(A,1)
+	metis_partition = Metis.Metis.partition(A, 100)
+	p = sort(1:n, by= i-> metis_partition[i])
 
-	return LowRankTAME_param_search_profiled(A,B;kwargs...)
-
-end
-
-function get_TAME_ranks(graph_A_file::String,graph_B_file::String)
-
-    A = load_ThirdOrderSymTensor(graph_A_file)
-    B = load_ThirdOrderSymTensor(graph_B_file)
-
-    results = Dict()
-
-    max_iter = 30
-    tol = 1e-12
-    X_0 = ones(A.n,B.n)
-    X_0 ./=norm(X_0)
-    #V_0 = ones(B.n,1)
-
-   # U_0 ./= norm(U_0)
-    #V_0 ./= norm(V_0)
-
-    alphas = [1.0,.5]
-    betas =[0.0,1.0,10]
-
-    for α in alphas
-        for β in betas
-            experiment_string = "α:$(α)_β:$(β)"
-            #_,ranks = lowest_rank_TAME_original_svd_for_ranks(A,B,U_0,V_0,β, max_iter,tol,α)
-            _,_,profile = TAME(A,B,X_0,β, max_iter,tol,α;profile=true)
-            results[experiment_string] = profile
-            println("finished $(split(graph_A_file,"/")[end])--$(split(graph_B_file,"/")[end]):$experiment_string")
-        end
-    end
-
-    return results
+	permute!(A,p,p)
 end
 
 #TODO: put in kwargs
@@ -355,7 +324,8 @@ function distributed_random_trials(trial_count::Int,process_count::Int,seed_exps
 
 end
 #,graph_type::String="ER"
-function random_graph_exp(n::Int, p_remove::Float64,graph_type::String;seed=nothing,degreedist=nothing,kwargs...)
+function random_graph_exp(n::Int, p_remove::Float64,graph_type::String;
+                          seed=nothing,use_metis=false,degreedist=nothing,kwargs...)
 
 	if seed !== nothing
 		Random.seed!(seed)
@@ -376,6 +346,7 @@ function random_graph_exp(n::Int, p_remove::Float64,graph_type::String;seed=noth
 			A = spatial_network(n, d;degreedist= degreedist)
 			p = nnz(A)/n^2
 		end
+
 	elseif graph_type == "HyperKron"
 		p = .4#2*log(n)/n
 		r = .4
@@ -388,6 +359,12 @@ function random_graph_exp(n::Int, p_remove::Float64,graph_type::String;seed=noth
 
 	p_add = p*p_remove/(1-p)
 	B = ER_noise_model(A,n,p_remove,p_add)
+
+	if use_metis
+		apply_Metis_permutation!(A,100)
+		apply_Metis_permutation!(B,100)
+	end
+
 	return set_up_tensor_alignment(A,B;kwargs...)
 end
 
@@ -424,6 +401,7 @@ function set_up_tensor_alignment(A,B;profile=false,kwargs...)
 
     A_ten = ThirdOrderSymTensor(n,A_indices,A_vals)
     B_ten = ThirdOrderSymTensor(n,B_indices,B_vals)
+
 	if profile
 		return align_tensors_profiled(A_ten,B_ten;kwargs...)
 	else
