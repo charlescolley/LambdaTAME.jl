@@ -20,7 +20,7 @@ function produce_ssten_from_triangles(file;use_metis=false)
 
 	alterfilename = (file,postfix)-> split(file,".smat")[1]*postfix
 	if use_metis
-	    output_file = alterfilename(file,"with_metis.ssten")
+	    output_file = alterfilename(file,"_with_metis.ssten")
 	else
 	    output_file = alterfilename(file,".ssten")
 	end

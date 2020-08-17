@@ -629,19 +629,21 @@ function LowRankTAME_profiled(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor,
 end
 
 function setup_tame_data(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor)
-	return _index_triangles_sym(A.n,A.indices), _index_triangles_sym(B.n,B.indices)
+	return _index_triangles_nodesym(A.n,A.indices), _index_triangles_nodesym(B.n,B.indices)
 end
 
-function _index_triangles_sym(n,Tris::Array{Int,2})
+function _index_triangles_nodesym(n,Tris::Array{Int,2})
 
-	Ti = [ Vector{Tuple{Int,Int}}(undef, 0) for i in 1:n]
-
+	Ti = [ Vector{Tuple{Int,Int}}(undef, 0) for i in 1:n ]
 	for (ti,tj,tk) in eachrow(Tris)
 		push!(Ti[ti], (tj,tk))
+		push!(Ti[tj], (ti,tk))
+		push!(Ti[tk], (ti,tj))
 	end
 	sort!.(Ti)
 	return Ti
 end
+
 
 function TAME(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor,W::Array{F,2},
                        β::F, max_iter::Int,tol::F,α::F;update_user::Int=-1,no_matching=false,
@@ -663,7 +665,7 @@ function TAME(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor,W::Array{F,2},
 
     while true
 
-	    x_k_1 = impTTVsym(A.n, B.n, x_k, A_Ti, B_Ti)
+	    x_k_1 = impTTVnodesym(A.n, B.n, x_k, A_Ti, B_Ti)
 		#x_k_1 = implicit_contraction(A,B,x_k)
         new_lambda = dot(x_k_1,x_k)
 
@@ -742,8 +744,8 @@ function TAME_profiled(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor,W::Array{F
 
     while true
 
-	#	x_k_1,t = @timed impTTVsym(A.n, B.n, x_k, A_Ti, B_Ti)
-		x_k_1,t = @timed implicit_contraction(A,B,x_k)
+		x_k_1,t = @timed impTTVnodesym(A.n, B.n, x_k, A_Ti, B_Ti)
+	#	x_k_1,t = @timed implicit_contraction(A,B,x_k)
 		push!(experiment_profile["contraction_timings"],t)
 
         new_lambda = dot(x_k_1,x_k)
@@ -772,7 +774,6 @@ function TAME_profiled(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor,W::Array{F
 
 			if update_user != -1 && i % update_user == 0
 				println("finished iterate $(i):tris:$(triangles) -- gaped_t:$(gaped_triangles)")
-
 			end
 
 			if triangles > best_triangle_count
@@ -781,7 +782,6 @@ function TAME_profiled(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor,W::Array{F
 				best_iterate = i
 			end
 		end
-
 
 		if update_user != -1 && i % update_user == 0
 			println("λ_$i: $(new_lambda)")
