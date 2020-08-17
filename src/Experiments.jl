@@ -1,7 +1,7 @@
 #=------------------------------------------------------------------------------
                         Formatting Routines
 ------------------------------------------------------------------------------=#
-function produce_ssten_from_triangles(file)
+function produce_ssten_from_triangles(file;use_metis=false)
 
     A = MatrixNetworks.readSMAT(file)
     (n,m) = size(A)
@@ -12,12 +12,18 @@ function produce_ssten_from_triangles(file)
 	if !issymmetric(A)
 		A = max.(A,A')  #symmetrize for Triangles routine
 	end
-	print(issymmetric(A))
+	if use_metis
+		apply_Metis_permutation!(A)
+	end
 
     T = collect(MatrixNetworks.triangles(A))
 
 	alterfilename = (file,postfix)-> split(file,".smat")[1]*postfix
-    output_file = alterfilename(file,".ssten")
+	if use_metis
+	    output_file = alterfilename(file,"with_metis.ssten")
+	else
+	    output_file = alterfilename(file,".ssten")
+	end
 
     open(output_file,"w") do f
         write(f,"$(3)\t$(n)\t$(length(T))\n")
@@ -99,7 +105,7 @@ end
 
 function align_tensors(graph_A_file::String,graph_B_file::String;
                        ThirdOrderSparse=true,profile=false,
-					   use_metis=false,kwargs...)
+					   kwargs...)
 
     if ThirdOrderSparse
         A = load_ThirdOrderSymTensor(graph_A_file)
@@ -109,11 +115,6 @@ function align_tensors(graph_A_file::String,graph_B_file::String;
         A = load(graph_A_file,false,"COOTen")
         B = load(graph_B_file,false,"COOTen")
     end
-
-	if use_metis
-		apply_Metis_permutation!(A,100)
-		apply_Metis_permutation!(B,100)
-	end
 
 
 	if profile
