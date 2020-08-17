@@ -772,7 +772,7 @@ function TAME_profiled(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor,W::Array{F
 
 			if update_user != -1 && i % update_user == 0
 				println("finished iterate $(i):tris:$(triangles) -- gaped_t:$(gaped_triangles)")
-				println("λ: $(new_lambda)")
+
 			end
 
 			if triangles > best_triangle_count
@@ -782,6 +782,10 @@ function TAME_profiled(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor,W::Array{F
 			end
 		end
 
+
+		if update_user != -1 && i % update_user == 0
+			println("λ_$i: $(new_lambda)")
+		end
 
         if abs(new_lambda - lambda) < tol || i >= max_iter
    			return reshape(best_x,A.n,B.n), best_triangle_count, experiment_profile
