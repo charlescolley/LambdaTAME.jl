@@ -166,38 +166,38 @@ function TAME_score(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor, X::SparseMat
 
 end
 
-#run the Hungarian algorithm on an iterate
+
 function TAME_score(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor,X::Array{Float64,2};return_timings=false)
 
     if return_timings
-        (matching, _) ,hungarian_time = @timed hungarian(-X) #negate because hungarian finds minimum weight matching
-        (triangle_count, gaped_triangles), matching_time = @timed TAME_score(A,B,Dict(i => j for (i,j) in enumerate(matching)))
-        return triangle_count, gaped_triangles, hungarian_time, matching_time
+        (_,_,matching) ,matching_time = @timed bipartite_matching_primal_dual_col_based(X')
+        (triangle_count, gaped_triangles), scoring_time = @timed TAME_score(A,B,Dict(i => j for (i,j) in enumerate(matching)))
+        return triangle_count, gaped_triangles, matching_time, scoring_time
     else
-        matching, _  = hungarian(-X) #negate because hungarian finds minimum weight matching
+        _,_,matching =bipartite_matching_primal_dual_col_based(X')
         return TAME_score(A,B,Dict(i => j for (i,j) in enumerate(matching)))
     end
 end
 
 function TAME_score(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor,x::Array{Float64,1};return_timings=false)
 
-
+    X = reshape(x,A.n,B.n)
     if return_timings
-        (matching, _) ,hungarian_time = @timed hungarian(reshape(-x,A.n,B.n)) #negate because hungarian finds minimum weight matching
+        (_,_,matching) ,hungarian_time = @timed bipartite_matching_primal_dual_col_based(X')
         (triangle_count, gaped_triangles), matching_time = @timed TAME_score(A,B,Dict(i => j for (i,j) in enumerate(matching)))
         return triangle_count, gaped_triangles, hungarian_time, matching_time
     else
-        matching, _  = hungarian(reshape(-x,A.n,B.n)) #negate because hungarian finds minimum weight matching
+        _,_,matching =bipartite_matching_primal_dual_col_based(X')
         return TAME_score(A,B,Dict(i => j for (i,j) in enumerate(matching)))
     end
 
 end
 
+
 function TAME_score(A::COOTen,B::COOTen,X::Array{Float64,2};return_timings=false)
 
-
    if return_timings
-        (matching, _) ,hungarian_time = @timed hungarian(-X) #negate because hungarian finds minimum weight matching
+        (_,_,matching) ,scoring_time = @timed bipartite_matching_primal_dual_col_based(X')
         (triangle_count, gaped_triangles), matching_time = @timed TAME_score(A,B,Dict(i => j for (i,j) in enumerate(matching)))
         return triangle_count, gaped_triangles, hungarian_time, matching_time
     else
@@ -374,4 +374,162 @@ function TAME_score(Triangle_Dict::Dict{Array{Int,1},Int},Input_tensor::ThirdOrd
         end
     end
     return triangle_count, gaped_triangles
+end
+
+
+
+function bipartite_matching_primal_dual_col_based(X::Adjoint{Float64,Array{T,2}}) where T
+
+	m,n = size(X)
+
+    # variables used for the primal-dual algorithm
+    # normalize ai values # updated on 2-19-2019
+    X ./= maximum(abs.(X))
+
+    alpha=zeros(Float64,m)
+    bt=zeros(Float64,m+n)#beta
+    queue=zeros(Int64,m)
+    t=zeros(Int64,m+n)
+    match1=zeros(Int64,m)
+    match2=zeros(Int64,m+n)
+    tmod = zeros(Int64,m+n)
+    ntmod=0
+
+    # initialize the primal and dual variables
+
+	for j = 1:n
+		for i=1:m
+			if X[i,j] > alpha[i]
+			   alpha[i]=X[i,j]
+			end
+		end
+    end
+
+    # dual variables (bt) are initialized to 0 already
+    # match1 and match2 are both 0, which indicates no matches
+
+    i=1
+    while i<=m
+
+        for j=1:ntmod
+            t[tmod[j]]=0
+        end
+        ntmod=0
+        # add i to the stack
+        head=1
+        tail=1
+        queue[head]=i
+        while head <= tail && match1[i]==0 #queue empty + i is unmatched
+            k=queue[head]
+
+            for j=1:n #iterate over row k
+
+                if X[k,j] < alpha[k] + bt[j] - 1e-8
+                    continue
+                end # skip if tight
+
+                if t[j]==0
+                    tail=tail+1 #put the potential match in the queue
+                    if tail <= m
+                        queue[tail]=match2[j]
+                    end
+                    t[j]=k  #try vertex k for vertex j
+                    ntmod=ntmod+1
+                    tmod[ntmod]=j
+                    if match2[j]<1
+                        while j>0
+                            match2[j]=t[j]
+                            k=t[j]
+                            temp=match1[k]
+                            match1[k]=j
+                            j=temp
+                        end
+                        break
+                    end
+                end
+            end
+
+			j = k + n #check dummy node
+			if 0.0 >= alpha[k] + bt[j] - 1e-8
+
+				if t[j]==0
+					tail=tail+1 #put the potential match in the queue
+					if tail <= m
+						queue[tail]=match2[j]
+					end
+					t[j]=k  #try vertex k for vertex j
+					ntmod=ntmod+1
+					tmod[ntmod]=j
+					if match2[j]<1
+						while j>0
+							match2[j]=t[j]
+							k=t[j]
+							temp=match1[k]
+							match1[k]=j
+							j=temp
+						end
+						break
+					end
+				end
+			end
+            head=head+1
+
+        end
+
+		if match1[i] < 1
+            theta=Inf
+            for j=1:head-1
+                t1=queue[j]
+                for t2=1:n
+                    if t[t2] == 0 && alpha[t1] + bt[t2] - X[t1,t2] < theta
+                        theta = alpha[t1] + bt[t2] - X[t1,t2]
+                    end
+                end
+				#check t1's dummy node
+				if t[t1 + n] == 0 && alpha[t1] + bt[t1 + n] < theta
+                        theta = alpha[t1] + bt[t1 + n]
+				end
+            end
+
+            for j=1:head-1
+                alpha[queue[j]] -= theta
+            end
+            for j=1:ntmod
+                bt[tmod[j]] += theta
+            end
+            continue
+        end
+
+        i=i+1
+    end
+
+	#count
+    val=0
+    for i=1:m
+        for j=1:n
+            if i==match2[j]
+                val=val+X[i,j]
+            end
+        end
+    end
+
+	#count how many are properly matched
+    noute = 0
+    for j=1:n
+        if match2[j]<=m
+            noute=noute+1
+        end
+    end
+
+    #M_output = Matching_output(m,n,val,noute,match1)
+	#return val,noute, match2 #convert to original format
+
+	if m > n
+		y = [(x > 0) ? x : i + maximum((n,m)) for (i,x) in zip(1:length(match2),match2)][1:n]
+	else
+		y = [(x > 0) ? x : i + minimum((n,m)) for (i,x) in zip(1:length(match2),match2)][1:n]
+	end
+
+    return val,noute,y # #running on adjoint
+
 end

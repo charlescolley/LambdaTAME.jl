@@ -479,8 +479,7 @@ function LowRankTAME(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor,
 
 		if !no_matching
 			#evaluate the matchings
-			sparse_X_k_1 = sparse(U_k_1*V_k_1')
-			triangles, gaped_triangles = TAME_score(A,B,sparse_X_k_1)
+			triangles, gaped_triangles = TAME_score(A,B,U_k_1*V_k_1')
 
 			if triangles > best_triangle_count
 				best_triangle_count  = triangles
@@ -597,9 +596,7 @@ function LowRankTAME_profiled(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor,
 
 		if !no_matching
 			#evaluate the matchings
-			sparse_X_k_1 = sparse(U_k_1*V_k_1')
-
-			triangles, gaped_triangles, matching_time, scoring_time = TAME_score(A,B,sparse_X_k_1;return_timings=true)
+			triangles, gaped_triangles, matching_time, scoring_time = TAME_score(A,B,U_k_1*V_k_1';return_timings=true)
 			push!(experiment_profile["matching_timings"],float(matching_time))
 			push!(experiment_profile["scoring_timings"], float(scoring_time))
 
@@ -678,24 +675,24 @@ function TAME(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor,W::Array{F,2},
         end
 
         x_k_1 ./= norm(x_k_1)
-
 		if !no_matching
-			sparse_X_k_1 = sparse(reshape(x_k_1,A.n,B.n))
-			triangles, gaped_triangles =  TAME_score(A,B,sparse_X_k_1)
+
+			triangles, gaped_triangles =  TAME_score(A,B,reshape(x_k_1,A.n,B.n))
 
 			if update_user != -1 && i % update_user == 0
-				println("finished iterate $(i):tris:$(triangles) -- gaped_t:$(gaped_triangles)")
+				println("finished iterate $(i):tris:$triangles -- gaped_t:$gaped_triangles")
 			end
+
+			if triangles > best_triangle_count
+				best_x = copy(x_k_1)
+				best_triangle_count = triangles
+				best_iterate = i
+			end
+
 		end
 
 		if update_user != -1 && i % update_user == 0
 			println("λ: $(new_lambda)")
-		end
-
-		if triangles > best_triangle_count
-			best_x = copy(x_k_1)
-			best_triangle_count = triangles
-			best_iterate = i
 		end
 
 
@@ -763,9 +760,8 @@ function TAME_profiled(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor,W::Array{F
 		push!(experiment_profile["ranks"],float(rank(reshape(x_k_1,(A.n,B.n)))))
 
 		if !no_matching
-			sparse_X_k_1 = sparse(reshape(x_k_1,A.n,B.n))
 
-			triangles, gaped_triangles, bipartite_matching_time, scoring_time = TAME_score(A,B,sparse_X_k_1;return_timings=true)
+			triangles, gaped_triangles, bipartite_matching_time, scoring_time = TAME_score(A,B,reshape(x_k_1,A.n,B.n);return_timings=true)
 			push!(experiment_profile["matching_timings"],bipartite_matching_time)
 			push!(experiment_profile["scoring_timings"],scoring_time)
 			push!(experiment_profile["matched triangles"],float(triangles))
