@@ -126,7 +126,7 @@ function TAME_param_search(A::Ten,B::Ten;
 
     max_triangle_match = min(size(A.indices,1),size(B.indices,1))
     total_triangles = size(A.indices,1) + size(B.indices,1)
-    best_TAME_PP_tris = -1
+    best_TAME_PP_tris::Int = -1
 
 	if Ten == COOTen
 		m = A.cubical_dimension
