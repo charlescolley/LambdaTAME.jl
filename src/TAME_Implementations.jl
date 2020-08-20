@@ -4,6 +4,11 @@
 ------------------------------------------------------------------------------=#
 function align_tensors(A,B;method::String="LambdaTAME",no_matching=false,kwargs...)
 
+	#put larger tensor on the left
+	if B.n > A.n
+		return align_tensors(B,A;method = method, no_matching=no_matching,kwargs...)
+	end
+
 	if method == "LambdaTAME"
 		return ΛTAME_param_search(A,B;kwargs...)
 	elseif method == "LowRankTAME"
@@ -16,6 +21,11 @@ function align_tensors(A,B;method::String="LambdaTAME",no_matching=false,kwargs.
 end
 
 function align_tensors_profiled(A,B;method::String="LambdaTAME",no_matching=false,kwargs...)
+
+	#put larger tensor on the left
+	if B.n > A.n
+		return align_tensors_profiled(B,A;method = method, no_matching=no_matching,kwargs...)
+	end
 
 	if method == "LambdaTAME"
 		return ΛTAME_param_search_profiled(A,B;kwargs...)
