@@ -35,6 +35,44 @@ function produce_ssten_from_triangles(file;use_metis=false)
 
 end
 
+function load_UnweightedThirdOrderSymTensor(filepath;enforceFormatting = true)
+
+	#check path validity
+	@assert filepath[end-5:end] == ".ssten"
+
+    open(filepath) do file
+		#preallocate from the header line
+		order, n, m =
+			[parse(Int,elem) for elem in split(chomp(readline(file)),'\t')]
+        @assert order == 3
+
+		Ti = [ Vector{Tuple{Int,Int}}(undef, 0) for i in 1:n ]
+
+		i = 1
+		@inbounds for line in eachline(file)
+			entries = split(chomp(line),'\t')
+
+			if enforceFormatting
+				(ti,tj,tk) = sort([parse(Int,elem) for elem in entries[1:end-1]])
+			else
+				(ti,tj,tk) = [parse(Int,elem) for elem in entries[1:end-1]]
+			end
+
+			if 0 == ti || 0 == tj || 0 == tk
+				error("elements must be indexed by 1.")
+			end
+			push!(Ti[ti], (tj,tk))
+			push!(Ti[tj], (ti,tk))
+			push!(Ti[tk], (ti,tj))
+
+		end
+
+		sort!.(Ti)
+		return UnweightedThirdOrderSymTensor(n,Ti)
+	end
+
+end
+
 function load_ThirdOrderSymTensor(filepath;enforceFormatting = true)
 
 	#check path validity
@@ -49,9 +87,11 @@ function load_ThirdOrderSymTensor(filepath;enforceFormatting = true)
 		indices = Array{Int,2}(undef,m,order)
 		values = Array{Float64,1}(undef,m)
 
+
 		i = 1
 		@inbounds for line in eachline(file)
 			entries = split(chomp(line),'\t')
+
 			indices[i,:] = [parse(Int,elem) for elem in entries[1:end-1]]
 			if enforceFormatting
 				sort!(indices[i,:])
@@ -69,6 +109,7 @@ function load_ThirdOrderSymTensor(filepath;enforceFormatting = true)
 				break
 			end
 	    end
+
 
 		if zero_indexed
 			indices .+= 1
@@ -111,7 +152,6 @@ function align_tensors(graph_A_file::String,graph_B_file::String;
         A = load_ThirdOrderSymTensor(graph_A_file)
         B = load_ThirdOrderSymTensor(graph_B_file)
     else
-
         A = load(graph_A_file,false,"COOTen")
         B = load(graph_B_file,false,"COOTen")
     end
@@ -174,11 +214,7 @@ function distributed_pairwise_alignment(files::Array{String,1},dirpath::String;
     for i in 1:length(files)
         for j in i+1:length(files)
 
-            if profile
-	            future = @spawn align_tensors_profiled(dirpath*files[i],dirpath*files[j];method=method,kwargs...)
-			else
-				future = @spawn align_tensors(dirpath*files[i],dirpath*files[j];method=method,kwargs...)
-			end
+            future = @spawn align_tensors(dirpath*files[i],dirpath*files[j];profile=profile,method=method,kwargs...)
             push!(futures,((i,j),future))
         end
     end
@@ -203,33 +239,6 @@ function distributed_pairwise_alignment(files::Array{String,1},dirpath::String;
 		else
 			push!(exp_results,(files[i],files[j],matched_tris, max_tris))
 		end
-    end
-
-    return files, exp_results
-end
-
-
-function distributed_TAME_rank_experiment(files::Array{String,1},dirpath::String;kwargs...)
-
-    @everywhere include_string(Main,$(read("LambdaTAME.jl",String)),"LambdaTAME.jl")
-
-
-    futures = []
-    exp_results = []
-
-#    Best_alignment_ratio = Array{Float64}(undef,length(ssten_files),length(ssten_files))
-
-    for i in 1:length(files)
-        for j in i+1:length(files)
-
-            #TODO: make this more robust
-            future = @spawn get_TAME_ranks(dirpath*files[i],dirpath*files[j];kwargs...)
-            push!(futures,((i,j),future))
-        end
-    end
-
-    for ((i,j), future) in futures
-        push!(exp_results,(files[i],files[j],fetch(future)))
     end
 
     return files, exp_results
