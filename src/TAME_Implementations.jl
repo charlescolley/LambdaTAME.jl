@@ -2,7 +2,9 @@
 #=------------------------------------------------------------------------------
               Routines for searching over alpha/beta parameters
 ------------------------------------------------------------------------------=#
-function align_tensors(A,B;method::String="LambdaTAME",no_matching=false,kwargs...)
+function align_tensors(A::Union{COOTen,ThirdOrderSymTensor},
+                       B::Union{COOTen,ThirdOrderSymTensor};
+					   method::String="LambdaTAME",no_matching=false,kwargs...)
 
 	#put larger tensor on the left
 	if B.n > A.n
@@ -20,8 +22,12 @@ function align_tensors(A,B;method::String="LambdaTAME",no_matching=false,kwargs.
 	end
 end
 
-function align_tensors_profiled(A,B;method::String="LambdaTAME",no_matching=false,kwargs...)
+function align_tensors_profiled(A::Union{COOTen,ThirdOrderSymTensor},
+                       	        B::Union{COOTen,ThirdOrderSymTensor};
+					            method::String="LambdaTAME",no_matching=false,kwargs...)
 
+
+	println(A.n,"  ",B.n)
 	#put larger tensor on the left
 	if B.n > A.n
 		return align_tensors_profiled(B,A;method = method, no_matching=no_matching,kwargs...)
@@ -444,10 +450,9 @@ function LowRankTAME(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor,
 	best_U::Array{F,2} = copy(U_k)
 	best_V::Array{F,2} = copy(U_k)
 
-	i = 1
     lambda = Inf
 
-    for _ in 1:max_iter
+    for i in 1:max_iter
 
 		A_comps, B_comps = get_kron_contract_comps(A,B,U_k,V_k)
 		lam = tr((B_comps'*V_k)*(U_k'*A_comps))
@@ -489,7 +494,16 @@ function LowRankTAME(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor,
 
 		if !no_matching
 			#evaluate the matchings
-			triangles, gaped_triangles = TAME_score(A,B,U_k_1*V_k_1')
+
+			X = U_k_1*V_k_1'
+			sparse_X = sparse(X)
+			if nnz(sparse_X) < A.n*B.n
+				println("using sparse")
+				triangles, gaped_triangles = TAME_score(A,B,sparse_X)
+			else
+				println("using dense")
+				triangles, gaped_triangles = TAME_score(A,B,X)
+			end
 
 			if triangles > best_triangle_count
 				best_triangle_count  = triangles
@@ -511,7 +525,6 @@ function LowRankTAME(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor,
 		V_k = copy(V_k_1)
 
 		lambda = lam
-		i += 1
 
     end
 
@@ -520,7 +533,7 @@ end
 
 function LowRankTAME_profiled(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor,
                           U_0::Array{F,2},V_0::Array{F,2}, β::F, max_iter::Int,tol::F,α::F;
-						  max_rank::Int = minimum((A.n,B.n)),update_user::Int=-1,
+						  max_rank::Int = minimum((A.n,B.n)),update_user::Int=-1,	
 						  no_matching::Bool=false) where {F <:AbstractFloat}
 
 	@assert size(U_0,2) == size(V_0,2)
@@ -538,15 +551,15 @@ function LowRankTAME_profiled(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor,
 	V_0 ./= sqrt(normalization_factor)
 
 
-	experiment_profile = Dict{String,Array{F,1}}(
-		"ranks"=>[],
-		"contraction_timings"=>[],
-		"svd_timings"=>[],
-		"qr_timings"=>[],
-		"matching_timings"=>[],
-		"scoring_timings"=>[]
+	experiment_profile = Dict{String,Union{Array{F,1},Array{Array{F,1},1}}}(
+		"ranks"=>Array{Float64,1}(undef,0),
+		"contraction_timings"=>Array{Float64,1}(undef,0),
+		"svd_timings"=>Array{Float64,1}(undef,0),
+		"qr_timings"=>Array{Float64,1}(undef,0),
+		"sing_vals"=>Array{Array{Float64,1},1}(undef,0),
+		"matching_timings"=>Array{Float64,1}(undef,0),
+		"scoring_timings"=>Array{Float64,1}(undef,0)
 	)
-
 
 	U_k = copy(U_0)
 	V_k = copy(V_0)
@@ -554,10 +567,9 @@ function LowRankTAME_profiled(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor,
 	best_U::Array{F,2} = copy(U_k)
 	best_V::Array{F,2} = copy(U_k)
 
-	i = 1
     lambda = Inf
 
-    for _ in 1:max_iter
+    for i in 1:max_iter
 
 
 		(A_comps, B_comps),t = @timed get_kron_contract_comps(A,B,U_k,V_k)
@@ -585,11 +597,12 @@ function LowRankTAME_profiled(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor,
 		push!(experiment_profile["qr_timings"],t_A + t_B)
 
 		core = A_R*B_R'
-		(C_U,C_S,C_Vt),t = @timed svd(core)
+		(C_U,C_S::Array{Float64,1},C_Vt),t = @timed svd(core)
 		push!(experiment_profile["svd_timings"],t)
 
 
 		singular_indexes= [i for i in 1:1:minimum((max_rank,length(C_S))) if C_S[i] > C_S[1]*eps(Float64)*dimension]
+		push!(experiment_profile["sing_vals"],C_S)
 		push!(experiment_profile["ranks"],float(length(singular_indexes)))
 
 		U_k_1 = A_Q*C_U[:,singular_indexes]
@@ -606,7 +619,10 @@ function LowRankTAME_profiled(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor,
 
 		if !no_matching
 			#evaluate the matchings
-			triangles, gaped_triangles, matching_time, scoring_time = TAME_score(A,B,U_k_1*V_k_1';return_timings=true)
+
+			triangles, gaped_triangles, matching_time, scoring_time = TAME_score(A,B,sparse(U_k_1*V_k_1');return_timings=true)
+			println("matching runtime: $matching_time matched $triangles triangles")
+
 			push!(experiment_profile["matching_timings"],float(matching_time))
 			push!(experiment_profile["scoring_timings"], float(scoring_time))
 
@@ -630,7 +646,6 @@ function LowRankTAME_profiled(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor,
 		V_k = copy(V_k_1)
 
 		lambda = lam
-
     end
 	return best_U, best_V, best_triangle_count, experiment_profile
 end
@@ -684,10 +699,21 @@ function TAME(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor,W::Array{F,2},
             x_k_1 = α * x_k_1 + (1 - α) * x0
         end
 
-        x_k_1 ./= norm(x_k_1)
+		x_k_1 ./= norm(x_k_1)
+		
 		if !no_matching
 
-			triangles, gaped_triangles =  TAME_score(A,B,reshape(x_k_1,A.n,B.n))
+			X = reshape(x_k_1,A.n,B.n)
+			sparse_X = sparse(X)
+			if nnz(sparse_X) < A.n*B.n
+				println("using sparse")
+				triangles, gaped_triangles, matching_time, scoring_time = TAME_score(A,B,sparse_X;return_timings=true)
+			else		
+				println("using dense")
+				triangles, gaped_triangles, matching_time, scoring_time = TAME_score(A,B,X;return_timings=true)
+			end
+
+			triangles, gaped_triangles =  TAME_score(A,B,)
 
 			if update_user != -1 && i % update_user == 0
 				println("finished iterate $(i):tris:$triangles -- gaped_t:$gaped_triangles")
@@ -721,12 +747,12 @@ end
 
 
 function TAME_profiled(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor,W::Array{F,2},
-                       β::F, max_iter::Int,tol::F,α::F;update_user::Int=-1,
+                       β::F, max_iter::Int,tol::F,α::F;update_user::Int=-1,return_sing_val=false,
 					   no_matching::Bool=false) where {F <:AbstractFloat}
 
     dimension = minimum((A.n,B.n))
 
-    experiment_profile = Dict{String,Array{F,1}}(
+    experiment_profile = Dict{String,Union{Array{F,1},Array{Array{F,1},1}}}(
 		"contraction_timings"=>[],
 		"matching_timings"=>[],
 		"scoring_timings"=>[],
@@ -734,7 +760,6 @@ function TAME_profiled(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor,W::Array{F
 		"gaped triangles"=>[],
 		"ranks"=>[]
 	)
-
 
 
 	A_Ti, B_Ti = setup_tame_data(A,B)
@@ -771,7 +796,10 @@ function TAME_profiled(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor,W::Array{F
 
 		if !no_matching
 
-			triangles, gaped_triangles, bipartite_matching_time, scoring_time = TAME_score(A,B,reshape(x_k_1,A.n,B.n);return_timings=true)
+			X = reshape(x_k_1,A.n,B.n)
+			sparse_X = sparse(X)
+			triangles, gaped_triangles, matching_time, scoring_time = TAME_score(A,B,sparse_X;return_timings=true)
+			
 			push!(experiment_profile["matching_timings"],bipartite_matching_time)
 			push!(experiment_profile["scoring_timings"],scoring_time)
 			push!(experiment_profile["matched triangles"],float(triangles))
