@@ -491,7 +491,7 @@ function spatial_graph_edges(n::Integer,d::Integer;degreedist=LogNormal(log(4),1
   ei = Int[]
   ej = Int[]
   for i=1:n
-    deg = ceil(Int,minimum((rand(degreedist),n)))
+    deg = ceil(Int,minimum((rand(degreedist),n-2)))
     idxs, dists = knn(T, xy[:,i], deg+1)
     for j in idxs
       if i != j
