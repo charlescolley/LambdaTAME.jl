@@ -164,7 +164,7 @@ function TAME_score(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor,U::Array{Float
     if return_timings
         (Match_mapping, _), matching_time = @timed low_rank_matching(U,V)
         (triangle_count, gaped_triangles), scoring_time = @timed TAME_score(A,B,Match_mapping)
-        return triangle_count, gaped_triangles, matching_time, scoring_time
+        return triangle_count, gaped_triangles, matching_time, scoring_time 
     else
         Match_mapping,weight = low_rank_matching(U,V)
         TAME_score(A,B,Match_mapping)
@@ -188,11 +188,11 @@ end
 function TAME_score(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor,X::Array{Float64,2};return_timings=false)
 
     if return_timings
-        (_,_,matching) ,matching_time = @timed bipartite_matching_primal_dual(X)
+        (_,_,matching,_) ,matching_time = @timed bipartite_matching_primal_dual(X)
         (triangle_count, gaped_triangles), scoring_time = @timed TAME_score(A,B,Dict(j => i for (i,j) in enumerate(matching)))
-        return triangle_count, gaped_triangles, matching_time, scoring_time
+        return triangle_count, gaped_triangles, matching_time, scoring_time, matching
     else
-        _,_,matching = bipartite_matching_primal_dual(X)
+        _,_,matching,_ = bipartite_matching_primal_dual(X)
         return TAME_score(A,B,Dict(j => i for (i,j) in enumerate(matching)))
     end
 end
@@ -201,11 +201,11 @@ function TAME_score(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor,x::Array{Float
 
     X = reshape(x,A.n,B.n)
     if return_timings
-        (_,_,matching) ,hungarian_time = @timed bipartite_matching_primal_dual(X;tol=1e-6)
+        (_,_,matching,_) ,hungarian_time = @timed bipartite_matching_primal_dual(X)
         (triangle_count, gaped_triangles), matching_time = @timed TAME_score(A,B,Dict(j => i for (i,j) in enumerate(matching)))
         return triangle_count, gaped_triangles, hungarian_time, matching_time
     else
-        _,_,matching = bipartite_matching_primal_dual(X)
+        _,_,matching,_ = bipartite_matching_primal_dual(X)
         return TAME_score(A,B,Dict(j => i for (i,j) in enumerate(matching)))
     end
 
@@ -215,11 +215,11 @@ end
 function TAME_score(A::COOTen,B::COOTen,X::Array{Float64,2};return_timings=false)
 
    if return_timings
-        (_,_,matching) ,scoring_time = @timed bipartite_matching_primal_dual(X)
+        (_,_,matching,_) ,scoring_time = @timed bipartite_matching_primal_dual(X)
         (triangle_count, gaped_triangles), matching_time = @timed TAME_score(A,B,Dict(j => i for (i,j) in enumerate(matching)))
         return triangle_count, gaped_triangles, matching_time, matching_time
     else
-        (_,_,matching) ,scoring_time = @timed bipartite_matching_primal_dual(X)
+        (_,_,matching,_) ,scoring_time = @timed bipartite_matching_primal_dual(X)
         return TAME_score(A,B,Dict(j => i for (i,j) in enumerate(matching)))
     end
 
@@ -397,7 +397,8 @@ end
 
 
 
-function bipartite_matching_primal_dual(X::Matrix{Float64};tol::Float64=1e-8,normalize_weights::Bool=false)
+function bipartite_matching_primal_dual(X::Matrix{Float64};tol::Float64=1e-8,
+                                        normalize_weights::Bool=false)
     #to get the access pattern right, we must match the right hand side to the left hand side. 
 
 	m,n = size(X)
@@ -412,10 +413,10 @@ function bipartite_matching_primal_dual(X::Matrix{Float64};tol::Float64=1e-8,nor
 	#initialize variables
     alpha=zeros(Float64,n)
     bt=zeros(Float64,m+n)#beta
+    match1 = zeros(Int64,n)
+    match2 = zeros(Int64,n+m)
     queue=zeros(Int64,n)
     t=zeros(Int64,m+n)
-    match1=zeros(Int64,n)
-    match2=zeros(Int64,m+n)
     tmod = zeros(Int64,m+n)
     ntmod=0
 
@@ -429,12 +430,13 @@ function bipartite_matching_primal_dual(X::Matrix{Float64};tol::Float64=1e-8,nor
 		end
     end
 
+
     # dual variables (bt) are initialized to 0 already
     # match1 and match2 are both 0, which indicates no matches
 
     j=1
     @inbounds while j<=n
-   # 	println("test")
+
         for i=1:ntmod
             t[tmod[i]]=0
         end
@@ -444,8 +446,8 @@ function bipartite_matching_primal_dual(X::Matrix{Float64};tol::Float64=1e-8,nor
         tail=1
         queue[head]=j
         while head <= tail && match1[j]==0 #queue empty + i is unmatched
- 		#	println("test2")
-			k=queue[head]
+            
+ 		 	k=queue[head]
 			#println("begining of queue loop")
 
             for i=1:m+1 #iterate over column k
@@ -454,7 +456,7 @@ function bipartite_matching_primal_dual(X::Matrix{Float64};tol::Float64=1e-8,nor
 					i = k+m
 				end
 				if i == k+m #dummy nodes don't have weight
-					if 0.0 < alpha[k] + bt[i] - 1e-8
+					if 0.0 < alpha[k] + bt[i] - tol
 						continue
 					end
                 elseif X[i,k] < alpha[k] + bt[i] - tol
@@ -485,7 +487,7 @@ function bipartite_matching_primal_dual(X::Matrix{Float64};tol::Float64=1e-8,nor
 
         end
 
-        #if node i was unable to be matched, update flows and search for new augmenting path
+        #if node j was unable to be matched, update flows and search for new augmenting path
 		if match1[j] < 1
             theta=Inf
             for i=1:head-1

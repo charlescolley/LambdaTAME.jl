@@ -532,7 +532,7 @@ end
 function LowRankTAME_profiled(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor,
                           U_0::Array{F,2},V_0::Array{F,2}, β::F, max_iter::Int,tol::F,α::F;
 						  max_rank::Int = minimum((A.n,B.n)),update_user::Int=-1,	
-						  no_matching::Bool=false) where {F <:AbstractFloat}
+						  no_matching::Bool=false,low_rank_matching::Bool=false) where {F <:AbstractFloat}
 
 	@assert size(U_0,2) == size(V_0,2)
 
@@ -612,20 +612,20 @@ function LowRankTAME_profiled(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor,
 		U_k_1 ./= sqrt(normalization_factor)
 		V_k_1 ./= sqrt(normalization_factor)
 
-		#TODO: need to redo or remove this
-		#Y, Z = get_kron_contract_comps(A,B,U_k_1,V_k_1)
 
 
 		if !no_matching
 			#evaluate the matchings
+			if low_rank_matching
+				triangles, gaped_tris,matching_time, scoring_time = TAME_score(A,B,U_k_1,V_k_1;return_timings=true)
+			else
+				triangles, gaped_tris,matching_time, scoring_time = TAME_score(A,B,U_k_1*V_k_1';return_timings=true)
+			end
 
-			triangles, gaped_triangles, matching_time, scoring_time = TAME_score(A,B,sparse(U_k_1*V_k_1');return_timings=true)
-			println("matching runtime: $matching_time matched $triangles triangles")
-			
 			push!(experiment_profile["matched_tris"],float(triangles))
 			push!(experiment_profile["matching_timings"],float(matching_time))
 			push!(experiment_profile["scoring_timings"], float(scoring_time))
-
+			
 			if triangles > best_triangle_count
 				best_triangle_count  = triangles
 				best_U = copy(U_k_1)
@@ -634,10 +634,16 @@ function LowRankTAME_profiled(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor,
 		end
 
 		if update_user != -1 && i % update_user == 0
-			println("λ_$i: $(lambda_k_1) -- rank:$(length(singular_indexes)) -- tris:$(triangles) -- gaped_t:$(gaped_triangles)")
+			println("λ_$i: $(lambda_k_1) -- rank:$(length(singular_indexes)) -- tris:$(triangles) -- gaped_t:$(gaped_tris)")
 		end
 
 		if abs(lambda_k_1 - lambda) < tol || i >= max_iter
+			#=
+			triangles,_= TAME_score(A,B,sparse(best_U*best_V');return_timings=false)
+			if triangles > best_triangle_count 
+				best_triangle_count = triangles
+			end
+			=#
 			return best_U, best_V, best_triangle_count, experiment_profile
 		end
 		#get the low rank factorization for the next one
@@ -646,6 +652,8 @@ function LowRankTAME_profiled(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor,
 
 		lambda = lambda_k_1
 	end
+
+
 
 	return best_U, best_V, best_triangle_count, experiment_profile
 end
