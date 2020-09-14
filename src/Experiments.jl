@@ -119,6 +119,13 @@ function load_ThirdOrderSymTensor(filepath;enforceFormatting = true)
     end
 end
 
+function write_to_armadillo_raw_ascii_format(X::Array{T,2},output_file::String) where T
+    open(output_file,"w") do f
+        for row in eachrow(X)
+            println(f,join(row," "))
+        end
+    end
+end
 #=------------------------------------------------------------------------------
                         Local File Experiments Routines
 ------------------------------------------------------------------------------=#
@@ -259,7 +266,7 @@ end
 
 function distributed_random_trials(trial_count::Int,process_count::Int,seed_exps::Bool=false
                                    ;method="LambdaTAME",graph_type::String="ER",
-								   n_sizes = [10, 50, 100, 500, 1000, 2000,5000],
+								   n_sizes = [100, 500, 1000, 2000,5000],
 								   profile=false,kwargs...)
 
     #only handling even batch sizes
@@ -308,20 +315,20 @@ function distributed_random_trials(trial_count::Int,process_count::Int,seed_exps
 
 					if method == "LambdaTAME" ||  method == "LowRankTAME"
     					if profile
-							matched_tris, max_tris, _, _, exp_results = fetch(future)
+							A_tris, B_tris, (matched_tris, max_tris, _, _, exp_results) = fetch(future)
 						else
-							matched_tris, max_tris, _, _ = fetch(future)
+							A_tris, B_tris, (matched_tris, max_tris, _, _) = fetch(future)
 						end
 					elseif method == "TAME"
 
 						if profile
-							matched_tris, max_tris, _,  exp_results = fetch(future)
+							A_tris, B_tris, (matched_tris, max_tris, _,  exp_results) = fetch(future)
 						else
-							matched_tris, max_tris, _  = fetch(future)
+							A_tris, B_tris, (matched_tris, max_tris, _) = fetch(future)
 						end
 
 					end
-					push!(results,(i, seed, p, n, matched_tris, max_tris, exp_results))
+					push!(results,(i, seed, p, n, matched_tris, A_tris, B_tris, max_tris, exp_results))
                 end
             end
 
@@ -413,9 +420,9 @@ function set_up_tensor_alignment(A,B;profile=false,kwargs...)
     B_ten = ThirdOrderSymTensor(n,B_indices,B_vals)
 
 	if profile
-		return align_tensors_profiled(A_ten,B_ten;kwargs...)
+		return size(A_indices,1), size(B_indices,1), align_tensors_profiled(A_ten,B_ten;kwargs...)
 	else
-	    return align_tensors(A_ten,B_ten;kwargs...)
+	    return size(A_indices,1), size(B_indices,1), align_tensors(A_ten,B_ten;kwargs...)
 	end
 end
 
