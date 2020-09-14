@@ -247,7 +247,7 @@ function LowRankTAME_param_search(A::Ten,B::Ten;
 				best_TAME_PP_V = copy(V)
 
             end
-			println("α:$(α) -- β:$(β) -- tri_match:$(best_TAME_PP_tris) -- max_tris $(max_triangle_match)")
+			println("α:$(α) -- β:$(β) -- tri_match:$(triangle_count) -- max_tris:$(max_triangle_match) -- best tri match:$best_TAME_PP_tris")
         end
 
     end
@@ -426,7 +426,7 @@ end
 function LowRankTAME(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor,
                           U_0::Array{F,2},V_0::Array{F,2}, β::F, max_iter::Int,tol::F,α::F;
 						  max_rank::Int = minimum((A.n,B.n)),update_user::Int=-1,
-						  no_matching=false) where {F <:AbstractFloat}
+						  no_matching=false,low_rank_matching=false) where {F <:AbstractFloat}
 
 	@assert size(U_0,2) == size(V_0,2)
 
@@ -492,21 +492,16 @@ function LowRankTAME(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor,
 
 		if !no_matching
 			#evaluate the matchings
-
-			X = U_k_1*V_k_1'
-			sparse_X = sparse(X)
-			if nnz(sparse_X) < A.n*B.n
-				println("using sparse")
-				triangles, gaped_triangles = TAME_score(A,B,sparse_X)
+			if low_rank_matching
+				triangles, gaped_triangles = TAME_score(A,B,U_k_1,V_k_1)
 			else
-				println("using dense")
-				triangles, gaped_triangles = TAME_score(A,B,X)
+				triangles, gaped_triangles = TAME_score(A,B,U_k_1*V_k_1')
 			end
 
 			if triangles > best_triangle_count
 				best_triangle_count  = triangles
 				best_U = copy(U_k_1)
-				best_V = copy(U_k_1)
+				best_V = copy(V_k_1)
 			end
 		end
 
@@ -629,7 +624,7 @@ function LowRankTAME_profiled(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor,
 			if triangles > best_triangle_count
 				best_triangle_count  = triangles
 				best_U = copy(U_k_1)
-				best_V = copy(U_k_1)
+				best_V = copy(V_k_1)
 			end
 		end
 
