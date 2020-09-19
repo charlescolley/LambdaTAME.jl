@@ -59,6 +59,7 @@ function search_Krylov_space(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor,U::Ar
     best_score = -1
     best_i = -1
     best_j = -1
+    best_matching = Dict{Int,Int}()
 
     Triangle_check = Dict{Array{Int,1},Int}()
     A_unique_nnz = length(A.values)
@@ -80,19 +81,20 @@ function search_Krylov_space(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor,U::Ar
        for j in 1:size(V,2)
 
             if A_unique_nnz > B_unique_nnz
-                matched_tris,gaped_tris = TAME_score(Triangle_check,Input_tensor,V[:,j],U[:,i])
+                matched_tris,gaped_tris,matching = TAME_score(Triangle_check,Input_tensor,V[:,j],U[:,i])
             else
-                matched_tris,gaped_tris = TAME_score(Triangle_check,Input_tensor,U[:,i],V[:,i])
+                matched_tris,gaped_tris,matching = TAME_score(Triangle_check,Input_tensor,U[:,i],V[:,j])
             end
 
             if matched_tris > best_score
+                best_matching = matching
                 best_score = matched_tris
                 best_i = i
                 best_j = j
             end
         end
     end
-    return best_score, best_i, best_j
+    return best_score, best_i, best_j, best_matching
 end
 
 function search_Krylov_space(A::COOTen,B::COOTen,U::Array{Float64,2},V::Array{Float64,2})
@@ -100,6 +102,7 @@ function search_Krylov_space(A::COOTen,B::COOTen,U::Array{Float64,2},V::Array{Fl
     best_score = -1
     best_i = -1
     best_j = -1
+    best_matching = Dict{Int,Int}()
 
     Triangle_check = Dict{Array{Int,1},Int}()
 
@@ -119,19 +122,20 @@ function search_Krylov_space(A::COOTen,B::COOTen,U::Array{Float64,2},V::Array{Fl
        for j in 1:size(V,2)
 
             if A.unique_nnz > B.unique_nnz
-                matched_tris,gaped_tris = TAME_score(Triangle_check,Input_tensor,V[:,j],U[:,i])
+                matched_tris, gaped_tris, matching = TAME_score(Triangle_check,Input_tensor,V[:,j],U[:,i])
             else
-                matched_tris,gaped_tris = TAME_score(Triangle_check,Input_tensor,U[:,i],V[:,i])
+                matched_tris, gaped_tris, matching = TAME_score(Triangle_check,Input_tensor,U[:,i],V[:,j])
             end
 
             if matched_tris > best_score
+                best_matching = matching
                 best_score = matched_tris
                 best_i = i
                 best_j = j
             end
         end
     end
-    return best_score, best_i, best_j
+    return best_score, best_i, best_j, best_matching
 end
 
 #used when we don't want to recreate the triangle matching dictionary multiple times
@@ -163,8 +167,8 @@ function TAME_score(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor,U::Array{Float
 
     if return_timings
         (Match_mapping, _), matching_time = @timed low_rank_matching(U,V)
-        (triangle_count, gaped_triangles), scoring_time = @timed TAME_score(A,B,Match_mapping)
-        return triangle_count, gaped_triangles, matching_time, scoring_time 
+        (triangle_count, gaped_triangles,_), scoring_time = @timed TAME_score(A,B,Match_mapping)
+        return triangle_count, gaped_triangles,Match_mapping, matching_time, scoring_time 
     else
         Match_mapping,weight = low_rank_matching(U,V)
         TAME_score(A,B,Match_mapping)
@@ -176,8 +180,8 @@ function TAME_score(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor, X::SparseMat
 
     if return_timings
         x ,bipartite_matching_time = @timed bipartite_matching(X)
-        (triangle_count, gaped_triangles), scoring_time = @timed TAME_score(A,B,Dict(i => j for (i,j) in enumerate(x.match)))
-        return triangle_count, gaped_triangles, bipartite_matching_time, scoring_time
+        (triangle_count, gaped_triangles,matching), scoring_time = @timed TAME_score(A,B,Dict(i => j for (i,j) in enumerate(x.match)))
+        return triangle_count, gaped_triangles, matching, bipartite_matching_time, scoring_time
     else
         x = bipartite_matching(X)
         return TAME_score(A,B,Dict(i => j for (i,j) in enumerate(x.match)))
@@ -189,8 +193,8 @@ function TAME_score(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor,X::Array{Float
 
     if return_timings
         (_,_,matching,_) ,matching_time = @timed bipartite_matching_primal_dual(X)
-        (triangle_count, gaped_triangles), scoring_time = @timed TAME_score(A,B,Dict(j => i for (i,j) in enumerate(matching)))
-        return triangle_count, gaped_triangles, matching_time, scoring_time, matching
+        (triangle_count, gaped_triangles,inverted_matching), scoring_time = @timed TAME_score(A,B,Dict(j => i for (i,j) in enumerate(matching)))
+        return triangle_count, gaped_triangles,inverted_matching, matching_time, scoring_time, matching
     else
         _,_,matching,_ = bipartite_matching_primal_dual(X)
         return TAME_score(A,B,Dict(j => i for (i,j) in enumerate(matching)))
@@ -201,9 +205,9 @@ function TAME_score(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor,x::Array{Float
 
     X = reshape(x,A.n,B.n)
     if return_timings
-        (_,_,matching,_) ,hungarian_time = @timed bipartite_matching_primal_dual(X)
-        (triangle_count, gaped_triangles), matching_time = @timed TAME_score(A,B,Dict(j => i for (i,j) in enumerate(matching)))
-        return triangle_count, gaped_triangles, hungarian_time, matching_time
+        (_,_,matching,_) ,matching_time = @timed bipartite_matching_primal_dual(X)
+        (triangle_count, gaped_triangles,inverted_matching), scoring_time = @timed TAME_score(A,B,Dict(j => i for (i,j) in enumerate(matching)))
+        return triangle_count, gaped_triangles,inverted_matching, matching_time, scoring_time
     else
         _,_,matching,_ = bipartite_matching_primal_dual(X)
         return TAME_score(A,B,Dict(j => i for (i,j) in enumerate(matching)))
@@ -216,8 +220,8 @@ function TAME_score(A::COOTen,B::COOTen,X::Array{Float64,2};return_timings=false
 
    if return_timings
         (_,_,matching,_) ,scoring_time = @timed bipartite_matching_primal_dual(X)
-        (triangle_count, gaped_triangles), matching_time = @timed TAME_score(A,B,Dict(j => i for (i,j) in enumerate(matching)))
-        return triangle_count, gaped_triangles, matching_time, matching_time
+        (triangle_count, gaped_triangles,inverted_matching), matching_time = @timed TAME_score(A,B,Dict(j => i for (i,j) in enumerate(matching)))
+        return triangle_count, gaped_triangles,inverted_matching, matching_time, matching_time
     else
         (_,_,matching,_) ,scoring_time = @timed bipartite_matching_primal_dual(X)
         return TAME_score(A,B,Dict(j => i for (i,j) in enumerate(matching)))
@@ -229,8 +233,8 @@ function TAME_score(A::COOTen,B::COOTen,x::Array{Float64,1};return_timings=false
 
    if return_timings
         (_,_,matching) ,matching_time = @timed bipartite_matching_primal_dual(reshape(x,A.cubical_dimension,B.cubical_dimension))
-        (triangle_count, gaped_triangles), scoring_time = @timed TAME_score(A,B,Dict(j => i for (i,j) in enumerate(matching)))
-        return triangle_count, gaped_triangles, matching_time,scoring_time
+        (triangle_count, gaped_triangles,inverted_matching), scoring_time = @timed TAME_score(A,B,Dict(j => i for (i,j) in enumerate(matching)))
+        return triangle_count, gaped_triangles,inverted_matching, matching_time,scoring_time
     else
         _,_,matching = bipartite_matching_primal_dual(reshape(x,A.cubical_dimension,B.cubical_dimension))
         return TAME_score(A,B,Dict(j => i for (i,j) in enumerate(matching)))
@@ -290,7 +294,7 @@ function TAME_score(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor,Match_mapping:
 
    # triangles, triangle_weight = count_triangles(sub_A,sub_B)
 
-    return triangle_count, gaped_triangles #sub_A, sub_B
+    return triangle_count, gaped_triangles, Match_mapping #sub_A, sub_B
 
 end
 
@@ -346,7 +350,7 @@ function TAME_score(A::COOTen,B::COOTen,Match_mapping::Dict{Int,Int})
 
    # triangles, triangle_weight = count_triangles(sub_A,sub_B)
 
-    return triangle_count, gaped_triangles #sub_A, sub_B
+    return triangle_count, gaped_triangles, Match_mapping
 
 end
 
@@ -369,7 +373,7 @@ function TAME_score(Triangle_Dict::Dict{Array{Int,1},Int},Input_tensor::COOTen,
             gaped_triangles += 1
         end
     end
-    return triangle_count, gaped_triangles
+    return triangle_count, gaped_triangles, Match_mapping
 end
 
 function TAME_score(Triangle_Dict::Dict{Array{Int,1},Int},Input_tensor::ThirdOrderSymTensor,
@@ -391,7 +395,7 @@ function TAME_score(Triangle_Dict::Dict{Array{Int,1},Int},Input_tensor::ThirdOrd
             gaped_triangles += 1
         end
     end
-    return triangle_count, gaped_triangles
+    return triangle_count, gaped_triangles, Match_mapping
 end
 
 

@@ -230,21 +230,21 @@ function distributed_pairwise_alignment(files::Array{String,1},dirpath::String;
 
 		if method == "LambdaTAME" ||  method == "LowRankTAME"
 			if profile
-				matched_tris, max_tris, _, _, results = fetch(future)
+				matched_tris, max_tris, _, _, best_matching, results = fetch(future)
 			else
-				matched_tris, max_tris, _, _ = fetch(future)
+				matched_tris, max_tris, _, _, best_matching = fetch(future)
 			end
 		elseif method == "TAME"
 			if profile
-				matched_tris, max_tris, _, results = fetch(future)
+				matched_tris, max_tris, _, best_matching, results = fetch(future)
 			else
-				matched_tris, max_tris, _ = fetch(future)
+				matched_tris, max_tris, _, best_matching = fetch(future)
 			end
 		end
 		if profile
-			push!(exp_results,(files[i],files[j],matched_tris, max_tris, results))
+			push!(exp_results,(files[i],files[j],matched_tris, max_tris, best_matching, results))
 		else
-			push!(exp_results,(files[i],files[j],matched_tris, max_tris))
+			push!(exp_results,(files[i],files[j],matched_tris, max_tris, best_matching))
 		end
     end
 
@@ -266,7 +266,7 @@ end
 
 function distributed_random_trials(trial_count::Int,process_count::Int,seed_exps::Bool=false
                                    ;method="LambdaTAME",graph_type::String="ER",
-								   n_sizes = [100, 500, 1000, 2000,5000],
+								   n_sizes = [100, 500, 1000, 2000,5000], p_remove = [.01,.05],
 								   profile=false,kwargs...)
 
     #only handling even batch sizes
@@ -275,7 +275,7 @@ function distributed_random_trials(trial_count::Int,process_count::Int,seed_exps
     #ensure file is loaded on all processes
     @everywhere include_string(Main,$(read("LambdaTAME.jl",String)),"LambdaTAME.jl")
 
-    p_remove = [.01,.05]
+   
 	batches = Int(trial_count/process_count)
 
 	if seed_exps
@@ -315,20 +315,22 @@ function distributed_random_trials(trial_count::Int,process_count::Int,seed_exps
 
 					if method == "LambdaTAME" ||  method == "LowRankTAME"
     					if profile
-							A_tris, B_tris, (matched_tris, max_tris, _, _, exp_results) = fetch(future)
+							A_tris, B_tris, perm, (matched_tris, max_tris, _, _,best_matching, exp_results) = fetch(future)
 						else
-							A_tris, B_tris, (matched_tris, max_tris, _, _) = fetch(future)
+							A_tris, B_tris, perm, (matched_tris, max_tris, _, _,best_matching) = fetch(future)
 						end
 					elseif method == "TAME"
 
 						if profile
-							A_tris, B_tris, (matched_tris, max_tris, _,  exp_results) = fetch(future)
+							A_tris, B_tris, perm, (matched_tris, max_tris, _, best_matching,  exp_results) = fetch(future)
 						else
-							A_tris, B_tris, (matched_tris, max_tris, _) = fetch(future)
+							A_tris, B_tris, perm, (matched_tris, max_tris, _, best_matching) = fetch(future)
 						end
 
-					end
-					push!(results,(i, seed, p, n, matched_tris, A_tris, B_tris, max_tris, exp_results))
+                    end
+                    accuracy = sum([1 for (i,j) in enumerate(perm) if best_matching[j] == i])/n
+                    
+					push!(results,(i, seed, p, n, accuracy, matched_tris, A_tris, B_tris, max_tris, exp_results))
                 end
             end
 
@@ -387,7 +389,7 @@ end
 
 function set_up_tensor_alignment(A,B;profile=false,kwargs...)
 
-	n,n = size(A)
+	n,n = size(B)
 	#permute the rows of B
     perm = shuffle(1:n)
     B = B[perm,perm]
@@ -420,9 +422,9 @@ function set_up_tensor_alignment(A,B;profile=false,kwargs...)
     B_ten = ThirdOrderSymTensor(n,B_indices,B_vals)
 
 	if profile
-		return size(A_indices,1), size(B_indices,1), align_tensors_profiled(A_ten,B_ten;kwargs...)
+		return size(A_indices,1), size(B_indices,1),perm, align_tensors_profiled(A_ten,B_ten;kwargs...)
 	else
-	    return size(A_indices,1), size(B_indices,1), align_tensors(A_ten,B_ten;kwargs...)
+	    return size(A_indices,1), size(B_indices,1),perm, align_tensors(A_ten,B_ten;kwargs...)
 	end
 end
 
