@@ -270,7 +270,7 @@ function distributed_random_trials(trial_count::Int,process_count::Int,seed_exps
 								   profile=false,kwargs...)
 
     #only handling even batch sizes
-    @assert trial_count % process_count == 0
+    #@assert trial_count % process_count == 0
 
     #ensure file is loaded on all processes
     @everywhere include_string(Main,$(read("LambdaTAME.jl",String)),"LambdaTAME.jl")
@@ -312,25 +312,26 @@ function distributed_random_trials(trial_count::Int,process_count::Int,seed_exps
                 end
 
                 for (i,seed,p,n,future) in futures
-
-					if method == "LambdaTAME" ||  method == "LowRankTAME"
-    					if profile
-							A_tris, B_tris, perm, (matched_tris, max_tris, _, _,best_matching, exp_results) = fetch(future)
-						else
-							A_tris, B_tris, perm, (matched_tris, max_tris, _, _,best_matching) = fetch(future)
-						end
-					elseif method == "TAME"
-
-						if profile
-							A_tris, B_tris, perm, (matched_tris, max_tris, _, best_matching,  exp_results) = fetch(future)
-						else
-							A_tris, B_tris, perm, (matched_tris, max_tris, _, best_matching) = fetch(future)
-						end
-
-                    end
-                    accuracy = sum([1 for (i,j) in enumerate(perm) if best_matching[j] == i])/n
-                    
-					push!(results,(i, seed, p, n, accuracy, matched_tris, A_tris, B_tris, max_tris, exp_results))
+                    if profile 
+                        if method == "LambdaTAME" ||  method == "LowRankTAME"
+                            A_tris, B_tris, perm, (matched_tris, max_tris, _, _,best_matching, exp_results) = fetch(future)
+                        elseif method == "TAME"
+                            A_tris, B_tris, perm, (matched_tris, max_tris, _, best_matching,  exp_results) = fetch(future)
+                        end
+                        accuracy = sum([1 for (i,j) in enumerate(perm) if get(best_matching,j,-1) == i])/n
+                        push!(results,(i, seed, p, n, accuracy, matched_tris, A_tris, B_tris, max_tris, exp_results))
+                    else
+                        if method == "LambdaTAME" ||  method == "LowRankTAME"
+                            A_tris, B_tris, perm, (matched_tris, max_tris, _, _,best_matching) = fetch(future)
+                        elseif method == "TAME"
+                            A_tris, B_tris, perm, (matched_tris, max_tris, _, best_matching) = fetch(future)
+                        elseif method == "EigenAlign"
+                            A_tris, B_tris, perm, matched_tris, best_matching = fetch(future)
+                            max_tris = minimum((A_tris,B_tris))
+                        end
+                        accuracy = sum([1 for (i,j) in enumerate(perm) if get(best_matching,j,-1) == i])/n
+                        push!(results,(i, seed, p, n, accuracy, matched_tris, A_tris, B_tris, max_tris))
+                    end                    
                 end
             end
 
@@ -384,7 +385,8 @@ function random_graph_exp(n::Int, p_remove::Float64,graph_type::String;
 		apply_Metis_permutation!(B,100)
 	end
 
-	return set_up_tensor_alignment(A,B;kwargs...)
+
+    return set_up_tensor_alignment(A,B;kwargs...)
 end
 
 function set_up_tensor_alignment(A,B;profile=false,kwargs...)
@@ -421,11 +423,19 @@ function set_up_tensor_alignment(A,B;profile=false,kwargs...)
     A_ten = ThirdOrderSymTensor(n,A_indices,A_vals)
     B_ten = ThirdOrderSymTensor(n,B_indices,B_vals)
 
-	if profile
-		return size(A_indices,1), size(B_indices,1),perm, align_tensors_profiled(A_ten,B_ten;kwargs...)
-	else
-	    return size(A_indices,1), size(B_indices,1),perm, align_tensors(A_ten,B_ten;kwargs...)
-	end
+    if kwargs[:method] == "EigenAlign"
+        matching = Dict{Int,Int}(zip(NetworkAlignment.EigenAlign(A,B)...))
+        triangle_count, gaped_triangles, _ = TAME_score(A_ten,B_ten,matching) 
+        
+        return size(A_indices,1), size(B_indices,1), perm, triangle_count, matching
+
+    else
+        if profile
+            return size(A_indices,1), size(B_indices,1),perm, align_tensors_profiled(A_ten,B_ten;kwargs...)
+        else
+            return size(A_indices,1), size(B_indices,1),perm, align_tensors(A_ten,B_ten;kwargs...)
+        end
+    end
 end
 
 
