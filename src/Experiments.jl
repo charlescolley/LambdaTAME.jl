@@ -264,7 +264,7 @@ end
                       Generated Graph Experiments Routines
 ------------------------------------------------------------------------------=#
 
-function distributed_random_trials(trial_count::Int,process_count::Int,seed_exps::Bool=false
+function distributed_random_trials(trial_count::Int,seed_exps::Bool=false
                                    ;method="LambdaTAME",graph_type::String="ER",
 								   n_sizes = [100, 500, 1000, 2000,5000], p_remove = [.01,.05],
 								   profile=false,kwargs...)
@@ -276,8 +276,6 @@ function distributed_random_trials(trial_count::Int,process_count::Int,seed_exps
     @everywhere include_string(Main,$(read("LambdaTAME.jl",String)),"LambdaTAME.jl")
 
    
-	batches = Int(trial_count/process_count)
-
 	if seed_exps
 		Random.seed!(0)
 		seeds = rand(UInt64, length(p_remove),length(n_sizes), trial_count)
@@ -287,57 +285,55 @@ function distributed_random_trials(trial_count::Int,process_count::Int,seed_exps
 	results = []
     p_index = 1
 
+    futures = []
+
+
     for p in p_remove
 
         n_index = 1
 
         for n in n_sizes
 
-
-            for batch in 1:batches
-
-                futures = []
-
-                for i in 1:process_count
-
-					if seed_exps
-						seed = seeds[p_index,n_index,(batch-1)*batches + i]
-					end
-
-					future = @spawn random_graph_exp(n,p,graph_type;
-					                                 profile=profile,seed=seed,method=method,
-													 kwargs...)
-                    push!(futures,((batch-1)*batches + i,seed,p,n,future))
-
+            for trial = 1:trial_count
+  
+                if seed_exps
+                    seed = seeds[p_index,n_index,trial]
                 end
 
-                for (i,seed,p,n,future) in futures
-                    if profile 
-                        if method == "LambdaTAME" ||  method == "LowRankTAME"
-                            A_tris, B_tris, perm, (matched_tris, max_tris, _, _,best_matching, exp_results) = fetch(future)
-                        elseif method == "TAME"
-                            A_tris, B_tris, perm, (matched_tris, max_tris, _, best_matching,  exp_results) = fetch(future)
-                        end
-                        accuracy = sum([1 for (i,j) in enumerate(perm) if get(best_matching,j,-1) == i])/n
-                        push!(results,(i, seed, p, n, accuracy, matched_tris, A_tris, B_tris, max_tris, exp_results))
-                    else
-                        if method == "LambdaTAME" ||  method == "LowRankTAME"
-                            A_tris, B_tris, perm, (matched_tris, max_tris, _, _,best_matching) = fetch(future)
-                        elseif method == "TAME"
-                            A_tris, B_tris, perm, (matched_tris, max_tris, _, best_matching) = fetch(future)
-                        elseif method == "EigenAlign"
-                            A_tris, B_tris, perm, matched_tris, best_matching = fetch(future)
-                            max_tris = minimum((A_tris,B_tris))
-                        end
-                        accuracy = sum([1 for (i,j) in enumerate(perm) if get(best_matching,j,-1) == i])/n
-                        push!(results,(i, seed, p, n, accuracy, matched_tris, A_tris, B_tris, max_tris))
-                    end                    
-                end
+                future = @spawn random_graph_exp(n,p,graph_type;
+                                                    profile=profile,seed=seed,method=method,
+                                                    kwargs...)
+                push!(futures,(seed,p,n,future))
+
             end
 
             n_index += 1
         end
         p_index += 1
+    end
+
+
+    for (seed,p,n,future) in futures
+        if profile 
+            if method == "LambdaTAME" ||  method == "LowRankTAME"
+                A_tris, B_tris, perm, (matched_tris, max_tris, _, _,best_matching, exp_results) = fetch(future)
+            elseif method == "TAME"
+                A_tris, B_tris, perm, (matched_tris, max_tris, _, best_matching,  exp_results) = fetch(future)
+            end
+            accuracy = sum([1 for (i,j) in enumerate(perm) if get(best_matching,j,-1) == i])/n
+            push!(results,(seed, p, n, accuracy, matched_tris, A_tris, B_tris, max_tris, exp_results))
+        else
+            if method == "LambdaTAME" ||  method == "LowRankTAME"
+                A_tris, B_tris, perm, (matched_tris, max_tris, _, _,best_matching) = fetch(future)
+            elseif method == "TAME"
+                A_tris, B_tris, perm, (matched_tris, max_tris, _, best_matching) = fetch(future)
+            elseif method == "EigenAlign"
+                A_tris, B_tris, perm, matched_tris, best_matching = fetch(future)
+                max_tris = minimum((A_tris,B_tris))
+            end
+            accuracy = sum([1 for (i,j) in enumerate(perm) if get(best_matching,j,-1) == i])/n
+            push!(results,( seed, p, n, accuracy, matched_tris, A_tris, B_tris, max_tris))
+        end                    
     end
 
     return results
