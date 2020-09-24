@@ -1,3 +1,18 @@
+function degree_based_matching(A::SparseMatrixCSC{T,Int},B::SparseMatrixCSC{T,Int}) where T
+
+	m = size(A,1)
+	n = size(B,1)
+
+	d_A = A*ones(n)
+	d_B = B*ones(m)
+
+	noise_factor = .01
+	p_A = sort(1:m,by=i->d_A[i]+noise_factor*rand()) #breaks ties with some variation
+	p_B = sort(1:n,by=j->d_B[j]+noise_factor*rand())
+
+	return collect(zip(p_A,p_B))
+
+end
 
 function low_rank_matching(U::Array{Float64,2},V::Array{Float64,2})
     n,d1 = size(U)
@@ -242,8 +257,11 @@ function TAME_score(A::COOTen,B::COOTen,x::Array{Float64,1};return_timings=false
 
 end
 
+"""
+   Match_mapping is expected to map V_A -> V_B
+"""
 function TAME_score(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor,Match_mapping::Dict{Int,Int})
-
+    
     match_len = length(Match_mapping)
 
     Triangle_check = Dict{Array{Int,1},Int}()
@@ -256,7 +274,7 @@ function TAME_score(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor,Match_mapping:
             Triangle_check[A.indices[i,:]] = 1
         end
 
-        #invert to map v indices to u
+        #invert to map V_B indices to V_A
         Match_mapping = Dict(value => key for (key, value) in Match_mapping)
 
         for i in 1:size(B.indices,1)

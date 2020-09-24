@@ -327,7 +327,7 @@ function distributed_random_trials(trial_count::Int,seed_exps::Bool=false
                 A_tris, B_tris, perm, (matched_tris, max_tris, _, _,best_matching) = fetch(future)
             elseif method == "TAME"
                 A_tris, B_tris, perm, (matched_tris, max_tris, _, best_matching) = fetch(future)
-            elseif method == "EigenAlign"
+            elseif method == "EigenAlign" || method == "Degree"
                 A_tris, B_tris, perm, matched_tris, best_matching = fetch(future)
                 max_tris = minimum((A_tris,B_tris))
             end
@@ -425,6 +425,12 @@ function set_up_tensor_alignment(A,B;profile=false,kwargs...)
         
         return size(A_indices,1), size(B_indices,1), perm, triangle_count, matching
 
+    elseif kwargs[:method] == "Degree"
+     
+        matching = Dict{Int,Int}(degree_based_matching(A,B))
+        triangle_count, _, _= TAME_score(A_ten,B_ten,matching) 
+        return size(A_indices,1), size(B_indices,1), perm, triangle_count, matching
+
     else
         if profile
             return size(A_indices,1), size(B_indices,1),perm, align_tensors_profiled(A_ten,B_ten;kwargs...)
@@ -493,13 +499,13 @@ function random_geometric_graph(n,k)
   return max.(A,A')
 end
 
-function spatial_network(n::Integer, d::Integer; degreedist=LogNormal(log(4),1))
+function spatial_network(n::Integer, d::Integer; degreedist=LogNormal(log(5),1))
   xy, ei, ej = spatial_graph_edges(n, d;degreedist=degreedist)
   A = sparse(ei,ej,1.0,n,n)
   return max.(A,A')
 end
 
-function spatial_graph_edges(n::Integer,d::Integer;degreedist=LogNormal(log(4),1))
+function spatial_graph_edges(n::Integer,d::Integer;degreedist=LogNormal(log(5),1))
   xy = rand(d,n)
   T = BallTree(xy)
   # form the edges for sparse
