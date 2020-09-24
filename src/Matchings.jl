@@ -3,12 +3,13 @@ function degree_based_matching(A::SparseMatrixCSC{T,Int},B::SparseMatrixCSC{T,In
 	m = size(A,1)
 	n = size(B,1)
 
-	d_A = A*ones(n)
-	d_B = B*ones(m)
+    noise_factor = .01
+	d_A = A*ones(m) .+ noise_factor*rand(m)
+	d_B = B*ones(n) .+ noise_factor*rand(n)
 
-	noise_factor = .01
-	p_A = sort(1:m,by=i->d_A[i]+noise_factor*rand()) #breaks ties with some variation
-	p_B = sort(1:n,by=j->d_B[j]+noise_factor*rand())
+	
+	p_A = sort(1:m,by=i->d_A[i]) #breaks ties with some variation
+	p_B = sort(1:n,by=j->d_B[j])
 
 	return collect(zip(p_A,p_B))
 
