@@ -34,6 +34,11 @@ using Main.SparseSymmetricTensors
 NETWORK_ALIGNMENT_PATH = "/Users/ccolley/Code/NetworkAlignment.jl/src/"
 include(NETWORK_ALIGNMENT_PATH*"NetworkAlignment.jl")
 
+
+LOWRANK_EIGENALIGN_PATH = "/Users/ccolley/Code/lowrank_spectral/all_code/align_networks_eigenalign.jl"
+include(LOWRANK_EIGENALIGN_PATH)
+
+
 #TODO: Check to see if this can be run straight out of the box.
 #local graph repos
 MULTIMAGNA=PROJECT_PATH*"/data/sparse_tensors/"

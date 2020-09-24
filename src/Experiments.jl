@@ -299,7 +299,6 @@ function distributed_random_trials(trial_count::Int,seed_exps::Bool=false
                 if seed_exps
                     seed = seeds[p_index,n_index,trial]
                 end
-
                 future = @spawn random_graph_exp(n,p,graph_type;
                                                     profile=profile,seed=seed,method=method,
                                                     kwargs...)
@@ -327,7 +326,7 @@ function distributed_random_trials(trial_count::Int,seed_exps::Bool=false
                 A_tris, B_tris, perm, (matched_tris, max_tris, _, _,best_matching) = fetch(future)
             elseif method == "TAME"
                 A_tris, B_tris, perm, (matched_tris, max_tris, _, best_matching) = fetch(future)
-            elseif method == "EigenAlign" || method == "Degree" || method == "Random"
+            elseif method == "EigenAlign" || method == "Degree" || method == "Random" || method == "LowRankEigenAlign"
                 A_tris, B_tris, perm, matched_tris, best_matching = fetch(future)
                 max_tris = minimum((A_tris,B_tris))
             end
@@ -373,7 +372,7 @@ function random_graph_exp(n::Int, p_remove::Float64,graph_type::String;
 		error("invalid graph type: $graph_type\n must be either 'ER','RandomGeometric' or 'HyperKron'")
 	end
 
-	p_add = p*p_remove/(1-p)
+    p_add = (p*p_remove)/(1-p)
 	B = ER_noise_model(A,n,p_remove,p_add)
 
 	if use_metis
@@ -419,25 +418,23 @@ function set_up_tensor_alignment(A,B;profile=false,kwargs...)
     A_ten = ThirdOrderSymTensor(n,A_indices,A_vals)
     B_ten = ThirdOrderSymTensor(n,B_indices,B_vals)
 
-    if kwargs[:method] == "EigenAlign" || kwargs[:method] == "Degree" || kwargs[:method] == "Random"
+    if kwargs[:method] == "EigenAlign" || kwargs[:method] == "Degree" || kwargs[:method] == "Random" || kwargs[:method] == "LowRankEigenAlign"
 
-        if kwargs[:method] == "EigenAlign"
-
+        if kwargs[:method] == "LowRankEigenAlign"
+            iters = 10
+            ma,mb,_,_ = align_networks_eigenalign(A,B,iters,"lowrank_svd_union",3)
+            matching = Dict{Int,Int}([i=>j for (i,j) in zip(ma,mb)]) 
+        elseif kwargs[:method] == "EigenAlign"
             matching = Dict{Int,Int}(zip(NetworkAlignment.EigenAlign(A,B)...))
         elseif kwargs[:method] == "Degree"
             matching = Dict{Int,Int}(degree_based_matching(A,B))
         elseif kwargs[:method] == "Random"
             matching = Dict{Int,Int}(enumerate(shuffle(1:n)))
         else
-            error("Invalid input, must be 'EigenAlign','Degree', or 'Random'.")
+            error("Invalid input, must be 'EigenAlign','LowRankEigenAlign','Degree', or 'Random'.")
         end
+ 
         triangle_count, gaped_triangles, _ = TAME_score(A_ten,B_ten,matching) 
-        return size(A_indices,1), size(B_indices,1), perm, triangle_count, matching
-
-   
-     
-        
-        triangle_count, _, _= TAME_score(A_ten,B_ten,matching) 
         return size(A_indices,1), size(B_indices,1), perm, triangle_count, matching
 
     else
