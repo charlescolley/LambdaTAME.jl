@@ -315,23 +315,33 @@ function distributed_random_trials(trial_count::Int,seed_exps::Bool=false
     for (seed,p,n,future) in futures
         if profile 
             if method == "LambdaTAME" ||  method == "LowRankTAME"
-                A_tris, B_tris, perm, (matched_tris, max_tris, _, _,best_matching, exp_results) = fetch(future)
+                A_tris, B_tris, perm, d_A, d_B, (matched_tris, max_tris, _, _,best_matching, exp_results) = fetch(future)
             elseif method == "TAME"
-                A_tris, B_tris, perm, (matched_tris, max_tris, _, best_matching,  exp_results) = fetch(future)
+                A_tris, B_tris, perm, d_A, d_B, (matched_tris, max_tris, _, best_matching,  exp_results) = fetch(future)
             end
+
             accuracy = sum([1 for (i,j) in enumerate(perm) if get(best_matching,j,-1) == i])/n
-            push!(results,(seed, p, n, accuracy, matched_tris, A_tris, B_tris, max_tris, exp_results))
+            D_A = sum(d_A)
+            D_B = sum(d_B)
+            degree_weighted_accuracy = sum([((d_A[i] + d_B[j])/(D_A+D_B)) for (i,j) in enumerate(perm) if get(best_matching,j,-1) == i])/ binomial(length(best_matching),2)
+      
+            push!(results,(seed, p, n, accuracy, degree_weighted_accuracy, matched_tris, A_tris, B_tris, max_tris, exp_results))
         else
             if method == "LambdaTAME" ||  method == "LowRankTAME"
-                A_tris, B_tris, perm, (matched_tris, max_tris, _, _,best_matching) = fetch(future)
+                A_tris, B_tris, perm, d_A, d_B, (matched_tris, max_tris, _, _,best_matching) = fetch(future)
             elseif method == "TAME"
-                A_tris, B_tris, perm, (matched_tris, max_tris, _, best_matching) = fetch(future)
+                A_tris, B_tris, perm, d_A, d_B, (matched_tris, max_tris, _, best_matching) = fetch(future)
             elseif method == "EigenAlign" || method == "Degree" || method == "Random" || method == "LowRankEigenAlign"
-                A_tris, B_tris, perm, matched_tris, best_matching = fetch(future)
+                A_tris, B_tris, perm, d_A, d_B, matched_tris, best_matching = fetch(future)
                 max_tris = minimum((A_tris,B_tris))
             end
+
             accuracy = sum([1 for (i,j) in enumerate(perm) if get(best_matching,j,-1) == i])/n
-            push!(results,( seed, p, n, accuracy, matched_tris, A_tris, B_tris, max_tris))
+            D_A = sum(d_A)
+            D_B = sum(d_B)
+            degree_weighted_accuracy = sum([((d_A[i] + d_B[j])/(D_A+D_B)) for (i,j) in enumerate(perm) if get(best_matching,j,-1) == i])/ binomial(length(best_matching),2)
+      
+            push!(results,( seed, p, n, accuracy, degree_weighted_accuracy, matched_tris, A_tris, B_tris, max_tris))
         end                    
     end
 
@@ -391,6 +401,10 @@ function set_up_tensor_alignment(A,B;profile=false,kwargs...)
     perm = shuffle(1:n)
     B = B[perm,perm]
 
+    #compute degrees for degree weighted accuracy
+    d_A = A*ones(n)
+    d_B = B*ones(n)
+
     #build COOTens from graphs
     A_tris = collect(MatrixNetworks.triangles(A))
     B_tris = collect(MatrixNetworks.triangles(B))
@@ -433,15 +447,15 @@ function set_up_tensor_alignment(A,B;profile=false,kwargs...)
         else
             error("Invalid input, must be 'EigenAlign','LowRankEigenAlign','Degree', or 'Random'.")
         end
- 
         triangle_count, gaped_triangles, _ = TAME_score(A_ten,B_ten,matching) 
-        return size(A_indices,1), size(B_indices,1), perm, triangle_count, matching
+        return size(A_indices,1), size(B_indices,1), perm, d_A, d_B, triangle_count, matching
 
     else
+
         if profile
-            return size(A_indices,1), size(B_indices,1),perm, align_tensors_profiled(A_ten,B_ten;kwargs...)
+            return size(A_indices,1), size(B_indices,1),perm, d_A, d_B, align_tensors_profiled(A_ten,B_ten;kwargs...)
         else
-            return size(A_indices,1), size(B_indices,1),perm, align_tensors(A_ten,B_ten;kwargs...)
+            return size(A_indices,1), size(B_indices,1),perm, d_A, d_B, align_tensors(A_ten,B_ten;kwargs...)
         end
     end
 end
