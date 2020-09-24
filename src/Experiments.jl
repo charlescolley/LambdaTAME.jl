@@ -327,7 +327,7 @@ function distributed_random_trials(trial_count::Int,seed_exps::Bool=false
                 A_tris, B_tris, perm, (matched_tris, max_tris, _, _,best_matching) = fetch(future)
             elseif method == "TAME"
                 A_tris, B_tris, perm, (matched_tris, max_tris, _, best_matching) = fetch(future)
-            elseif method == "EigenAlign" || method == "Degree"
+            elseif method == "EigenAlign" || method == "Degree" || method == "Random"
                 A_tris, B_tris, perm, matched_tris, best_matching = fetch(future)
                 max_tris = minimum((A_tris,B_tris))
             end
@@ -419,15 +419,24 @@ function set_up_tensor_alignment(A,B;profile=false,kwargs...)
     A_ten = ThirdOrderSymTensor(n,A_indices,A_vals)
     B_ten = ThirdOrderSymTensor(n,B_indices,B_vals)
 
-    if kwargs[:method] == "EigenAlign"
-        matching = Dict{Int,Int}(zip(NetworkAlignment.EigenAlign(A,B)...))
+    if kwargs[:method] == "EigenAlign" || kwargs[:method] == "Degree" || kwargs[:method] == "Random"
+
+        if kwargs[:method] == "EigenAlign"
+
+            matching = Dict{Int,Int}(zip(NetworkAlignment.EigenAlign(A,B)...))
+        elseif kwargs[:method] == "Degree"
+            matching = Dict{Int,Int}(degree_based_matching(A,B))
+        elseif kwargs[:method] == "Random"
+            matching = Dict{Int,Int}(enumerate(shuffle(1:n)))
+        else
+            error("Invalid input, must be 'EigenAlign','Degree', or 'Random'.")
+        end
         triangle_count, gaped_triangles, _ = TAME_score(A_ten,B_ten,matching) 
-        
         return size(A_indices,1), size(B_indices,1), perm, triangle_count, matching
 
-    elseif kwargs[:method] == "Degree"
+   
      
-        matching = Dict{Int,Int}(degree_based_matching(A,B))
+        
         triangle_count, _, _= TAME_score(A_ten,B_ten,matching) 
         return size(A_indices,1), size(B_indices,1), perm, triangle_count, matching
 
