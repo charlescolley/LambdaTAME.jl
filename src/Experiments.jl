@@ -320,10 +320,10 @@ function distributed_random_trials(trial_count::Int,seed_exps::Bool=false
                 A_tris, B_tris, perm, d_A, d_B, (matched_tris, max_tris, _, best_matching,  exp_results) = fetch(future)
             end
 
-            accuracy = sum([1 for (i,j) in enumerate(perm) if get(best_matching,j,-1) == i])/n
+            accuracy = sum([1 for (i,j) in enumerate(perm) if get(best_matching,i,-1) == j])/n
             D_A = sum(d_A)
             D_B = sum(d_B)
-            degree_weighted_accuracy = sum([((d_A[i] + d_B[j])/(D_A+D_B)) for (i,j) in enumerate(perm) if get(best_matching,j,-1) == i])/ binomial(length(best_matching),2)
+            degree_weighted_accuracy = sum([(get(best_matching,i,-1) == j) ? ((d_A[i] + d_B[j])/(D_A+D_B)) : 0.0 for (i,j) in enumerate(perm)])
       
             push!(results,(seed, p, n, accuracy, degree_weighted_accuracy, matched_tris, A_tris, B_tris, max_tris, exp_results))
         else
@@ -336,10 +336,10 @@ function distributed_random_trials(trial_count::Int,seed_exps::Bool=false
                 max_tris = minimum((A_tris,B_tris))
             end
 
-            accuracy = sum([1 for (i,j) in enumerate(perm) if get(best_matching,j,-1) == i])/n
+            accuracy = sum([1 for (i,j) in enumerate(perm) if get(best_matching,i,-1) == j])/n
             D_A = sum(d_A)
             D_B = sum(d_B)
-            degree_weighted_accuracy = sum([((d_A[i] + d_B[j])/(D_A+D_B)) for (i,j) in enumerate(perm) if get(best_matching,j,-1) == i])/ binomial(length(best_matching),2)
+            degree_weighted_accuracy = sum([(get(best_matching,i,-1) == j) ? ((d_A[i] + d_B[j])/(D_A+D_B)) : 0.0 for (i,j) in enumerate(perm)])
       
             push!(results,( seed, p, n, accuracy, degree_weighted_accuracy, matched_tris, A_tris, B_tris, max_tris))
         end                    
@@ -437,7 +437,7 @@ function set_up_tensor_alignment(A,B;profile=false,kwargs...)
         if kwargs[:method] == "LowRankEigenAlign"
             iters = 10
             ma,mb,_,_ = align_networks_eigenalign(A,B,iters,"lowrank_svd_union",3)
-            matching = Dict{Int,Int}([i=>j for (i,j) in zip(ma,mb)]) 
+            matching = Dict{Int,Int}([i=>j for (i,j) in zip(mb,ma)]) 
         elseif kwargs[:method] == "EigenAlign"
             matching = Dict{Int,Int}(zip(NetworkAlignment.EigenAlign(A,B)...))
         elseif kwargs[:method] == "Degree"

@@ -8,7 +8,15 @@ function align_tensors(A::Union{COOTen,ThirdOrderSymTensor},
 
 	#put larger tensor on the left
 	if B.n > A.n
-		return align_tensors(B,A;method = method, no_matching=no_matching,kwargs...)
+		results = align_tensors(B,A;method = method, no_matching=no_matching,kwargs...)
+		#flip the matchings if A and B were swapped
+		if method == "LambdaTAME" ||  method == "LowRankTAME"
+			best_TAME_PP_tris, max_triangle_match, U_best, V_best, best_matching = results
+			return best_TAME_PP_tris, max_triangle_match, U_best, V_best, Dict((j,i) for (i,j) in best_matching)
+		elseif method == "TAME"
+			best_TAME_PP_tris, max_triangle_match, best_TAME_PP_x, best_matching = results
+			return best_TAME_PP_tris, max_triangle_match, best_TAME_PP_x, Dict((j,i) for (i,j) in best_matching)
+		end
 	end
 
 	if method == "LambdaTAME"
@@ -28,7 +36,16 @@ function align_tensors_profiled(A::Union{COOTen,ThirdOrderSymTensor},
 
 	#put larger tensor on the left
 	if B.n > A.n
-		return align_tensors_profiled(B,A;method = method, no_matching=no_matching,kwargs...)
+		results =  align_tensors_profiled(B,A;method = method, no_matching=no_matching,kwargs...)
+		#flip the matchings if A and B were swapped
+		if method == "LambdaTAME" ||  method == "LowRankTAME"
+			best_TAME_PP_tris, max_triangle_match, U_best, V_best, best_matching,profile = results
+			return best_TAME_PP_tris, max_triangle_match, U_best, V_best, Dict((j,i) for (i,j) in best_matching), profile
+		elseif method == "TAME"
+			best_TAME_PP_tris, max_triangle_match, best_TAME_PP_x, best_matching,profile = results
+			return best_TAME_PP_tris, max_triangle_match, best_TAME_PP_x, Dict((j,i) for (i,j) in best_matching), profile
+		end
+
 	end
 
 	if method == "LambdaTAME"
@@ -221,7 +238,9 @@ function TAME_param_search_profiled(A::Ten,B::Ten;
 end
 
 function LowRankTAME_param_search(A::Ten,B::Ten;
-                           iter::Int = 15,tol::Float64=1e-6,
+						   iter::Int = 15,tol::Float64=1e-6,
+						   U_0::Array{Float64,2} = ones(A.n,1),
+						   V_0::Array{Float64,2} = ones(B.n,1),
 						   alphas::Array{F,1}=[.5,1.0],
 						   betas::Array{F,1} =[1000.0,100.0,10.0,1.0,0.0,0.1,0.01,0.001],
 						   kwargs...) where {F <: AbstractFloat,
@@ -246,7 +265,7 @@ function LowRankTAME_param_search(A::Ten,B::Ten;
         for β in betas
 
 			U, V, triangle_count,matching =
-				LowRankTAME(A,B,ones(m,1),ones(n,1), β,iter,tol,α;kwargs...)
+				LowRankTAME(A,B,U_0,V_0,β,iter,tol,α;kwargs...)
 
             if triangle_count > best_TAME_PP_tris
                 best_TAME_PP_tris = triangle_count
