@@ -441,7 +441,8 @@ function set_up_tensor_alignment(A,B;profile=false,kwargs...)
         elseif kwargs[:method] == "EigenAlign"
             matching = Dict{Int,Int}(zip(NetworkAlignment.EigenAlign(A,B)...))
         elseif kwargs[:method] == "Degree"
-            matching = Dict{Int,Int}(degree_based_matching(A,B))
+            ma,mb = degree_based_matching(A,B)
+            matching = Dict{Int,Int}(zip(mb,ma))
         elseif kwargs[:method] == "Random"
             matching = Dict{Int,Int}(enumerate(shuffle(1:n)))
         else

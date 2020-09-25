@@ -11,7 +11,7 @@ function degree_based_matching(A::SparseMatrixCSC{T,Int},B::SparseMatrixCSC{T,In
 	p_A = sort(1:m,by=i->d_A[i]) #breaks ties with some variation
 	p_B = sort(1:n,by=j->d_B[j])
 
-	return collect(zip(p_A,p_B))
+	return p_A,p_B
 
 end
 
