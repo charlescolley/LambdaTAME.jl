@@ -32,12 +32,12 @@ using Main.SparseSymmetricTensors
 
 # https://github.com/nassarhuda/NetworkAlignment.jl.git
 NETWORK_ALIGNMENT_PATH = "/Users/ccolley/Code/NetworkAlignment.jl/src/"
-#NETWORK_ALIGNMENT_PATH = "/homes/ccolley/Documents/Software/NetworkAlignment.jl/src" #nilpotent
+#NETWORK_ALIGNMENT_PATH = "/homes/ccolley/Documents/Software/NetworkAlignment.jl/src/" #nilpotent
 include(NETWORK_ALIGNMENT_PATH*"NetworkAlignment.jl")
 
 
 LOWRANK_EIGENALIGN_PATH = "/Users/ccolley/Code/lowrank_spectral/all_code/align_networks_eigenalign.jl" #local
-#LOWRANK_EIGENALIGN_PATH = "/homes/ccolley/Documents/Software/lowrank_spectral/all_code/align_networks_eigenalign.jl"#nilpotent
+#LOWRANK_EIGENALIGN_PATH = "/homes/ccolley/Documents/Software/lowrank_spectral_v1_julia/all_code/align_networks_eigenalign.jl"#nilpotent
 include(LOWRANK_EIGENALIGN_PATH)
 
 
