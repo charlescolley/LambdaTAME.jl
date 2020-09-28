@@ -351,23 +351,26 @@ function distributed_random_trials(trial_count::Int,seed_exps::Bool=false
 end
 #,graph_type::String="ER"
 function random_graph_exp(n::Int, p_remove::Float64,graph_type::String;
-                          seed=nothing,use_metis=false,degreedist=nothing,p=nothing,kwargs...)
+                          seed=nothing,use_metis=false,degreedist=nothing,p_edges=nothing,kwargs...)
 
 	if seed !== nothing
 		Random.seed!(seed)
 	end
 
     if graph_type == "ER"
-        if p === nothing 
+        if p_edges === nothing 
             p = 2*log(n)/n
+        else
+            p = p_edges(n)
         end
-		A = erdos_renyi(n,p(n))
+
+		A = erdos_renyi(n,p)
 
 	elseif graph_type == "RandomGeometric"
 
 		if degreedist === nothing
             k = 10
-            if p === nothing 
+            if p_edges === nothing 
                 p = k/n
             end
 			A = random_geometric_graph(n,k)
@@ -378,7 +381,7 @@ function random_graph_exp(n::Int, p_remove::Float64,graph_type::String;
 		end
 
     elseif graph_type == "HyperKron"
-        if p === nothing 
+        if p_edges === nothing 
             p = .4#2*log(n)/n
         end
 		r = .4
