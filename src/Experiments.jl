@@ -299,6 +299,7 @@ function distributed_random_trials(trial_count::Int,seed_exps::Bool=false
                 if seed_exps
                     seed = seeds[p_index,n_index,trial]
                 end
+		println(seed)
                 future = @spawn random_graph_exp(n,p,graph_type;
                                                     profile=profile,seed=seed,method=method,
                                                     kwargs...)
@@ -350,21 +351,25 @@ function distributed_random_trials(trial_count::Int,seed_exps::Bool=false
 end
 #,graph_type::String="ER"
 function random_graph_exp(n::Int, p_remove::Float64,graph_type::String;
-                          seed=nothing,use_metis=false,degreedist=nothing,kwargs...)
+                          seed=nothing,use_metis=false,degreedist=nothing,p=nothing,kwargs...)
 
 	if seed !== nothing
 		Random.seed!(seed)
 	end
 
-	if graph_type == "ER"
-		 p = 2*log(n)/n
-		 A = erdos_renyi(n,p)
+    if graph_type == "ER"
+        if p === nothing 
+            p = 2*log(n)/n
+        end
+		A = erdos_renyi(n,p)
 
 	elseif graph_type == "RandomGeometric"
 
 		if degreedist === nothing
-			k = 10
-			p = k/n
+            k = 10
+            if p === nothing 
+                p = k/n
+            end
 			A = random_geometric_graph(n,k)
 		else
 			d = 2
@@ -372,8 +377,10 @@ function random_graph_exp(n::Int, p_remove::Float64,graph_type::String;
 			p = nnz(A)/n^2
 		end
 
-	elseif graph_type == "HyperKron"
-		p = .4#2*log(n)/n
+    elseif graph_type == "HyperKron"
+        if p === nothing 
+            p = .4#2*log(n)/n
+        end
 		r = .4
 
 		A = sparse(gpa_graph(n,p,r,5))
