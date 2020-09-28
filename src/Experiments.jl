@@ -361,7 +361,7 @@ function random_graph_exp(n::Int, p_remove::Float64,graph_type::String;
         if p === nothing 
             p = 2*log(n)/n
         end
-		A = erdos_renyi(n,p)
+		A = erdos_renyi(n,p(n))
 
 	elseif graph_type == "RandomGeometric"
 
