@@ -299,7 +299,6 @@ function distributed_random_trials(trial_count::Int,seed_exps::Bool=false
                 if seed_exps
                     seed = seeds[p_index,n_index,trial]
                 end
-		println(seed)
                 future = @spawn random_graph_exp(n,p,graph_type;
                                                     profile=profile,seed=seed,method=method,
                                                     kwargs...)
@@ -316,9 +315,9 @@ function distributed_random_trials(trial_count::Int,seed_exps::Bool=false
     for (seed,p,n,future) in futures
         if profile 
             if method == "LambdaTAME" ||  method == "LowRankTAME"
-                A_tris, B_tris, perm, d_A, d_B, (matched_tris, max_tris, _, _,best_matching, exp_results) = fetch(future)
+                d_A, d_B, perm, (A_tris, B_tris,(matched_tris, max_tris, _, _,best_matching, exp_results))= fetch(future)
             elseif method == "TAME"
-                A_tris, B_tris, perm, d_A, d_B, (matched_tris, max_tris, _, best_matching,  exp_results) = fetch(future)
+                d_A, d_B, perm, (A_tris, B_tris,(matched_tris, max_tris, _, best_matching, exp_results))= fetch(future)
             end
 
             accuracy = sum([1 for (i,j) in enumerate(perm) if get(best_matching,j,-1) == i])/n
@@ -329,11 +328,11 @@ function distributed_random_trials(trial_count::Int,seed_exps::Bool=false
             push!(results,(seed, p, n, accuracy, degree_weighted_accuracy, matched_tris, A_tris, B_tris, max_tris, exp_results))
         else
             if method == "LambdaTAME" ||  method == "LowRankTAME"
-                A_tris, B_tris, perm, d_A, d_B, (matched_tris, max_tris, _, _,best_matching) = fetch(future)
+                d_A, d_B, perm, (A_tris, B_tris,(matched_tris, max_tris, _, _,best_matching)) = fetch(future)
             elseif method == "TAME"
-                A_tris, B_tris, perm, d_A, d_B, (matched_tris, max_tris, _, best_matching) = fetch(future)
+                d_A, d_B, perm, (A_tris, B_tris, (matched_tris, max_tris, _, best_matching)) = fetch(future)
             elseif method == "EigenAlign" || method == "Degree" || method == "Random" || method == "LowRankEigenAlign"
-                A_tris, B_tris, perm, d_A, d_B, matched_tris, best_matching = fetch(future)
+                d_A, d_B, perm, (A_tris, B_tris, matched_tris, best_matching) = fetch(future)
                 max_tris = minimum((A_tris,B_tris))
             end
 
@@ -395,81 +394,20 @@ function random_graph_exp(n::Int, p_remove::Float64,graph_type::String;
     p_add = (p*p_remove)/(1-p)
 	B = ER_noise_model(A,n,p_remove,p_add)
 
+    perm = shuffle(1:n)
+    B = B[perm,perm]
+
 	if use_metis
 		apply_Metis_permutation!(A,100)
 		apply_Metis_permutation!(B,100)
 	end
 
-
-    return set_up_tensor_alignment(A,B;kwargs...)
-end
-
-function set_up_tensor_alignment(A,B;profile=false,kwargs...)
-
-	n,n = size(B)
-	#permute the rows of B
-    perm = shuffle(1:n)
-    B = B[perm,perm]
-
-    #compute degrees for degree weighted accuracy
     d_A = A*ones(n)
     d_B = B*ones(n)
 
-    #build COOTens from graphs
-    A_tris = collect(MatrixNetworks.triangles(A))
-    B_tris = collect(MatrixNetworks.triangles(B))
-
-    A_nnz = length(A_tris)
-    B_nnz = length(B_tris)
-
-    A_indices = Array{Int,2}(undef,A_nnz,3)
-    B_indices = Array{Int,2}(undef,B_nnz,3)
-    for i =1:A_nnz
-        A_indices[i,1]= A_tris[i][1]
-        A_indices[i,2]= A_tris[i][2]
-        A_indices[i,3]= A_tris[i][3]
-    end
-
-    for i =1:B_nnz
-        B_indices[i,1]= B_tris[i][1]
-        B_indices[i,2]= B_tris[i][2]
-        B_indices[i,3]= B_tris[i][3]
-    end
-
-    A_vals = ones(A_nnz)
-    B_vals = ones(B_nnz)
-
-    A_ten = ThirdOrderSymTensor(n,A_indices,A_vals)
-    B_ten = ThirdOrderSymTensor(n,B_indices,B_vals)
-
-    if kwargs[:method] == "EigenAlign" || kwargs[:method] == "Degree" || kwargs[:method] == "Random" || kwargs[:method] == "LowRankEigenAlign"
-
-        if kwargs[:method] == "LowRankEigenAlign"
-            iters = 10
-            ma,mb,_,_ = align_networks_eigenalign(A,B,iters,"lowrank_svd_union",3)
-            matching = Dict{Int,Int}([i=>j for (i,j) in zip(ma,mb)]) 
-        elseif kwargs[:method] == "EigenAlign"
-            matching = Dict{Int,Int}(zip(NetworkAlignment.EigenAlign(A,B)...))
-        elseif kwargs[:method] == "Degree"
-            matching = Dict{Int,Int}(zip(degree_based_matching(A,B)...))
-        elseif kwargs[:method] == "Random"
-            matching = Dict{Int,Int}(enumerate(shuffle(1:n)))
-        else
-            error("Invalid input, must be 'EigenAlign','LowRankEigenAlign','Degree', or 'Random'.")
-        end
-        triangle_count, gaped_triangles, _ = TAME_score(A_ten,B_ten,matching) 
-        return size(A_indices,1), size(B_indices,1), perm, d_A, d_B, triangle_count, matching
-
-    else
-
-        if profile
-            return size(A_indices,1), size(B_indices,1),perm, d_A, d_B, align_tensors_profiled(A_ten,B_ten;kwargs...)
-        else
-            return size(A_indices,1), size(B_indices,1),perm, d_A, d_B, align_tensors(A_ten,B_ten;kwargs...)
-        end
-    end
+    return d_A,d_B,perm,align_matrices(A,B;kwargs...)
+   
 end
-
 
 function ER_noise_model(A,n::Int,p_remove::F,p_add::F) where {F <: AbstractFloat}
     B = copy(A)
@@ -493,6 +431,69 @@ function ER_noise_model(A,n::Int,p_remove::F,p_add::F) where {F <: AbstractFloat
     return B
 end
 
+function align_matrices(A::SparseMatrixCSC{T,Int},B::SparseMatrixCSC{T,Int};profile=false,kwargs...) where T
+
+    A_ten = graph_to_ThirdOrderTensor(A)
+    B_ten = graph_to_ThirdOrderTensor(B)
+    
+    if kwargs[:method] == "LambdaTAME" || kwargs[:method] == "LowRankTAME" || kwargs[:method] == "TAME"
+        if profile
+            return size(A_ten.indices,1), size(B_ten.indices,1), align_tensors_profiled(A_ten,B_ten;kwargs...)
+        else
+            return size(A_ten.indices,1), size(B_ten.indices,1), align_tensors(A_ten,B_ten;kwargs...)
+        end
+
+    elseif kwargs[:method] == "EigenAlign" || kwargs[:method] == "Degree" || kwargs[:method] == "Random" || kwargs[:method] == "LowRankEigenAlign"
+
+        if kwargs[:method] == "LowRankEigenAlign"
+            iters = 10
+            ma,mb,_,_ = align_networks_eigenalign(A,B,iters,"lowrank_svd_union",3)
+            matching = Dict{Int,Int}([i=>j for (i,j) in zip(ma,mb)]) 
+        elseif kwargs[:method] == "EigenAlign"
+            matching = Dict{Int,Int}(zip(NetworkAlignment.EigenAlign(A,B)...))
+        elseif kwargs[:method] == "Degree"
+            matching = Dict{Int,Int}(zip(degree_based_matching(A,B)...))
+        elseif kwargs[:method] == "Random"
+            n,n = size(B)
+            matching = Dict{Int,Int}(enumerate(shuffle(1:n)))
+        else
+            error("Invalid input, must be ")
+        end
+        triangle_count, gaped_triangles, _ = TAME_score(A_ten,B_ten,matching) 
+        return size(A_ten.indices,1), size(B_ten.indices,1), triangle_count, matching
+    else
+        raise(ArgumentError("method must be one of 'LambdaTAME', 'LowRankTAME', 'TAME', 'EigenAlign', 'LowRankEigenAlign', 'Degree', or 'Random'."))
+    end
+
+    
+end
+
+function graph_to_ThirdOrderTensor(A)
+
+    n,n = size(A)
+    
+    if !issymmetric(A)
+        println("Symmetrizing matrix")
+		A = max.(A,A')  #symmetrize for Triangles routine
+	end
+
+    #build COOTens from graphs
+    tris = collect(MatrixNetworks.triangles(A))
+    nnz = length(tris)
+
+
+    indices = Array{Int,2}(undef,nnz,3)
+    for i =1:nnz
+        indices[i,1]= tris[i][1]
+        indices[i,2]= tris[i][2]
+        indices[i,3]= tris[i][3]
+    end
+
+    vals = ones(nnz)
+
+    return ThirdOrderSymTensor(n,indices,vals)
+
+end
 
 
 # --------------------------------------------------------------------------- #

@@ -36,7 +36,7 @@ NETWORK_ALIGNMENT_PATH = "/Users/ccolley/Code/NetworkAlignment.jl/src/"
 include(NETWORK_ALIGNMENT_PATH*"NetworkAlignment.jl")
 
 
-LOWRANK_EIGENALIGN_PATH = "/Users/ccolley/Code/lowrank_spectral/all_code/align_networks_eigenalign.jl" #local
+LOWRANK_EIGENALIGN_PATH = "/Users/ccolley/Code/lowrank_spectral_v1_julia/all_code/include_all.jl" #local
 #LOWRANK_EIGENALIGN_PATH = "/homes/ccolley/Documents/Software/lowrank_spectral_v1_julia/all_code/align_networks_eigenalign.jl"#nilpotent
 include(LOWRANK_EIGENALIGN_PATH)
 
