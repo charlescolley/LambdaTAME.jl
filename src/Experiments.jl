@@ -213,6 +213,15 @@ function distributed_pairwise_alignment(files::Array{String,1},dirpath::String;
 
     @everywhere include_string(Main,$(read("LambdaTAME.jl",String)),"LambdaTAME.jl")
 
+    alignment_object = ""
+    if all( [f[end-5:end] == ".ssten" for f in fs]) #tensors 
+        alignment_object = "Tensors" 
+    elseif all( [f[end-4:end] == ".smat" for f in fs]) #matrices
+        alignment_object = "Matrices" 
+    else 
+        throw(ArgumentError("all files must be the same file type, either all '.ssten' or '.smat'."))
+    end
+
     futures = []
 	exp_results = []
 
@@ -221,7 +230,13 @@ function distributed_pairwise_alignment(files::Array{String,1},dirpath::String;
     for i in 1:length(files)
         for j in i+1:length(files)
 
-            future = @spawn align_tensors(dirpath*files[i],dirpath*files[j];profile=profile,method=method,kwargs...)
+            if alignment_object == "Tensors"
+                future = @spawn align_tensors(dirpath*files[i],dirpath*files[j];profile=profile,method=method,kwargs...)
+            elseif alignment_object == "Matrices"
+                A = MatrixNetworks.readSMAT(dirpath*files[i])
+                B = MatrixNetworks.readSMAT(dirpath*files[j])
+                future = @spawn align_matrices(A,B;profile=profile,method=method,kwargs...)
+            end
             push!(futures,((i,j),future))
         end
     end
@@ -239,7 +254,11 @@ function distributed_pairwise_alignment(files::Array{String,1},dirpath::String;
 				matched_tris, max_tris, _, best_matching, results = fetch(future)
 			else
 				matched_tris, max_tris, _, best_matching = fetch(future)
-			end
+            end
+        elseif method == "EigenAlign" || method == "Degree" || method == "Random" || method == "LowRankEigenAlign"
+            A_tens, B_tens, matched_tris, best_matching, results = fetch(future)
+            max_tris = min(A_tens, B_tens)
+            profile = true
 		end
 		if profile
 			push!(exp_results,(files[i],files[j],matched_tris, max_tris, best_matching, results))
@@ -328,11 +347,11 @@ function distributed_random_trials(trial_count::Int,seed_exps::Bool=false
             push!(results,(seed, p, n, accuracy, degree_weighted_accuracy, matched_tris, A_tris, B_tris, max_tris, exp_results))
         else
             if method == "LambdaTAME" ||  method == "LowRankTAME"
-                d_A, d_B, perm, (A_tris, B_tris,(matched_tris, max_tris, _, _,best_matching)) = fetch(future)
+                d_A, d_B, perm, (A_tris, B_tris,(matched_tris, max_tris, _, _, best_matching)) = fetch(future)
             elseif method == "TAME"
                 d_A, d_B, perm, (A_tris, B_tris, (matched_tris, max_tris, _, best_matching)) = fetch(future)
             elseif method == "EigenAlign" || method == "Degree" || method == "Random" || method == "LowRankEigenAlign"
-                d_A, d_B, perm, (A_tris, B_tris, matched_tris, best_matching) = fetch(future)
+                d_A, d_B, perm, (A_tris, B_tris, matched_tris, best_matching, _) = fetch(future)
                 max_tris = minimum((A_tris,B_tris))
             end
 
@@ -447,22 +466,25 @@ function align_matrices(A::SparseMatrixCSC{T,Int},B::SparseMatrixCSC{T,Int};prof
 
         if kwargs[:method] == "LowRankEigenAlign"
             iters = 10
-            ma,mb,_,_ = align_networks_eigenalign(A,B,iters,"lowrank_svd_union",3)
+            (ma,mb,_,_),t = @timed align_networks_eigenalign(A,B,iters,"lowrank_svd_union",3)
             matching = Dict{Int,Int}([i=>j for (i,j) in zip(ma,mb)]) 
         elseif kwargs[:method] == "EigenAlign"
-            matching = Dict{Int,Int}(zip(NetworkAlignment.EigenAlign(A,B)...))
+            (ma,mb),t = @timed NetworkAlignment.EigenAlign(A,B)
+            matching = Dict{Int,Int}(zip(ma,mb))
         elseif kwargs[:method] == "Degree"
-            matching = Dict{Int,Int}(zip(degree_based_matching(A,B)...))
+            (ma,mb),t = @timed degree_based_matching(A,B)
+            matching = Dict{Int,Int}(zip(ma,mb))
         elseif kwargs[:method] == "Random"
             n,n = size(B)
-            matching = Dict{Int,Int}(enumerate(shuffle(1:n)))
+            
+            matching,t = @timed Dict{Int,Int}(enumerate(shuffle(1:n)))
         else
             error("Invalid input, must be ")
         end
         triangle_count, gaped_triangles, _ = TAME_score(A_ten,B_ten,matching) 
-        return size(A_ten.indices,1), size(B_ten.indices,1), triangle_count, matching
+        return size(A_ten.indices,1), size(B_ten.indices,1), triangle_count, matching, t 
     else
-        raise(ArgumentError("method must be one of 'LambdaTAME', 'LowRankTAME', 'TAME', 'EigenAlign', 'LowRankEigenAlign', 'Degree', or 'Random'."))
+        throw(ArgumentError("method must be one of 'LambdaTAME', 'LowRankTAME', 'TAME', 'EigenAlign', 'LowRankEigenAlign', 'Degree', or 'Random'."))
     end
 
     
