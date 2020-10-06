@@ -1,7 +1,7 @@
 LambdaTAME
 ==========
 
-A julia (v1.3) implementation of the LambdaTAME heurestic for pairwise graph alignments.
+A julia (v1.5) implementation of the LambdaTAME, LowRankTAME, and TAME heurestics for pairwise graph alignments.
 
 
 Contents
@@ -13,7 +13,7 @@ Contents
 * Matchings.jl:
     Routines for finding low rank matches. 
 * TAME_Implementations.jl:
-    Implementations of the TAME, \Lambda-TAME, and low rank TAME routines. **some routines are experimental**
+    Implementations of the TAME, \Lambda-TAME, and low rank TAME routines.
 * PostProcessing.jl:
   Routines for the post-processing portion of the TAME algorithm. **in developement**
   
@@ -46,7 +46,7 @@ Experiments
   - full directory
 * distributed_pairwise_alignment
 * synthetic_HyperKron_problem
-* pairwise_alignmen
+* pairwise_alignment
 
 
 TODO
@@ -54,8 +54,4 @@ TODO
 * convert to module
 * remove dependency from ssten 
 * add in Testing
-* fix low rank
-* write TAME
-  - check original C code
-* write rank growth tests
 * improve Krylov subspace search reuse
