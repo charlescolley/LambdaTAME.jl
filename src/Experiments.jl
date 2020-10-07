@@ -214,9 +214,9 @@ function distributed_pairwise_alignment(files::Array{String,1},dirpath::String;
     @everywhere include_string(Main,$(read("LambdaTAME.jl",String)),"LambdaTAME.jl")
 
     alignment_object = ""
-    if all( [f[end-5:end] == ".ssten" for f in fs]) #tensors 
+    if all( [f[end-5:end] == ".ssten" for f in files]) #tensors 
         alignment_object = "Tensors" 
-    elseif all( [f[end-4:end] == ".smat" for f in fs]) #matrices
+    elseif all( [f[end-4:end] == ".smat" for f in files]) #matrices
         alignment_object = "Matrices" 
     else 
         throw(ArgumentError("all files must be the same file type, either all '.ssten' or '.smat'."))
@@ -376,14 +376,17 @@ function random_graph_exp(n::Int, p_remove::Float64,graph_type::String;
 	end
 
     if graph_type == "ER"
-        if p_edges === nothing 
-            p = 2*log(n)/n
+        if degreedist === nothing
+            if p_edges === nothing 
+                p = 2*log(n)/n
+            else
+                p = p_edges(n)
+            end
+            A = erdos_renyi(n,p)
         else
-            p = p_edges(n)
+            A = erdos_renyi(n;degreedist)
+            p = nnz(A)/n^2
         end
-
-		A = erdos_renyi(n,p)
-
 	elseif graph_type == "RandomGeometric"
 
 		if degreedist === nothing
@@ -529,6 +532,28 @@ function erdos_renyi(n,p)
     return sparse(is,js,ones(length(is)),n,n)
 end
 
+function erdos_renyi(n;degreedist=LogNormal(log(5),1))
+
+    # form the edges for sparse
+    ei = Int[]
+    ej = Int[]
+
+    for i=1:n
+      deg = ceil(Int,minimum((rand(degreedist),n-1)))
+      neighbors = sample(1:n,deg+1, replace = false)
+
+      for j in neighbors
+        if i != j
+          push!(ei,i)
+          push!(ej,j)
+        end
+      end
+    end
+
+    A = sparse(ei,ej,1.0,n,n)
+
+    return max.(A,A')
+end
 
 #--                             David's graph code                          --#
 
