@@ -14,6 +14,8 @@ Contents
     Routines for finding low rank matches. 
 * TAME_Implementations.jl:
     Implementations of the TAME, \Lambda-TAME, and low rank TAME routines.
+* Contractions.jl:
+    Routines for computing the tensor contraction operations
 * PostProcessing.jl:
   Routines for the post-processing portion of the TAME algorithm. **in developement**
   
@@ -32,7 +34,7 @@ Dependencies
 
 Data
 ----
-included files are sparse matrix and sparse tensor (.smat and .ssten files respectively) representations of the PPI networks from the [MultiMAGNA++](https://www3.nd.edu/~cone/multiMAGNA++/) project. Data is included for convenience of recreating our experiments. If utilizing these files, please add appropriate citations to their original project source. 
+included files are sparse matrix and sparse tensor (.smat and .ssten files respectively) representations of the subset of PPI networks from the [LVGNA](https://www3.nd.edu/~cone/LNA_GNA/) project which we use (original .gw files can be directly downloaded [here](https://www3.nd.edu/~cone/LNA_GNA/networks.zip)). Data is included for convenience of recreating our experiments. If utilizing these files, please add appropriate citations to their original project source. 
 
 Experiments
 --------------
@@ -53,5 +55,4 @@ TODO
 -------
 * convert to module
 * remove dependency from ssten 
-* add in Testing
-* improve Krylov subspace search reuse
+
