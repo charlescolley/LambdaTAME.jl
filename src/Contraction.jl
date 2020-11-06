@@ -10,13 +10,29 @@ function tensor_vector_contraction(A::ThirdOrderSymTensor, x::Array{Float64,1})
 
     y = zeros(Float64,A.n)
     edge_count = size(A.indices,1)
-
-    for j=1:edge_count
-        i_1,i_2,i_3 = A.indices[j,:]
+	j =1
+    @inbounds for (i_1,i_2,i_3) in eachrow(A.indices)
 
         y[i_1] += 2 * x[i_2]*x[i_3]*A.values[j]
         y[i_2] += 2 * x[i_1]*x[i_3]*A.values[j]
         y[i_3] += 2 * x[i_1]*x[i_2]*A.values[j]
+
+		j +=1
+    end
+
+    return y
+end
+
+function tensor_vector_contraction(A::UnweightedThirdOrderSymTensor, x::Array{Float64,1})
+    @assert length(x) == A.n
+
+    y = zeros(Float64,A.n)
+
+    @inbounds for (i_1,i_2,i_3) in eachrow(A.indices)
+
+        y[i_1] += 2 * x[i_2]*x[i_3]
+        y[i_2] += 2 * x[i_1]*x[i_3]
+        y[i_3] += 2 * x[i_1]*x[i_2]
 
     end
 
@@ -35,7 +51,7 @@ function tri_sub_tensor(A::ThirdOrderSymTensor,x::Array{Float64,1})
 	J = zeros(Int64,6*nnzs)
 	V = zeros(Float64,6*nnzs)
 
-	for nnz_index = 1:nnzs
+    @inbounds for nnz_index = 1:nnzs
 		index += 6
 		i,j,k = A.indices[nnz_index,:]
 		val = A.values[nnz_index]
@@ -62,38 +78,78 @@ function tri_sub_tensor(A::ThirdOrderSymTensor,x::Array{Float64,1})
 		V[index] = val*x[i]
 
 	end
+	return sparse(I,J,V,A.n,A.n)
+end
+
+
+"""-----------------------------------------------------------------------------
+    contracts a tensor represented with indices + values in a symmetric COO
+  format with a vector to return a sparse matrix.
+-----------------------------------------------------------------------------"""
+function tri_sub_tensor(A::ThirdOrderSymTensor,x::Array{Float64,1},
+    					I::Array{Int64,1},J::Array{Int64,1},V::Array{Float64,1})
+
+	index = 0
+	nnzs = size(A.indices,1)
+    for nnz_index = 1:nnzs
+		index += 6
+		i,j,k = A.indices[nnz_index,:]
+		val = A.values[nnz_index]
+
+		I[index-5] = i
+		J[index-5] = j
+		I[index-4] = j
+		J[index-4] = i
+		V[index-5] = val*x[k]
+		V[index-4] = val*x[k]
+
+		I[index-3] = i
+		J[index-3] = k
+		I[index-2] = k
+		J[index-2] = i
+		V[index-3] = val*x[j]
+		V[index-2] = val*x[j]
+
+		I[index-1] = j
+		J[index-1] = k
+		I[index] = k
+		J[index] = j
+		V[index-1] = val*x[i]
+		V[index] = val*x[i]
+
+	end
+	return sparse(I,J,V,A.n,A.n)
+end
+
+
+"""-----------------------------------------------------------------------------
+    contracts a tensor represented with indices + values in a symmetric COO
+  format with a vector to return a sparse matrix.
+-----------------------------------------------------------------------------"""
+function tri_sub_tensor(A::UnweightedThirdOrderSymTensor,x::Array{Float64,1})
+
+	index = 0
+	nnzs = 2*sum([length(x) for x in A_U_ten.indices])
+	I = zeros(Int64,2*nnzs)
+	J = zeros(Int64,2*nnzs)
+	V = zeros(Float64,2*nnzs)
+
+	for i in 1:A.n
+		for (j,k) in A.indices[i]
+			index += 2
+
+			I[index-1] = j
+			J[index-1] = k
+			I[index] = k
+			J[index] = j
+			V[index-1] = x[i]
+			V[index] = x[i]
+		end
+	end
 	return sparse(I[1:index],J[1:index],V[1:index],A.n,A.n)
 end
 
-#TODO: adapt to work for any order tensor
-function implicit_contraction(A::COOTen,B::COOTen,x::Array{Float64,1})
 
-    @assert length(x) == A.cubical_dimension*B.cubical_dimension
-    m = A.cubical_dimension
-    n = B.cubical_dimension
-    y = similar(x)
-
-	y .= 0
-
-    ileave = (i,j) -> i + m*(j-1)
-
-    for i in 1:length(A)
-
-        for (i_1,i_2,i_3) in permutations(A.indices[i,:])
-
-            for j in 1:length(B)
-                j_1,j_2,j_3 = B.indices[j,:]
-
-                y[ileave(i_1,j_1)] += 2*A.vals[i]*B.vals[j]*x[ileave(i_2,j_2)]*x[ileave(i_3,j_3)]
-                y[ileave(i_2,j_2)] += 2*A.vals[i]*B.vals[j]*x[ileave(i_1,j_1)]*x[ileave(i_3,j_3)]
-                y[ileave(i_3,j_3)] += 2*A.vals[i]*B.vals[j]*x[ileave(i_1,j_1)]*x[ileave(i_2,j_2)]
-
-            end
-        end
-    end
-
-    return y
-end
 
 
 function kron_contract(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor,
@@ -119,13 +175,28 @@ function kron_contract(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor,
     @assert A.n == n
     @assert B.n == m
 
+
+	#preallocate memory used for building sparse matrices
+	A_nnzs = size(A.indices,1)
+	A_I = zeros(Int64,6*A_nnzs)
+	A_J = zeros(Int64,6*A_nnzs)
+	A_V = zeros(Float64,6*A_nnzs)
+
+
+	B_nnzs = size(B.indices,1)
+	B_I = zeros(Int64,6*B_nnzs)
+	B_J = zeros(Int64,6*B_nnzs)
+	B_V = zeros(Float64,6*B_nnzs)
+
     result = zeros(A.n * B.n)
 
 
-    for i in 1:d1
+    @inbounds for i in 1:d1
 
-        sub_A_i = tri_sub_tensor(A,U[:,i])
-        sub_B_i = tri_sub_tensor(B,V[:,i])
+	#	sub_A_i = tri_sub_tensor(A,U[:,i])
+	#	sub_B_i = tri_sub_tensor(B,V[:,i])
+        sub_A_i = tri_sub_tensor(A,U[:,i],A_I,A_J,A_V)
+        sub_B_i = tri_sub_tensor(B,V[:,i],B_I,B_J,B_V)
         for j in 1:i
 
             A_update = (sub_A_i*U[:,j])
@@ -143,8 +214,9 @@ function kron_contract(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor,
 end
 
 
-function get_kron_contract_comps(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor,
-                       U::Array{Float64,2},V::Array{Float64,2})
+function get_kron_contract_comps(A::Union{ThirdOrderSymTensor,UnweightedThirdOrderSymTensor},
+    							 B::Union{ThirdOrderSymTensor,UnweightedThirdOrderSymTensor},
+              			         U::Array{Float64,2},V::Array{Float64,2})
 
     n,d1 = size(U)
     m,d2 = size(V)
@@ -162,11 +234,24 @@ function get_kron_contract_comps(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor,
 	B_comps = zeros(m,max_rank)
 	index = 1
 
+	A_nnzs = size(A.indices,1)
+	A_I = zeros(Int64,6*A_nnzs)
+	A_J = zeros(Int64,6*A_nnzs)
+	A_V = zeros(Float64,6*A_nnzs)
 
-    for i in 1:d1
 
-        sub_A_i = tri_sub_tensor(A,U[:,i])
-        sub_B_i = tri_sub_tensor(B,V[:,i])
+	B_nnzs = size(B.indices,1)
+	B_I = zeros(Int64,6*B_nnzs)
+	B_J = zeros(Int64,6*B_nnzs)
+	B_V = zeros(Float64,6*B_nnzs)
+
+
+    @inbounds for i in 1:d1
+
+
+        sub_A_i = tri_sub_tensor(A,U[:,i],A_I,A_J,A_V)
+        sub_B_i = tri_sub_tensor(B,V[:,i],B_I,B_J,B_V)
+
         for j in 1:i
 
 			if i == j
@@ -187,120 +272,87 @@ end
 
 function implicit_contraction(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor,x::Array{Float64,1})
 
+	error("Code is Broken, must be fixed")
     @assert length(x) == A.n*B.n
     m = A.n
     n = B.n
-    y = zeros(Float64,length(x))
+	X = reshape(x,A.n,B.n)
+    Y = similar(X)
 
-    ileave = (i,j) -> i + m*(j-1)
-
-    @inbounds for i in 1:size(A.indices,1)
+    #ileave = (i,j) -> i + m*(j-1)
+	i = 1
+	j = 1
+    @inbounds for (i_1,i_2,i_3) in eachrow(A.indices)
 
 		A_val = A.values[i]
-		i_1,i_2,i_3 = A.indices[i,:]
-
+		i += 1
+		j = 1
 #        for (i_1,i_2,i_3) in permutations(A.indices[i,:])
-		@inbounds for j in 1:size(B.indices,1)
-			j_1,j_2,j_3 = B.indices[j,:]
+		for (j_1,j_2,j_3) in eachrow(B.indices)
+
 
 			#i_1,i_2,i_3
-			@inbounds y[ileave(i_1,j_1)] += 2*A_val*B.values[j]*x[ileave(i_2,j_2)]*x[ileave(i_3,j_3)]
-			@inbounds y[ileave(i_2,j_2)] += 2*A_val*B.values[j]*x[ileave(i_1,j_1)]*x[ileave(i_3,j_3)]
-			@inbounds y[ileave(i_3,j_3)] += 2*A_val*B.values[j]*x[ileave(i_1,j_1)]*x[ileave(i_2,j_2)]
+			@inbounds Y[i_1,j_1] += 2*A_val*B.values[j]*X[i_2,j_2]*X[i_3,j_3]
+			@inbounds Y[i_2,j_2] += 2*A_val*B.values[j]*X[i_1,j_1]*X[i_3,j_3]
+			@inbounds Y[i_3,j_3] += 2*A_val*B.values[j]*X[i_1,j_1]*X[i_2,j_2]
 
 			#i_1,i_3,i_2
-			@inbounds y[ileave(i_1,j_1)] += 2*A_val*B.values[j]*x[ileave(i_3,j_2)]*x[ileave(i_2,j_3)]
-			@inbounds y[ileave(i_3,j_2)] += 2*A_val*B.values[j]*x[ileave(i_1,j_1)]*x[ileave(i_2,j_3)]
-			@inbounds y[ileave(i_2,j_3)] += 2*A_val*B.values[j]*x[ileave(i_1,j_1)]*x[ileave(i_3,j_2)]
+			@inbounds Y[i_1,j_1] += 2*A_val*B.values[j]*X[i_3,j_2]*X[i_2,j_3]
+			@inbounds Y[i_3,j_2] += 2*A_val*B.values[j]*X[i_1,j_1]*X[i_2,j_3]
+			@inbounds Y[i_2,j_3] += 2*A_val*B.values[j]*X[i_1,j_1]*X[i_3,j_2]
 
 			#i_2,i_1,i_3
-			@inbounds y[ileave(i_2,j_1)] += 2*A_val*B.values[j]*x[ileave(i_1,j_2)]*x[ileave(i_3,j_3)]
-			@inbounds y[ileave(i_1,j_2)] += 2*A_val*B.values[j]*x[ileave(i_2,j_1)]*x[ileave(i_3,j_3)]
-			@inbounds y[ileave(i_3,j_3)] += 2*A_val*B.values[j]*x[ileave(i_2,j_1)]*x[ileave(i_1,j_2)]
+			@inbounds Y[i_2,j_1] += 2*A_val*B.values[j]*X[i_1,j_2]*X[i_3,j_3]
+			@inbounds Y[i_1,j_2] += 2*A_val*B.values[j]*X[i_2,j_1]*X[i_3,j_3]
+			@inbounds Y[i_3,j_3] += 2*A_val*B.values[j]*X[i_2,j_1]*X[i_1,j_2]
 
 			#i_2,i_3,i_1
-			@inbounds y[ileave(i_2,j_1)] += 2*A_val*B.values[j]*x[ileave(i_3,j_2)]*x[ileave(i_1,j_3)]
-			@inbounds y[ileave(i_3,j_2)] += 2*A_val*B.values[j]*x[ileave(i_2,j_1)]*x[ileave(i_1,j_3)]
-			@inbounds y[ileave(i_1,j_3)] += 2*A_val*B.values[j]*x[ileave(i_2,j_1)]*x[ileave(i_3,j_2)]
+			@inbounds Y[i_2,j_1] += 2*A_val*B.values[j]*X[i_3,j_2]*X[i_1,j_3]
+			@inbounds Y[i_3,j_2] += 2*A_val*B.values[j]*X[i_2,j_1]*X[i_1,j_3]
+			@inbounds Y[i_1,j_3] += 2*A_val*B.values[j]*X[i_2,j_1]*X[i_3,j_2]
 
 			#i_3,i_2,i_1
-			@inbounds y[ileave(i_3,j_1)] += 2*A_val*B.values[j]*x[ileave(i_2,j_2)]*x[ileave(i_1,j_3)]
-			@inbounds y[ileave(i_2,j_2)] += 2*A_val*B.values[j]*x[ileave(i_3,j_1)]*x[ileave(i_1,j_3)]
-			@inbounds y[ileave(i_1,j_3)] += 2*A_val*B.values[j]*x[ileave(i_3,j_1)]*x[ileave(i_2,j_2)]
+			@inbounds Y[i_3,j_1] += 2*A_val*B.values[j]*X[i_2,j_2]*X[i_1,j_3]
+			@inbounds Y[i_2,j_2] += 2*A_val*B.values[j]*X[i_3,j_1]*X[i_1,j_3]
+			@inbounds Y[i_1,j_3] += 2*A_val*B.values[j]*X[i_3,j_1]*X[i_2,j_2]
 
 			#i_3,i_1,i_2
-			@inbounds y[ileave(i_3,j_1)] += 2*A_val*B.values[j]*x[ileave(i_1,j_2)]*x[ileave(i_2,j_3)]
-			@inbounds y[ileave(i_1,j_2)] += 2*A_val*B.values[j]*x[ileave(i_3,j_1)]*x[ileave(i_2,j_3)]
-			@inbounds y[ileave(i_2,j_3)] += 2*A_val*B.values[j]*x[ileave(i_3,j_1)]*x[ileave(i_1,j_2)]
+			@inbounds Y[i_3,j_1] += 2*A_val*B.values[j]*X[i_1,j_2]*X[i_2,j_3]
+			@inbounds Y[i_1,j_2] += 2*A_val*B.values[j]*X[i_3,j_1]*X[i_2,j_3]
+			@inbounds Y[i_2,j_3] += 2*A_val*B.values[j]*X[i_3,j_1]*X[i_1,j_2]
 
 		end
+		j += 1
   #      end
     end
 
-    return y
+    return Y[:]
 end
 
-function _applytri_sym!(Y::Matrix,X::Matrix,i::Integer,j::Integer,k::Integer,
-		ip::Integer,jp::Integer,kp::Integer)
-	@inbounds begin
-		Y[i,ip] += X[j,jp]*X[k,kp]
-		Y[i,ip] += X[j,kp]*X[k,jp]
-		Y[i,jp] += X[j,ip]*X[k,kp]
-		Y[i,jp] += X[j,kp]*X[k,ip]
-		Y[i,kp] += X[j,ip]*X[k,jp]
-		Y[i,kp] += X[j,jp]*X[k,ip]
-		Y[i,ip] += X[k,jp]*X[j,kp]
-		Y[i,ip] += X[k,kp]*X[j,jp]
-		Y[i,jp] += X[k,ip]*X[j,kp]
-		Y[i,jp] += X[k,kp]*X[j,ip]
-		Y[i,kp] += X[k,ip]*X[j,jp]
-		Y[i,kp] += X[k,jp]*X[j,ip]
-		Y[j,ip] += X[i,jp]*X[k,kp]
-		Y[j,ip] += X[i,kp]*X[k,jp]
-		Y[j,jp] += X[i,ip]*X[k,kp]
-		Y[j,jp] += X[i,kp]*X[k,ip]
-		Y[j,kp] += X[i,ip]*X[k,jp]
-		Y[j,kp] += X[i,jp]*X[k,ip]
-		Y[j,ip] += X[k,jp]*X[i,kp]
-		Y[j,ip] += X[k,kp]*X[i,jp]
-		Y[j,jp] += X[k,ip]*X[i,kp]
-		Y[j,jp] += X[k,kp]*X[i,ip]
-		Y[j,kp] += X[k,ip]*X[i,jp]
-		Y[j,kp] += X[k,jp]*X[i,ip]
-		Y[k,ip] += X[i,jp]*X[j,kp]
-		Y[k,ip] += X[i,kp]*X[j,jp]
-		Y[k,jp] += X[i,ip]*X[j,kp]
-		Y[k,jp] += X[i,kp]*X[j,ip]
-		Y[k,kp] += X[i,ip]*X[j,jp]
-		Y[k,kp] += X[i,jp]*X[j,ip]
-		Y[k,ip] += X[j,jp]*X[i,kp]
-		Y[k,ip] += X[j,kp]*X[i,jp]
-		Y[k,jp] += X[j,ip]*X[i,kp]
-		Y[k,jp] += X[j,kp]*X[i,ip]
-		Y[k,kp] += X[j,ip]*X[i,jp]
-		Y[k,kp] += X[j,jp]*X[i,ip]
-	end
-end
 
-function impTTVsym(nG::Int,nH::Int,x::Vector{Float64},Gti, Hti)
+function impTTVnodesym(A::UnweightedThirdOrderSymTensor,
+                       B::UnweightedThirdOrderSymTensor,x::Vector{Float64})
 
-	X = reshape(x,nG,nH)
-	#Xt = copy(X’)
+	X = reshape(x,A.n,B.n)
 	Y = similar(X)
 	Y .= 0
-
-	@inbounds for g = 1:nG
-		for h = 1:nH
-			for (jp,kp) in Hti[h]
-				for (j,k) in Gti[g]
-					_applytri_sym!(Y,X,g,j,k,h,jp,kp)
+	@inbounds for a = 1:A.n
+		for b = 1:B.n
+			newval = 0.0
+			for (jp,kp) in A.indices[a]
+				@simd for pair in B.indices[b]
+					j,k = pair
+					@inbounds newval += X[jp,j]*X[kp,k]+X[kp,j]*X[jp,k]
 				end
 			end
+			Y[a,b] = 2*newval
 		end
 	end
 	y = Y[:]
 	return y
+
 end
+
 
 function impTTVnodesym(nG::Int,nH::Int,x::Vector{Float64},Gti, Hti)
 
@@ -311,10 +363,10 @@ function impTTVnodesym(nG::Int,nH::Int,x::Vector{Float64},Gti, Hti)
 	@inbounds for g = 1:nG
 		for h = 1:nH
 			newval = 0.0
-			for (jp,kp) in Hti[h]
-				@simd for pair in Gti[g]
+			for (jp,kp) in Gti[g]
+				@simd for pair in Hti[h]
 					j,k = pair
-					@inbounds newval += X[j,jp]*X[k,kp]+X[j,kp]*X[k,jp]
+					@inbounds newval += X[jp,j]*X[kp,k]+X[kp,j]*X[jp,k]
 				end
 			end
 			Y[g,h] = 2*newval
@@ -322,4 +374,44 @@ function impTTVnodesym(nG::Int,nH::Int,x::Vector{Float64},Gti, Hti)
 	end
 	y = Y[:]
 	return y
+end
+
+#TODO: move to appropriate file 
+function SSHOPM(A::ThirdOrderSymTensor,β::Float64, max_iter::Int, tol::Float64,
+	            x_0::Array{Float64,1}=ones(A.n);update_user::Int=-1)
+
+	#normalize init vector
+	x_k = copy(x_0)
+	x_k ./=norm(x_0)
+
+    lambda_k = Inf
+    i = 1
+
+    while true
+
+		x_k_1 = tensor_vector_contraction(A,x_k)
+		lambda_k_1 = x_k_1'*x_k
+
+
+		if β != 0.0
+			x_k_1 .+= β*x_k
+        end
+
+		x_k_1 ./= norm(x_k_1)
+
+		res = abs(lambda_k_1 - lambda_k)
+		if update_user != -1 && i % update_user == 0
+			println("iteration $(i)    λ: $(lambda_k_1)   |λ_k_1 - λ_k| = $res")
+		end
+
+        if res < tol || i >= max_iter
+            return x_k_1, lambda_k_1
+        else
+			lambda_k = copy(lambda_k_1)
+			x_k = copy(x_k_1)
+            i += 1
+        end
+
+    end
+
 end

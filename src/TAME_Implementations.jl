@@ -2,8 +2,7 @@
 #=------------------------------------------------------------------------------
               Routines for searching over alpha/beta parameters
 ------------------------------------------------------------------------------=#
-function align_tensors(A::Union{COOTen,ThirdOrderSymTensor},
-                       B::Union{COOTen,ThirdOrderSymTensor};
+function align_tensors(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor;
 					   method::String="LambdaTAME",no_matching=false,kwargs...)
 
 	#put larger tensor on the left
@@ -26,12 +25,12 @@ function align_tensors(A::Union{COOTen,ThirdOrderSymTensor},
 	elseif method == "TAME"
 		return TAME_param_search(A,B;no_matching = no_matching,kwargs...)
 	else
-		raise(ArgumentError("method must be one of 'LambdaTAME', 'LowRankTAME', or 'TAME'."))
+		throw(ArgumentError("method must be one of 'LambdaTAME', 'LowRankTAME',or 'TAME'."))
 	end
+
 end
 
-function align_tensors_profiled(A::Union{COOTen,ThirdOrderSymTensor},
-                       	        B::Union{COOTen,ThirdOrderSymTensor};
+function align_tensors_profiled(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor;
 					            method::String="LambdaTAME",no_matching=false,kwargs...)
 
 	#put larger tensor on the left
@@ -55,7 +54,7 @@ function align_tensors_profiled(A::Union{COOTen,ThirdOrderSymTensor},
 	elseif method == "TAME"
 		return TAME_param_search_profiled(A,B;no_matching = no_matching,kwargs...)
 	else
-		raise(ArgumentError("method must be one of 'LambdaTAME', 'LowRankTAME', or 'TAME'."))
+		throw(ArgumentError("method must be one of 'LambdaTAME', 'LowRankTAME', or 'TAME'."))
 	end
 end
 
@@ -95,9 +94,9 @@ function ΛTAME_param_search(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor;
 end
 
 
-function ΛTAME_param_search_profiled(A::Ten,B::Ten; iter::Int = 15,tol::Float64=1e-6,
-							alphas::Array{F,1}=[.5,1.0],
-							betas::Array{F,1} =[1000.0,100.0,10.0,1.0,0.0,0.1,0.01,0.001]) where {F <: AbstractFloat,Ten <:Union{COOTen,ThirdOrderSymTensor}}
+function ΛTAME_param_search_profiled(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor; 
+	                                 iter::Int = 15,tol::Float64=1e-6, alphas::Array{F,1}=[.5,1.0],
+							         betas::Array{F,1} =[1000.0,100.0,10.0,1.0,0.0,0.1,0.01,0.001]) where {F <: AbstractFloat}
 
     max_triangle_match = min(size(A.indices,1),size(B.indices,1))
     best_TAME_PP_tris = -1
@@ -153,11 +152,10 @@ function ΛTAME_param_search_profiled(A::Ten,B::Ten; iter::Int = 15,tol::Float64
 end
 
 #add in SparseSymmetricTensors.jl function definitions
-function TAME_param_search(A::Ten,B::Ten;
-                           iter::Int = 15,tol::Float64=1e-6,
-						   alphas::Array{F,1}=[.5,1.0],
+function TAME_param_search(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor;
+                           iter::Int = 15,tol::Float64=1e-6, alphas::Array{F,1}=[.5,1.0],
 						   betas::Array{F,1} =[1000.0,100.0,10.0,1.0,0.0,0.1,0.01,0.001],
-						   kwargs...) where {F <: AbstractFloat,Ten <:Union{COOTen,ThirdOrderSymTensor}}
+						   kwargs...) where {F <: AbstractFloat}
 
     max_triangle_match = min(size(A.indices,1),size(B.indices,1))
     total_triangles = size(A.indices,1) + size(B.indices,1)
@@ -194,13 +192,11 @@ function TAME_param_search(A::Ten,B::Ten;
 	return best_TAME_PP_tris, max_triangle_match, best_TAME_PP_x, best_matching
 end
 
-function TAME_param_search_profiled(A::Ten,B::Ten;
-                           iter::Int = 15,tol::Float64=1e-6,
-						   alphas::Array{F,1}=[.5,1.0],
-						   betas::Array{F,1} =[1000.0,100.0,10.0,1.0,0.0,0.1,0.01,0.001],
-						   profile::Bool=false,profile_aggregation="all",
-						   kwargs...) where {F <: AbstractFloat,
-						                     Ten <:Union{COOTen,ThirdOrderSymTensor}}
+function TAME_param_search_profiled(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor;
+                                    iter::Int = 15,tol::Float64=1e-6, alphas::Array{F,1}=[.5,1.0],
+						            betas::Array{F,1} =[1000.0,100.0,10.0,1.0,0.0,0.1,0.01,0.001],
+						            profile::Bool=false,profile_aggregation="all",
+						            kwargs...) where {F <: AbstractFloat}
     max_triangle_match = min(size(A.indices,1),size(B.indices,1))
     total_triangles = size(A.indices,1) + size(B.indices,1)
 	best_TAME_PP_tris = -1
@@ -237,14 +233,13 @@ function TAME_param_search_profiled(A::Ten,B::Ten;
 
 end
 
-function LowRankTAME_param_search(A::Ten,B::Ten;
-						   iter::Int = 15,tol::Float64=1e-6,
-						   U_0::Array{Float64,2} = ones(A.n,1),
-						   V_0::Array{Float64,2} = ones(B.n,1),
-						   alphas::Array{F,1}=[.5,1.0],
-						   betas::Array{F,1} =[1000.0,100.0,10.0,1.0,0.0,0.1,0.01,0.001],
-						   kwargs...) where {F <: AbstractFloat,
-						                     Ten <:Union{COOTen,ThirdOrderSymTensor}}
+function LowRankTAME_param_search(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor;
+						          iter::Int = 15,tol::Float64=1e-6,
+						          U_0::Array{Float64,2} = ones(A.n,1),
+						          V_0::Array{Float64,2} = ones(B.n,1),
+						          alphas::Array{F,1}=[.5,1.0],
+						          betas::Array{F,1} =[1000.0,100.0,10.0,1.0,0.0,0.1,0.01,0.001],
+						          kwargs...) where {F <: AbstractFloat}
     max_triangle_match = min(size(A.indices,1),size(B.indices,1))
     total_triangles = size(A.indices,1) + size(B.indices,1)
     best_TAME_PP_tris = -1
@@ -326,59 +321,6 @@ end
              		    Spectral Relaxation Routines
 ------------------------------------------------------------------------------=#
 
-function ΛTAME(A::COOTen, B::COOTen, β::Float64, max_iter::Int,
-               tol::Float64,α::Float64;update_user::Int=-1)
-
-    U = zeros(A.cubical_dimension,max_iter+1)
-    V = zeros(B.cubical_dimension,max_iter+1) #store initial in first column
-
-    U[:,1] = ones(A.cubical_dimension)
-    U[:,1] /=norm(U[:,1])
-
-    V[:,1] = ones(B.cubical_dimension)
-    V[:,1] /=norm(U[:,1])
-
-    sqrt_β = β^(.5)
-
-    lambda = Inf
-    i = 1
-
-    while true
-
-        U[:,i+1] = contract_k_1(A,U[:,i])
-        V[:,i+1] = contract_k_1(B,V[:,i])
-
-        lambda_A = (U[:,i+1]'*U[:,i])
-        lambda_B = (V[:,i+1]'*V[:,i])
-        new_lambda = lambda_A*lambda_B
-
-        if β != 0.0
-            U[:,i+1] .+= sqrt_β*U[:,i+1]
-            V[:,i+1] .+= sqrt_β*V[:,i+1]
-        end
-
-        if α != 1.0
-            U[:,i+1] = α*U[:,i+1] + (1 -α)*U[:,1]
-            V[:,i+1] = α*V[:,i+1] + (1 -α)*V[:,1]
-        end
-
-        U[:,i+1] ./= norm(U[:,i+1])
-        V[:,i+1] ./= norm(V[:,i+1])
-
-		if update_user != -1 && i % update_user == 0
-			println("iteration $(i)    λ_A: $(lambda_A) -- λ_B: $(lambda_B) -- newλ: $(new_lambda)")
-		end
-
-        if abs(new_lambda - lambda) < tol || i >= max_iter
-            return U[:,1:i], V[:,1:i]
-        else
-            lambda = new_lambda
-            i += 1
-        end
-
-    end
-
-end
 
 function ΛTAME(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor, β::Float64,
                max_iter::Int,tol::Float64,α::Float64;update_user=-1)

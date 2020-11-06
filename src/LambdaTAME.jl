@@ -1,3 +1,5 @@
+module LambdaTAME
+
 using LinearAlgebra
 using NPZ
 using Distributed
@@ -6,6 +8,7 @@ using Random
 using MatrixNetworks
 using DataStructures
 using NearestNeighbors
+
 using Distributions
 using Metis
 
@@ -14,17 +17,11 @@ using Metis
 import Statistics: mean
 import Arpack: svds
 import Combinatorics: permutations
-
+import StatsBase: sample
 
 #store path to project repo here
 PROJECT_PATH = "."
 
-
-
-SST_PATH = "/Users/ccolley/Documents/Research/SparseSymmetricTensors.jl/src/SparseSymmetricTensors.jl" # local path
-#SST_PATH = "/homes/ccolley/Documents/Software/SparseSymmetricTensors.jl/src/SparseSymmetricTensors.jl" #Nilpotent path
-include(SST_PATH)
-using Main.SparseSymmetricTensors
 
 # https://github.com/eikmeier/TGPA.git
 #TGPA_PATH = "Users/ccolley/Code/TGPA"
@@ -37,7 +34,7 @@ include(NETWORK_ALIGNMENT_PATH*"NetworkAlignment.jl")
 
 
 LOWRANK_EIGENALIGN_PATH = "/Users/ccolley/Code/lowrank_spectral_v1_julia/all_code/include_all.jl" #local
-#LOWRANK_EIGENALIGN_PATH = "/homes/ccolley/Documents/Software/lowrank_spectral_v1_julia/all_code/align_networks_eigenalign.jl"#nilpotent
+#LOWRANK_EIGENALIGN_PATH = "/homes/ccolley/Documents/Software/lowrank_spectral_v1_julia/all_code/include_all.jl"#nilpotent
 include(LOWRANK_EIGENALIGN_PATH)
 
 
@@ -68,3 +65,7 @@ include("PostProcessing.jl")
 include("TAME_Implementations.jl")
 #include("Experimental_code.jl")
 include("Experiments.jl")
+#include("SparseSymmetricTensorCode.jl")
+
+
+end #module 

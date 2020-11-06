@@ -113,46 +113,6 @@ function search_Krylov_space(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor,U::Ar
     return best_score, best_i, best_j, best_matching
 end
 
-function search_Krylov_space(A::COOTen,B::COOTen,U::Array{Float64,2},V::Array{Float64,2})
-
-    best_score = -1
-    best_i = -1
-    best_j = -1
-    best_matching = Dict{Int,Int}()
-
-    Triangle_check = Dict{Array{Int,1},Int}()
-
-    if A.unique_nnz > B.unique_nnz
-        for i in 1:A.unique_nnz
-            Triangle_check[A.indices[i,:]] = 1
-        end
-        Input_tensor = B
-    else
-        for i in 1:B.unique_nnz
-            Triangle_check[B.indices[i,:]] = 1
-        end
-        Input_tensor = A
-    end
-
-    for i in 1:size(U,2)
-       for j in 1:size(V,2)
-
-            if A.unique_nnz > B.unique_nnz
-                matched_tris, gaped_tris, matching = TAME_score(Triangle_check,Input_tensor,V[:,j],U[:,i])
-            else
-                matched_tris, gaped_tris, matching = TAME_score(Triangle_check,Input_tensor,U[:,i],V[:,j])
-            end
-
-            if matched_tris > best_score
-                best_matching = matching
-                best_score = matched_tris
-                best_i = i
-                best_j = j
-            end
-        end
-    end
-    return best_score, best_i, best_j, best_matching
-end
 
 #used when we don't want to recreate the triangle matching dictionary multiple times
 function TAME_score(Triangle_Dict::Dict{Array{Int,1},Int},Input_tensor,
@@ -164,20 +124,9 @@ function TAME_score(Triangle_Dict::Dict{Array{Int,1},Int},Input_tensor,
 end
 
 
-#Computes the TAME score for this iterate by
-function TAME_score(A::COOTen,B::COOTen,u::Array{Float64,1},v::Array{Float64,1})
 
-    Match_mapping, weight = rank_one_matching(u,v)
-    TAME_score(A,B,Match_mapping)
 
-end
 
-function TAME_score(A::COOTen,B::COOTen,U::Array{Float64,2},V::Array{Float64,2})
-
-    Match_mapping = low_rank_matching(U,V)
-    TAME_score(A,B,Match_mapping)
-
-end
 
 function TAME_score(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor,U::Array{Float64,2},V::Array{Float64,2};return_timings=false)
 
@@ -232,31 +181,6 @@ function TAME_score(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor,x::Array{Float
 end
 
 
-function TAME_score(A::COOTen,B::COOTen,X::Array{Float64,2};return_timings=false)
-
-   if return_timings
-        (_,_,matching,_) ,scoring_time = @timed bipartite_matching_primal_dual(X)
-        (triangle_count, gaped_triangles,inverted_matching), matching_time = @timed TAME_score(A,B,Dict(j => i for (i,j) in enumerate(matching)))
-        return triangle_count, gaped_triangles,inverted_matching, matching_time, matching_time
-    else
-        (_,_,matching,_) ,scoring_time = @timed bipartite_matching_primal_dual(X)
-        return TAME_score(A,B,Dict(j => i for (i,j) in enumerate(matching)))
-    end
-
-end
-
-function TAME_score(A::COOTen,B::COOTen,x::Array{Float64,1};return_timings=false)
-
-   if return_timings
-        (_,_,matching) ,matching_time = @timed bipartite_matching_primal_dual(reshape(x,A.cubical_dimension,B.cubical_dimension))
-        (triangle_count, gaped_triangles,inverted_matching), scoring_time = @timed TAME_score(A,B,Dict(j => i for (i,j) in enumerate(matching)))
-        return triangle_count, gaped_triangles,inverted_matching, matching_time,scoring_time
-    else
-        _,_,matching = bipartite_matching_primal_dual(reshape(x,A.cubical_dimension,B.cubical_dimension))
-        return TAME_score(A,B,Dict(j => i for (i,j) in enumerate(matching)))
-    end
-
-end
 
 """
    Match_mapping is expected to map V_A -> V_B
@@ -317,83 +241,7 @@ function TAME_score(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor,Match_mapping:
 
 end
 
-function TAME_score(A::COOTen,B::COOTen,Match_mapping::Dict{Int,Int})
 
-    match_len = length(Match_mapping)
-
-    Triangle_check = Dict{Array{Int,1},Int}()
-    gaped_triangles = 0
-    triangle_count = 0
-
-    if A.unique_nnz > B.unique_nnz
-
-        for i in 1:A.unique_nnz
-            Triangle_check[A.indices[i,:]] = 1
-        end
-
-        #invert to map v indices to u
-        Match_mapping = Dict(value => key for (key, value) in Match_mapping)
-
-        for i in 1:B.unique_nnz
-            v_i,v_j,v_k = B.indices[i,:]
-
-            matched_triangle =
-              sort([get(Match_mapping,v_i,-1),get(Match_mapping,v_j,-1),get(Match_mapping,v_k,-1)])
-    #        println(B.indices[i,:]," -> ",matched_triangle)
-            match = get(Triangle_check,matched_triangle,0)
-            if match == 1
-                triangle_count += 1
-            else
-                gaped_triangles += 1
-            end
-        end
-
-    else
-        for i in 1:B.unique_nnz
-            Triangle_check[B.indices[i,:]] = 1
-        end
-
-        for i in 1:A.unique_nnz
-            v_i,v_j,v_k = A.indices[i,:]
-            matched_triangle =
-               sort([get(Match_mapping,v_i,-1), get(Match_mapping,v_j,-1),get(Match_mapping,v_k,-1)])
-
-            match = get(Triangle_check,matched_triangle,0)
-            if match == 1
-                triangle_count += 1
-            else
-                gaped_triangles += 1
-            end
-        end
-    end
-
-   # triangles, triangle_weight = count_triangles(sub_A,sub_B)
-
-    return triangle_count, gaped_triangles, Match_mapping
-
-end
-
-function TAME_score(Triangle_Dict::Dict{Array{Int,1},Int},Input_tensor::COOTen,
-                    Match_mapping::Dict{Int,Int})
-
-    triangle_count = 0
-    gaped_triangles = 0
-
-    for i in 1:Input_tensor.unique_nnz
-        v_i,v_j,v_k = Input_tensor.indices[i,:]
-
-        matched_triangle =
-          sort([get(Match_mapping,v_i,-1),get(Match_mapping,v_j,-1),get(Match_mapping,v_k,-1)])
-
-        match = get(Triangle_Dict,matched_triangle,0)
-        if match == 1
-            triangle_count += 1
-        else
-            gaped_triangles += 1
-        end
-    end
-    return triangle_count, gaped_triangles, Match_mapping
-end
 
 function TAME_score(Triangle_Dict::Dict{Array{Int,1},Int},Input_tensor::ThirdOrderSymTensor,
                     Match_mapping::Dict{Int,Int})
@@ -416,7 +264,6 @@ function TAME_score(Triangle_Dict::Dict{Array{Int,1},Int},Input_tensor::ThirdOrd
     end
     return triangle_count, gaped_triangles, Match_mapping
 end
-
 
 
 
