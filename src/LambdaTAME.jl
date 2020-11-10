@@ -27,15 +27,17 @@ PROJECT_PATH = "."
 #TGPA_PATH = "Users/ccolley/Code/TGPA"
 #include(TGPA_PATH*"/TGPA_generator.jl")
 
+
+#
 # https://github.com/nassarhuda/NetworkAlignment.jl.git
-NETWORK_ALIGNMENT_PATH = "/Users/ccolley/Code/NetworkAlignment.jl/src/"
+#NETWORK_ALIGNMENT_PATH = "/Users/ccolley/Code/NetworkAlignment.jl/src/"
 #NETWORK_ALIGNMENT_PATH = "/homes/ccolley/Documents/Software/NetworkAlignment.jl/src/" #nilpotent
-include(NETWORK_ALIGNMENT_PATH*"NetworkAlignment.jl")
+#include(NETWORK_ALIGNMENT_PATH*"NetworkAlignment.jl")
 
 
-LOWRANK_EIGENALIGN_PATH = "/Users/ccolley/Code/lowrank_spectral_v1_julia/all_code/include_all.jl" #local
+#LOWRANK_EIGENALIGN_PATH = "/Users/ccolley/Code/lowrank_spectral_v1_julia/all_code/include_all.jl" #local
 #LOWRANK_EIGENALIGN_PATH = "/homes/ccolley/Documents/Software/lowrank_spectral_v1_julia/all_code/include_all.jl"#nilpotent
-include(LOWRANK_EIGENALIGN_PATH)
+#include(LOWRANK_EIGENALIGN_PATH)
 
 
 #TODO: Check to see if this can be run straight out of the box.
@@ -66,6 +68,30 @@ include("TAME_Implementations.jl")
 #include("Experimental_code.jl")
 include("Experiments.jl")
 #include("SparseSymmetricTensorCode.jl")
+
+
+
+#  --  From Experiments.jl --  #
+
+export distributed_pairwise_alignment 
+export distributed_random_trials
+export align_tensors # this is the file based version
+export align_matrices
+export random_graph_exp
+
+export load_ThirdOrderSymTensor
+export graph_to_ThirdOrderTensor
+
+#  --  From Matchings.jl --  #
+export bipartite_matching_primal_dual
+
+#  --  From TAME_Implementations.jl --  #
+export align_tensors_profiled
+export ΛTAME
+export LowRankTAME
+export LowRankTAME_profiled
+export TAME
+export TAME_profiled
 
 
 end #module 

@@ -124,10 +124,6 @@ function TAME_score(Triangle_Dict::Dict{Array{Int,1},Int},Input_tensor,
 end
 
 
-
-
-
-
 function TAME_score(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor,U::Array{Float64,2},V::Array{Float64,2};return_timings=false)
 
     if return_timings
@@ -266,7 +262,36 @@ function TAME_score(Triangle_Dict::Dict{Array{Int,1},Int},Input_tensor::ThirdOrd
 end
 
 
+"""------------------------------------------------------------------------------
+  A function for solving the a maximum bipartite matching problem with a dense 
+  m x n input X. 
 
+  Inputs
+  ------
+  * X - (Matrix{Float64}):
+    The weights of the input bipartite graph. 
+  * tol - (Float):
+    The tolerance to determine whether or not the flow through an edge is at 
+    capacity. 
+  * normalize\_weights - (Bool):
+    Whether or not to normalize the maximum edge weight to be 1.0, implictly
+    alters the tolerance to which the problem is solved.
+
+  Outputs
+  -------
+  * val - (Float):
+    The value of the maximum weighted matching. 
+  * noute - (Int):
+    The cardinality of the matching found. 
+  * match1 - (Array{Int,1}):
+    The mapping linking left hand side nodes to the right hand side. The ith 
+    entry maps node i to a right hand side node. 
+  * match2 - (Array{Int,1}):
+    The mapping linking right hand side nodes to the right hand side. The jth 
+    entry maps node j to a left hand side node. The last n entries in the array
+    represent dummy nodes which are used to account non-matches which may arise 
+    from negative weights. 
+------------------------------------------------------------------------------"""
 function bipartite_matching_primal_dual(X::Matrix{Float64};tol::Float64=1e-8,
                                         normalize_weights::Bool=false)
     #to get the access pattern right, we must match the right hand side to the left hand side. 
