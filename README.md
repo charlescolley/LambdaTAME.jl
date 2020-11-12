@@ -33,28 +33,31 @@ Dependencies
 [Tests](https://docs.julialang.org/en/v1/stdlib/Test/) and [Suppressor](https://github.com/JuliaIO/Suppressor.jl) for testing. 
 
 Data
-----
+====
 included files are sparse matrix and sparse tensor (.smat and .ssten files respectively) representations of the subset of PPI networks from the [LVGNA](https://www3.nd.edu/~cone/LNA_GNA/) project which we use (original .gw files can be directly downloaded [here](https://www3.nd.edu/~cone/LNA_GNA/networks.zip)). Data is included for convenience of recreating our experiments. If utilizing these files, please add appropriate citations to their original project source. 
 
 Exported Functions
---------------
+==================
 
-* distributed_pairwise_alignment 
+### Experiment Drivers
+* distributed_pairwise_alignment
 * distributed_random_trials
 * align_tensors
 * align_tensors_profiled
 * align_matrices
 * random_graph_exp
 
+### ThirdOrderSymTensor Helpers
 * load_ThirdOrderSymTensor
 * graph_to_ThirdOrderTensor
 
-* bipartite_matching_primal_dual
+### Matching Routines
+ * bipartite_matching_primal_dual
 
+### Spectral Relaxation Routines
 * ΛTAME
 * LowRankTAME
 * LowRankTAME_profiled
 * TAME
 * TAME_profiled
-
 
