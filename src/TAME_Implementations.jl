@@ -18,19 +18,17 @@
   
   Outputs
   -------
-  * best\_TAME\_PP\_tris - (Int):
-  	The largest number of triangles matched over all iterations.
-  * max\_triangle\_match - (Int):
-	The maximum number of triangles matchable. This is the minimum between the 
-	number of triangles in graphs A and B. 
-  * best\_TAME\_PP\_x - (Array{Float,2}):
-	The best iterate found over all the alphas and betas specified by the user. 
-	when 'LambdaTAME' and 'LowRankTAME' are called, this is replaced by the U
-	and V components of the best iterate. 
-  * best\_matching - (Dict{Int,Int}):
-	The best matching found, maps from A to B. When the method flips A and B, 
-	the dictionary is also flipped when returned. 
-------------------------------------------------------------------------------"""
+	* 'best_TAME_PP_tris' - (Int):
+		The largest number of triangles matched over all iterations.
+	* 'max_triangle_match' - (Int):
+	  The maximum number of triangles matchable. This is the minimum between the 
+	  number of triangles in graphs A and B. 
+	* 'best_TAME_PP_x' - (Array{Float,2}):
+	  The best iterate found over all the alphas and betas specified by the user. 
+	  when 'LambdaTAME' and 'LowRankTAME' are called, this is replaced by the U
+	  and V components of the best iterate. 
+
+-----------------------------------------------------------------------------"""
 function align_tensors(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor;
 					   method::String="LambdaTAME",no_matching=false,kwargs...)
 
@@ -61,7 +59,7 @@ end
 
 """------------------------------------------------------------------------------
   This function aligns graphs using their tensor representations and returns the
-  profiled version of the algorithms. These routines call the param_search 
+  profiled version of the algorithms. These routines call the 'param_search'
   functions for the associated method used.
 
   Inputs
@@ -73,27 +71,27 @@ end
   * method - (String):
 	The choice of method used to align the methods. Options include 'LambdaTAME',
 	'LowRankTAME', and 'TAME'. 
-  * no\_matching - (Bool):
+  * 'no_matching' - (Bool):
 	Will not run the matching routines when True. This is useful when studying 
 	the ranks of the iterates. Any counts which may rely on the matchings are 
 	replaced by -1. 
   Outputs
   -------
-  * best\_TAME\_PP\_tris - (Int):
+  * 'best_TAME_PP_tris' - (Int):
     The largest number of triangles matched over all iterations.
-  * max\_triangle\_match - (Int):
+  * 'max_triangle_match' - (Int):
 	The maximum number of triangles matchable. This is the minimum between the 
 	number of triangles in graphs A and B. 
-  * best\_TAME\_PP\_x - (Array{Float,2}):
+  * 'best_TAME_PP_x' - (Array{Float,2}):
 	The best iterate found over all the alphas and betas specified by the user. 
 	when 'LambdaTAME' and 'LowRankTAME' are called, this is replaced by the U
 	and V components of the best iterate. 
-  * best\_matching - (Dict{Int,Int}):
+  * 'best_matching' - (Dict{Int,Int}):
 	The best matching found, maps from A to B. When the method flips A and B, 
 	the dictionary is also flipped when returned. 
   * profile - (Dict):
 	A dictionary storing the profiling results from each of the methods. Please 
-	see the _profiled versions of the code to see what is returned by each 
+	see the '_profiled' versions of the code to see what is returned by each 
 	function.
 ------------------------------------------------------------------------------"""
 function align_tensors_profiled(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor;
@@ -392,7 +390,7 @@ end
   power method for each of the tensors passed it. These iterates are stored and
   the best rank one matching is picked out of all the quadratic pairs of vectors
   computed. This portion of the algorith computes the contractions, the full 
-  procedure can be found in the associated \_param\_search algorithms. 
+  procedure can be found in the associated '_param_search' algorithms. 
 
   Inputs
   ------
@@ -402,12 +400,12 @@ end
 	The shift to use on the iterations.
   * α -(float):
 	The mixing parameter for combining in the starting iterates. 
-  * max\_iter - (Int):
+  * 'max_iter' - (Int):
 	The maximum number of iterations to run. 
   * tol - (Float):
 	The tolerence to solve the algorithm to. Computes the tolerance by measuring
 	the absolute value of the difference between the computed eigenvalues. 
-  * update\_user - (Int):
+  * 'update_user' - (Int):
 	Specifies how frequently output messages should be printed to the user. 
 	Default is -1 which means no output messages are printed, else if the value 
 	is k, then the kth iterate will print out an update. 
@@ -495,40 +493,40 @@ end
   ------
   * A,B - (ThirdOrderSymTensor):
 	The tensors to align against one another. 
-  * U\_0, V\_0 - (Array{Float,2}):
+  * 'U_0', 'V_0' - (Array{Float,2}):
 	The low rank components of the starting iteration X = UV'. Iterates are 
 	normalized before the iterations begin. 
   * β - (Float):
 	The shift to use on the iterations.
   * α -(float):
 	The mixing parameter for combining in the starting iterates. 
-  * max\_iter - (Int):
+  * 'max_iter' - (Int):
 	The maximum number of iterations to run. 
   * tol - (Float):
 	The tolerence to solve the algorithm to. Computes the tolerance by measuring
 	the absolute value of the difference between the computed eigenvalues. 
-  * max\_rank - (Int):
+  * 'max_rank' - (Int):
 	Specify the maximum rank of each of the iterates. Default makes it so that 
 	only singular values small enough to be considered zero are truncated. 
-  * update\_user - (Int):
+  * 'update_user' - (Int):
 	Specifies how frequently output messages should be printed to the user. 
 	Default is -1 which means no output messages are printed, else if the value 
 	is k, then the kth iterate will print out an update. 
-  * no\_matching - (Bool):
+  * 'no_matching' - (Bool):
 	Specifies whether or not to run the matching and scoring portions of the 
 	algorithm. Useful if only the iterates are desired. 
-  * low\_rank\_matching - (Bool):
+  * 'low_rank_matching' - (Bool):
 	Specifies whether or not to run the low rank matching procedure from [1]. 
 	This is useful when speed is needed, but may lead to regressions in the 
 	matching performance. 
 
   Output
   ------
-  * best\_U, best\_V - (Array{Float,2})
+  * 'best_U', 'best_V' - (Array{Float,2})
     Returns the components to the iteration which matched the most triangles. 
-  * best\_triangle\_count - (Int)
+  * 'best_triangle_count' - (Int)
     The maximum number of triangles matched. 
-  * best\_matching - (Dict{Int,Int})
+  * 'best_matching' - (Dict{Int,Int})
 	The matching computed between the two graphs, maps the vertices of A to the
 	vertices of B. 
 
@@ -649,53 +647,53 @@ end
   ------
   * A,B - (ThirdOrderSymTensor):
 	The tensors to align against one another. 
-  * U\_0, V\_0 - (Array{Float,2}):
+  * 'U_0', 'V_0' - (Array{Float,2}):
 	The low rank components of the starting iteration X = UV'. Iterates are 
 	normalized before the iterations begin. 
   * β - (Float):
 	The shift to use on the iterations.
   * α -(float):
 	The mixing parameter for combining in the starting iterates. 
-  * max\_iter - (Int):
+  * 'max_iter' - (Int):
 	The maximum number of iterations to run. 
   * tol - (Float):
 	The tolerence to solve the algorithm to. Computes the tolerance by measuring
 	the absolute value of the difference between the computed eigenvalues. 
-  * max\_rank - (Int):
+  * 'max_rank' - (Int):
 	Specify the maximum rank of each of the iterates. Default makes it so that 
 	only singular values small enough to be considered zero are truncated. 
-  * update\_user - (Int):
+  * 'update_user' - (Int):
 	Specifies how frequently output messages should be printed to the user. 
 	Default is -1 which means no output messages are printed, else if the value 
 	is k, then the kth iterate will print out an update. 
-  * no\_matching - (Bool):
+  * 'no_matching' - (Bool):
 	Specifies whether or not to run the matching and scoring portions of the 
 	algorithm. Useful if only the iterates are desired. 
-  * low\_rank\_matching - (Bool):
+  * 'low_rank_matching' - (Bool):
 	Specifies whether or not to run the low rank matching procedure from [1]. 
 	This is useful when speed is needed, but may lead to regressions in the 
 	matching performance. 
 
   Output
   ------
-	* best\_U, best\_V - (Array{Float,2})
+	* 'best_U', 'best_V' - (Array{Float,2})
 	  Returns the components to the iteration which matched the most triangles. 
-	* best\_triangle\_count - (Int)
+	* 'best_triangle_count' - (Int)
 	  The maximum number of triangles matched. 
-	* best\_matching - (Dict{Int,Int})
+	* 'best_matching' - (Dict{Int,Int})
 	  The matching computed between the two graphs, maps the vertices of A to the
 	  vertices of B. 
-	* experiment\_profile - (Dict{String,Union{Array{F,1},Array{Array{F,1},1}}}):
+	* 'experiment_profile' - (Dict{String,Union{Array{F,1},Array{Array{F,1},1}}}):
 	  The experiment profile computed, keys for the experiment data collected are
 	  as follows. 
 	  +'ranks' - The ranks of each iterate X_k. 
-	  +'contraction\_timings' - Time taken to compute each contraction. 
-	  +'svd\_timings' - Time taken to compute the svd.
-	  +'qr\_timings' - Time taken to compute the QR factorations.
-	  +'matched\_tris' - The number of triangles matched by each iterate. 
-	  +'sing\_vals' - The singular values of each iterate X_k. 
-	  +'matching\_times' - Time taken to solve the matchings. 
-	  +'soring\_timings' - Time taken to score each matching. 
+	  +'contraction_timings' - Time taken to compute each contraction. 
+	  +'svd_timings' - Time taken to compute the svd.
+	  +'qr_timings' - Time taken to compute the QR factorations.
+	  +'matched_tris' - The number of triangles matched by each iterate. 
+	  +'sing_vals' - The singular values of each iterate X_k. 
+	  +'matching_times' - Time taken to solve the matchings. 
+	  +'soring_timings' - Time taken to score each matching. 
 
   Citation
   --------
@@ -864,27 +862,27 @@ end
 	The shift to use on the iterations.
   * α -(float):
 	The mixing parameter for combining in the starting iterates. 
-  * max\_iter - (Int):
+  * 'max_iter' - (Int):
 	The maximum number of iterations to run. 
   * tol - (Float):
 	The tolerence to solve the algorithm to. Computes the tolerance by measuring
 	the absolute value of the difference between the computed eigenvalues. 
-  * update\_user - (Int):
+  * 'update_user' - (Int):
 	Specifies how frequently output messages should be printed to the user. 
 	Default is -1 which means no output messages are printed, else if the value 
 	is k, then the kth iterate will print out an update. 
-  * no\_matching - (Bool):
+  * 'no_matching' - (Bool):
 	Specifies whether or not to run the matching and scoring portions of the 
 	algorithm. Useful if only the iterates are desired. 
 
   Output
   ------
-	* best\_x- (Array{Float,2})
+	* 'best_x'- (Array{Float,2})
 	  Returns the components to the iteration which matched the most triangles. 
 	  Reshapes the iterate x into a matrix. 
-	* best\_triangle\_count - (Int)
+	* 'best_triangle_count' - (Int)
 	  The maximum number of triangles matched. 
-	* best\_matching - (Dict{Int,Int})
+	* 'best_matching' - (Dict{Int,Int})
 	  The matching computed between the two graphs, maps the vertices of A to the
 	  vertices of B. 
 ------------------------------------------------------------------------------"""
@@ -976,40 +974,40 @@ end
 	The shift to use on the iterations.
   * α -(float):
 	The mixing parameter for combining in the starting iterates. 
-  * max\_iter - (Int):
+  * 'max_iter' - (Int):
 	The maximum number of iterations to run. 
   * tol - (Float):
 	The tolerence to solve the algorithm to. Computes the tolerance by measuring
 	the absolute value of the difference between the computed eigenvalues. 
-  * update\_user - (Int):
+  * 'update_user' - (Int):
 	Specifies how frequently output messages should be printed to the user. 
 	Default is -1 which means no output messages are printed, else if the value 
 	is k, then the kth iterate will print out an update. 
-  * no\_matching - (Bool):
+  * 'no_matching' - (Bool):
 	Specifies whether or not to run the matching and scoring portions of the 
 	algorithm. Useful if only the iterates or profiling is desired. 
 
   Output
   ------
-    * best\_x- (Array{Float,2})
+    * 'best_x'- (Array{Float,2})
       Returns the components to the iteration which matched the most triangles. 
       Reshapes the iterate x into a matrix.  
-	* best\_triangle\_count - (Int)
+	* 'best_triangle_count' - (Int)
 	  The maximum number of triangles matched. 
-	* best\_matching - (Dict{Int,Int})
+	* 'best_matching' - (Dict{Int,Int})
 	  The matching computed between the two graphs, maps the vertices of A to the
 	  vertices of B. 
-	* experiment\_profile - (Dict{String,Union{Array{F,1},Array{Array{F,1}}}}):
+	* 'experiment_profile' - (Dict{String,Union{Array{F,1},Array{Array{F,1}}}}):
 	  The experiment profile computed, keys for the experiment data collected are
 	  as follows. 
-	  +'contraction\_timings' - Time taken to compute each contraction. 
-	  +'matched\_tris' - The number of triangles matched by each iterate. 
+	  +'contraction_timings' - Time taken to compute each contraction. 
+	  +'matched_tris' - The number of triangles matched by each iterate. 
 	  +'gaped triangles' - The number of unmatched triangles, equal to the 
 	                       maximum - matched triangles.
-	  +'sing\_vals' - The singular values of each iterate X_k. 
+	  +'sing_vals' - The singular values of each iterate X_k. 
 	  +'ranks' - The ranks of each iterate X_k. 
-	  +'matching\_timings' - Time taken to solve the matchings. 
-	  +'soring\_timings' - Time taken to score each matching. 
+	  +'matching_timings' - Time taken to solve the matchings. 
+	  +'soring_timings' - Time taken to score each matching. 
 
 ------------------------------------------------------------------------------"""
 function TAME_profiled(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor, β::F, max_iter::Int,

@@ -273,7 +273,7 @@ end
   * tol - (Float):
     The tolerance to determine whether or not the flow through an edge is at 
     capacity. 
-  * normalize\_weights - (Bool):
+  * 'normalize_weights' - (Bool):
     Whether or not to normalize the maximum edge weight to be 1.0, implictly
     alters the tolerance to which the problem is solved.
 
@@ -293,7 +293,7 @@ end
     from negative weights. 
 ------------------------------------------------------------------------------"""
 function bipartite_matching_primal_dual(X::Matrix{Float64};tol::Float64=1e-8,
-                                        normalize_weights::Bool=false)
+                                       normalize_weights::Bool=false)
     #to get the access pattern right, we must match the right hand side to the left hand side. 
 
 	m,n = size(X)
