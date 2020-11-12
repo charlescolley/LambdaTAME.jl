@@ -36,23 +36,25 @@ Data
 ----
 included files are sparse matrix and sparse tensor (.smat and .ssten files respectively) representations of the subset of PPI networks from the [LVGNA](https://www3.nd.edu/~cone/LNA_GNA/) project which we use (original .gw files can be directly downloaded [here](https://www3.nd.edu/~cone/LNA_GNA/networks.zip)). Data is included for convenience of recreating our experiments. If utilizing these files, please add appropriate citations to their original project source. 
 
-Experiments
+Exported Functions
 --------------
+
+* distributed_pairwise_alignment 
 * distributed_random_trials
-* full_ER_TAME_test
-  - synthetic_HyperKron_problem
-* full_HyperKron_TAME_test
-  - synthetic_HyperKron_problem
-* self_alignment
-  - file
-  - full directory
-* distributed_pairwise_alignment
-* synthetic_HyperKron_problem
-* pairwise_alignment
+* align_tensors
+* align_tensors_profiled
+* align_matrices
+* random_graph_exp
 
+* load_ThirdOrderSymTensor
+* graph_to_ThirdOrderTensor
 
-TODO
--------
-* convert to module
-* remove dependency from ssten 
+* bipartite_matching_primal_dual
+
+* ΛTAME
+* LowRankTAME
+* LowRankTAME_profiled
+* TAME
+* TAME_profiled
+
 
