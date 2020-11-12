@@ -168,13 +168,9 @@ function ΛTAME_param_search_profiled(A::ThirdOrderSymTensor,B::ThirdOrderSymTen
 	best_j = -1
 	best_matching = Dict{Int,Int}()
 
-	if Ten == COOTen
-		m = A.cubical_dimension
-		n = B.cubical_dimension
-	else
-		m = A.n
-		n = B.n
-	end
+	m = A.n
+	n = B.n
+
 
 
 	results = Dict(
@@ -226,13 +222,8 @@ function TAME_param_search(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor;
 	best_TAME_PP_tris::Int = -1
 	best_matching = Dict{Int,Int}()
 
-	if Ten == COOTen
-		m = A.cubical_dimension
-		n = B.cubical_dimension
-	else
-		m = A.n
-		n = B.n
-	end
+	m = A.n
+	n = B.n
 
 	best_TAME_PP_x = Array{Float64,2}(undef,m,n)
 
@@ -266,13 +257,8 @@ function TAME_param_search_profiled(A::ThirdOrderSymTensor,B::ThirdOrderSymTenso
 	best_TAME_PP_tris = -1
 	best_matching = Dict{Int,Int}()
 
-	if Ten == COOTen
-		m = A.cubical_dimension
-		n = B.cubical_dimension
-	else
-		m = A.n
-		n = B.n
-	end
+	m = A.n
+	n = B.n
 
 	best_TAME_PP_x = Array{Float64,2}(undef,m,n)
 	experiment_profiles = Array{Tuple{String,Dict{String,Union{Array{Float64,1},Array{Array{Float64,1},1}}}},1}(undef,0)
@@ -309,13 +295,9 @@ function LowRankTAME_param_search(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor;
     best_TAME_PP_tris = -1
 	best_matching = Dict{Int,Int}()
 
-	if Ten == COOTen
-		m = A.cubical_dimension
-		n = B.cubical_dimension
-	else
-		m = A.n
-		n = B.n
-	end
+	m = A.n
+	n = B.n
+
 
 	best_TAME_PP_U = ones(m,1)
 	best_TAME_PP_V = ones(n,1)
