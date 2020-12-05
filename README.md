@@ -3,7 +3,7 @@ LambdaTAME
 
 A julia (v1.5) implementation of the LambdaTAME, LowRankTAME, and TAME heurestics for pairwise graph alignments.
 
-
+![](LVGNA++_runtimes_and_performance.jpg)
 Contents
 =======
 * LambdaTAME.jl:
