@@ -1,4 +1,4 @@
-The SparseSymmetricTensors.jl package is licensed under the MIT "Expat" License:
+The LambdaTAME package is licensed under the MIT "Expat" License:
 
 > Copyright (c) 2020: Charlie Colley.
 >
