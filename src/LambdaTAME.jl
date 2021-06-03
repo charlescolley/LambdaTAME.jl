@@ -13,6 +13,7 @@ using Distributions
 using Metis
 
 
+
 #using Hungarian  #TODO: remove
 import Statistics: mean
 import Arpack: svds
@@ -55,6 +56,21 @@ struct UnweightedThirdOrderSymTensor #hyperedge weights are 1.0
     n::Int                  #assuming > 0
     indices::Vector{Vector{Tuple{Int,Int}}}   #assuming no repeated permutations, i != k , k != j , i != j
 end
+
+
+struct SymTensorUnweighted
+    n::Int
+    order::Int
+    indices::Array{Int,2}
+end
+
+struct SymTensor
+    n::Int
+    order::Int
+    indices::Array{Int,2}
+    values::Array{Float64,1}
+end
+
 
 #TODO:
 #   Note that to use SparseSymmetricTensors.jl, must update experiment drivers to
