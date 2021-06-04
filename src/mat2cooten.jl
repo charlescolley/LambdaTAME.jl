@@ -1,5 +1,5 @@
-#include("/Users/ccolley/Code/GLANCE/TuranShadow.jl")   #local
-include("/homes/ccolley/Documents/Software/GLANCE/TuranShadow.jl")    #server
+include("/Users/ccolley/Code/GLANCE/TuranShadow.jl")   #local
+#include("/homes/ccolley/Documents/Software/GLANCE/TuranShadow.jl")    #server
 #using NumbersFromText
 using FileIO: save
 using JLD: save,load
@@ -154,16 +154,18 @@ end
 
 function tensor_from_graph(A, k, t)
 
-    _, cliques = TuranShadow(A,k,t)
+    _, raw_cliques::Array{Array{Int64,1},1} = TuranShadow(A,k,t)
 
-    cliques = [sort(clique) for clique in cliques]
-    sort!(cliques) #lexicographic ordered helps eliminate repeats
-    cliques = Set(cliques) # ensure edges are unique
+    raw_cliques = [sort(clique) for clique in raw_cliques]
+    #sort!(cliques) #lexicographic ordered helps eliminate repeats
+    cliques = Set(raw_cliques) # ensure edges are unique
+    #TODO: manually check for repeats in lexicographic list? 
 
     indices = zeros(k,length(cliques))
     idx = 1
     n = -1
-    for clique in cliques
+    
+    for clique in sort(collect(Set(cliques))) #is there a better way to do this? 
         indices[:,idx] = clique
         n_c = maximum(clique)
         if n < n_c
@@ -173,6 +175,11 @@ function tensor_from_graph(A, k, t)
     end
 
     return round.(Int,indices)
+
+end
+
+#TODO: typing?
+function reduce_to_unique_motifs(cliques::Array{Array{T,1},1}) where {T <: Int}
 
 end
 
