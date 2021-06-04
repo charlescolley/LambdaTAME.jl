@@ -16,92 +16,6 @@ LVGNA_data = "/homes/ccolley/Documents/Research/heresWaldo/data/MultiMagna_TAME"
 TENSOR_PATH = "/homes/ccolley/Documents/Research/TensorConstruction/tensors/"   #server
 
 
-#=
-    Small routine for finding motifs
-=#
-function sample_for_cliques()
-
-
-
-    orders = [3,4,5,6,7,8,9,10]   
-    sample_counts = [10000,50000,100000,1000000,10000000,100000000,1000000000] 
-
-    #sever path
-    synth_graph_loc = "/u/subspace_s3/ccolley/Documents/Research/graphAlignment/synthetic_alignments/synthGraphs/"
-
-    inputs_outputs =  [
-        ("duplicationPerturbedER-noiseModel:duplication-perturbation_p:0.75.smat","duplicationPerturbedER-noiseModel:duplication-perturbation_p:0.75/"), 
-        ("duplicationPerturbedER-noiseModel:ER-premove:0.05.smat","duplicationPerturbedER-noiseModel:ER-premove:0.05/"),
-        ("perturbed_human_PHY1-noiseModel:duplication-perturbation_p:0.75.smat","perturbed_human_PHY1-noiseModel:duplication-perturbation_p:0.75/"),
-        ("perturbed_human_PHY1-noiseModel:ER-premove:0.05.smat","perturbed_human_PHY1-noiseModel:ER-premove:0.05/"),
-    ]
-
-    if nprocs() < (length(inputs_outputs) + 1)
-        addprocs((length(inputs_outputs) + 1) - nprocs())
-    end
-
-    @everywhere include_string(Main,$(read("mat2cooten.jl",String)),"mat2cooten.jl")
-
-    futures = []
-    for (input,output) in inputs_outputs
-
-        if !isdir(TENSOR_PATH*output)
-            mkdir(TENSOR_PATH*output)
-        end
-
-        future = @spawn sample_motifs(synth_graph_loc*input,TENSOR_PATH*output,orders,sample_counts)  
-        push!(futures,(future,input))
-
-    end
-
-    for (future, input) in futures
-        fetch(future)
-        println("joined $input")
-    end
-
-end
-
-#TODO: this code is redundant, remove.
-function parallel_parse(matrix_fldr,tensor_fldr)
-    """
-        Assuming that [matrix,tensor]_fldr ends in '/'
-    """
-
-    error("test this first")
-    #find available matrices 
-    matrix_files = readdir(matrix_fldr) 
-    #filter for smat at the moment
-
-
-    #orders = [3,4,5,6,7,8,9,10]
-    #samples = [10000,50000,100000,1000000,10000000,100000000]
-
-    orders = [3]
-    samples = [100]
-
-    futures = []
-
-    for matrix in matrix_files 
-        root_name = split(split(matrix_file,"/")[end],".")[1]
-        
-        # make a folder for each matrix to store built tensors
-        if !isdir(tensor_fldr*root_name)
-            mkdir(tensor_fldr*root_name)
-        end
-
-        future = @spawn sample_motifs(matrix_file,tensor_fldr*root_name,orders,sample_counts)
-
-        push!(futures,(future))
-
-
-    end
-
-    #join the processes 
-    for future in futures
-        fetch(future)
-    end
-
-end
 
 
 function write_tensor(edge_set,outputfile)
@@ -143,17 +57,7 @@ function write_ssten(indices::Array{Int,2},n, filepath::String)
     close(file)
 end
 
-
-function snap_datasets()
-    #src: huda's TuranShadow repo
-    #;wget https://snap.stanford.edu/data/loc-gowalla_edges.txt.gz
-
-    M = readmatrix(Int,"as-skitter.txt")
-    M .+= 1
-    A = sparse(M[:,1],M[:,2],1,maximum(M),maximum(M)) 
-
-end
-
+#routine used for reading in edge files stored as .csv
 function parse_csv(file)
      
      f = CSV.File(file,header=false, types=[Int,Int])
@@ -168,6 +72,7 @@ function parse_csv(file)
      return A
 end
 
+#TODO: move to Experiments.jl?
 function sample_motifs(matrix_file,output_path,orders,sample_counts)
 
     #check file format
@@ -271,6 +176,8 @@ function tensor_from_graph(A, k, t)
 
 end
 
+#=  -- Functions to remove?
+
 function gather_runtime_data(tensor_folders,output_path =nothing)
 
     all_data_by_order = [parse_tensor_folder_runtimes(tensor_folder) for tensor_folder in tensor_folders]
@@ -337,3 +244,4 @@ function parse_tensor_folder_runtimes(tensor_folder)
     end
     return data_by_order
 end
+=#
