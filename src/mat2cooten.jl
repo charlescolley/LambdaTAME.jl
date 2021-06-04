@@ -151,14 +151,34 @@ function sample_motifs(matrix_file,output_path,orders,sample_counts)
 
 end
 
+function tensors_from_graph(A, orders::Array{Int,1}, sample_size::Int)
 
-function tensor_from_graph(A, k, t)
 
-    _, cliques::Array{Array{Int64,1},1} = TuranShadow(A,k,t)
+    tensors = Array{SymTensorUnweighted,1}(undef,length(orders))
+
+    for order in orders
+        edges, n = tensor_from_graph(A, order, sample_size)
+    end
+
+end
+
+function tensors_from_graph(A, orders::Array{Int,1}, sample_sizes::Array{Int,1})
+
+    @assert length(orders) == length(sample_sizes)
+
+    for (order,sample) in zip(orders,sample_sizes)
+        edges, n = tensor_from_graph(A, order, sample)
+    end
+
+end
+
+function tensor_from_graph(A, order, t)
+
+    _, cliques::Array{Array{Int64,1},1} = TuranShadow(A,order,t)
 
     reduce_to_unique_motifs!(cliques)
 
-    indices = zeros(k,length(cliques))
+    indices = zeros(order,length(cliques))
     idx = 1
     n = -1
     
@@ -171,7 +191,8 @@ function tensor_from_graph(A, k, t)
         idx += 1;
     end
 
-    return round.(Int,indices)
+    
+    return SymTensorUnweighted(n,order,round.(Int,indices))
 
 end
 

@@ -94,10 +94,9 @@ include("../src/mat2cooten.jl")
     clique_size = 4
 
     A = LambdaTAME.random_geometric_graph(n,k)
-    @inferred Array{Int64,2} tensor_from_graph(A, clique_size, trials)
-
-
-    _, cliques::Array{Array{Int64,1},1} = TuranShadow(A,order,t)
+    #export SymTensorUnweighted
+ 
+    _, cliques::Array{Array{Int64,1},1} = TuranShadow(A,order,trials)
 
     @testset "clique enumeration/sorting" begin
 
@@ -109,6 +108,14 @@ include("../src/mat2cooten.jl")
 
         @test issetequal(original_cliques,Set(cliques))
         @test length(cliques) == length(Set(cliques))
+    end
+
+    @testset "matrix Contructors" begin
+
+        @inferred tensor_from_graph(A, clique_size, trials)
+        @inferred tensors_from_graph(A, [3,4,5], trials)
+        @inferred tensors_from_graph(A, [3,4,5], [1000,10000,1000])
+
     end
 
 end
