@@ -90,8 +90,25 @@ include("../src/mat2cooten.jl")
     n= 100 
     k = 25
     trials = 1000
+    order = 5
     clique_size = 4
 
     A = LambdaTAME.random_geometric_graph(n,k)
     @inferred Array{Int64,2} tensor_from_graph(A, clique_size, trials)
+
+
+    _, cliques::Array{Array{Int64,1},1} = TuranShadow(A,order,t)
+
+    @testset "clique enumeration/sorting" begin
+
+        original_cliques = copy(cliques)
+        reduce_to_unique_motifs!(cliques)
+
+        original_cliques = [sort(clique) for clique in original_cliques]
+        original_cliques = Set(original_cliques)
+
+        @test issetequal(original_cliques,Set(cliques))
+        @test length(cliques) == length(Set(cliques))
+    end
+
 end

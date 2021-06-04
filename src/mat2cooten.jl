@@ -154,18 +154,15 @@ end
 
 function tensor_from_graph(A, k, t)
 
-    _, raw_cliques::Array{Array{Int64,1},1} = TuranShadow(A,k,t)
+    _, cliques::Array{Array{Int64,1},1} = TuranShadow(A,k,t)
 
-    raw_cliques = [sort(clique) for clique in raw_cliques]
-    #sort!(cliques) #lexicographic ordered helps eliminate repeats
-    cliques = Set(raw_cliques) # ensure edges are unique
-    #TODO: manually check for repeats in lexicographic list? 
+    reduce_to_unique_motifs!(cliques)
 
     indices = zeros(k,length(cliques))
     idx = 1
     n = -1
     
-    for clique in sort(collect(Set(cliques))) #is there a better way to do this? 
+    for clique in cliques #is there a better way to do this? 
         indices[:,idx] = clique
         n_c = maximum(clique)
         if n < n_c
@@ -178,9 +175,36 @@ function tensor_from_graph(A, k, t)
 
 end
 
-#TODO: typing?
-function reduce_to_unique_motifs(cliques::Array{Array{T,1},1}) where {T <: Int}
+#TODO: 
+function reduce_to_unique_motifs!(cliques::Array{Array{T,1},1}) where {T <: Int}
 
+    order = length(cliques[1])
+
+    for i = 1:length(cliques)
+        sort!(cliques[i])
+    end
+
+    sort!(cliques)
+    
+    ix_drop = Array{Int,1}(undef,0)
+
+    current_clique_idx = 1
+    for i =2:length(cliques)
+        
+        if cliques[i] == cliques[current_clique_idx] #found a repeated clique, mark for removal
+            push!(ix_drop,i)
+        else #found a new clique, update ptr
+            current_clique_idx = i 
+        end
+
+    end
+
+    deleteat!(cliques,ix_drop)
+    #return cliques, ix_drop
+    #remove all repeated cliques
+    #cliques = cliques[setdiff(begin:end, ix_drop)]
+
+    
 end
 
 #=  -- Functions to remove?
