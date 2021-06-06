@@ -65,19 +65,44 @@ end
     V = rand(B.n,d)
     X = U*V'
 
-    UTOST_y = LambdaTAME.impTTVnodesym(Unweighted_A,Unweighted_B,reshape(X,A.n*B.n))
-    #TOST_y = LambdaTAME.implicit_contraction(A,B,reshape(X,A.n*B.n))   #TODO: known problem with code, unused in experiment
-    TOST_U, TOST_V = LambdaTAME.get_kron_contract_comps(A,B,U,V)
-    LR_TOST_y = LambdaTAME.reshape(TOST_U*TOST_V',A.n*B.n)
+    @testset "Kronecker Product Contraction" begin
+        UTOST_y = LambdaTAME.impTTVnodesym(Unweighted_A,Unweighted_B,reshape(X,A.n*B.n))
+        #TOST_y = LambdaTAME.implicit_contraction(A,B,reshape(X,A.n*B.n))   #TODO: known problem with code, unused in experiment
+        TOST_U, TOST_V = LambdaTAME.get_kron_contract_comps(A,B,U,V)
+        LR_TOST_y = LambdaTAME.reshape(TOST_U*TOST_V',A.n*B.n)
 
 
-    #ensure all vectors are pairwise equal
-    #@test norm(UTOST_y   - TOST_y)/norm(TOST_y) < tol
-    #@test norm(LR_TOST_y - TOST_y)/norm(TOST_y) < tol
-    @test norm(LR_TOST_y - UTOST_y)/norm(UTOST_y) < tol
+        #ensure all vectors are pairwise equal
+        #@test norm(UTOST_y   - TOST_y)/norm(TOST_y) < tol
+        #@test norm(LR_TOST_y - TOST_y)/norm(TOST_y) < tol
+        @test norm(LR_TOST_y - UTOST_y)/norm(UTOST_y) < tol
+    end
+
+    @testset "Multiple Motif Contraction" begin
+        seed!(54321)
+        n= 100 
+        k = 25
+        trials = 1000
+        orders = [3,4,5,6]
+
+
+        x = ones(n,1)
+        y = zeros(n,1)
+        A = LambdaTAME.random_geometric_graph(n,k)
+        tensors = tensors_from_graph(A,orders,trials)
+
+        for i =1:length(orders)
+            LambdaTAME.contraction!(tensors[i],x,y)
+        end
 
 
 
+    end
+
+end
+
+
+@testset "Matching Routines" begin 
 end
 
 
