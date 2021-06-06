@@ -113,6 +113,99 @@ function search_Krylov_space(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor,U::Ar
     return best_score, best_i, best_j, best_matching
 end
 
+function search_Krylov_space(A::SymTensorUnweighted,B::SymTensorUnweighted,U::Array{Float64,2},V::Array{Float64,2})
+
+
+    A_order,A_unique_nnz = size(A.indices)
+    B_order,B_unique_nnz = size(B.indices)
+    #@assert A_order == B_order
+
+    best_score = -1
+    best_i = -1
+    best_j = -1
+    best_matching = Dict{Int,Int}()
+
+    motif_check = Dict{Array{Int,1},Int}()
+
+
+    if A_unique_nnz > B_unique_nnz
+        for i in 1:A_unique_nnz
+            motif_check[A.indices[:,i]] = 1
+        end
+        Input_tensor = B
+    else
+        for i in 1:B_unique_nnz
+            motif_check[B.indices[:,i]] = 1
+        end
+        Input_tensor = A
+    end
+
+    for i in 1:size(U,2)
+       for j in 1:size(V,2)
+
+            if A_unique_nnz > B_unique_nnz
+                matched_motifs,gaped_motifs,matching = TAME_score(motif_check,Input_tensor,V[:,j],U[:,i])
+            else
+                matched_motifs,gaped_motifs,matching = TAME_score(motif_check,Input_tensor,U[:,i],V[:,j])
+            end
+
+            if matched_motifs > best_score
+                best_matching = matching
+                best_score = matched_motifs
+                best_i = i
+                best_j = j
+            end
+        end
+    end
+    return best_score, best_i, best_j, best_matching
+end
+
+function search_Krylov_space(A::Array{SymTensorUnweighted,1},B::Array{SymTensorUnweighted,1},U::Array{Float64,2},V::Array{Float64,2})
+
+
+    A_order,A_unique_nnz = size(A.indices)
+    B_order,B_unique_nnz = size(B.indices)
+    #@assert A_order == B_order
+
+    best_score = -1
+    best_i = -1
+    best_j = -1
+    best_matching = Dict{Int,Int}()
+
+    motif_check = Dict{Array{Int,1},Int}()
+
+
+    if A_unique_nnz > B_unique_nnz
+        for i in 1:A_unique_nnz
+            motif_check[A.indices[:,i]] = 1
+        end
+        Input_tensor = B
+    else
+        for i in 1:B_unique_nnz
+            motif_check[B.indices[:,i]] = 1
+        end
+        Input_tensor = A
+    end
+
+    for i in 1:size(U,2)
+       for j in 1:size(V,2)
+
+            if A_unique_nnz > B_unique_nnz
+                matched_motifs,gaped_motifs,matching = TAME_score(motif_check,Input_tensor,V[:,j],U[:,i])
+            else
+                matched_motifs,gaped_motifs,matching = TAME_score(motif_check,Input_tensor,U[:,i],V[:,j])
+            end
+
+            if matched_motifs > best_score
+                best_matching = matching
+                best_score = matched_motifs
+                best_i = i
+                best_j = j
+            end
+        end
+    end
+    return best_score, best_i, best_j, best_matching
+end
 
 #used when we don't want to recreate the triangle matching dictionary multiple times
 function TAME_score(Triangle_Dict::Dict{Array{Int,1},Int},Input_tensor,
@@ -238,7 +331,6 @@ function TAME_score(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor,Match_mapping:
 end
 
 
-
 function TAME_score(Triangle_Dict::Dict{Array{Int,1},Int},Input_tensor::ThirdOrderSymTensor,
                     Match_mapping::Dict{Int,Int})
 
@@ -260,6 +352,135 @@ function TAME_score(Triangle_Dict::Dict{Array{Int,1},Int},Input_tensor::ThirdOrd
     end
     return triangle_count, gaped_triangles, Match_mapping
 end
+
+#TODO: may remove the array mapping routines 
+function TAME_score(A::SymTensorUnweighted,B::SymTensorUnweighted, mapping::Array{Int,1})
+
+    @assert size(A.indices,1) == size(B.indices,1)
+
+
+    if size(B.indices,2) > size(A.indices,2)
+        inverted_mapping = -ones(Int, maximum(mapping))
+
+        for (v,u) in enumerate(mapping)
+            if u != -1
+                inverted_mapping[u] = v
+            end
+        end
+
+        #return (-1,"ERROR:mapping needs to be inverted")
+        return motif_matching_count(B.indices, A.indices,inverted_mapping)
+    end
+
+    order =  size(A.indices,1)
+    A_motifs = Set(eachcol(A.indices))
+
+    matched_motifs = 0
+
+    for idx =1:size(B.indices,2)
+        edge = B.indices[:,idx]
+        new_edge = [mapping[i] for i in edge]
+        sort!(new_edge)
+
+        if new_edge in A_motifs
+            matched_motifs += 1
+        end
+
+    end
+    return matched_motifs
+
+end
+
+#TODO: may remove, see above
+function TAME_score(A_motifs::Dict{Array{Int,1},Int}, B::SymTensorUnweighted, mapping::Array{Int,1})
+
+  
+    order =  size(B.indices,1)
+    #A_motifs = Set(eachcol(Indices_A))
+
+    matched_motifs = 0
+
+    for idx =1:size(B.indices,2)
+        edge = B.indices[:,idx]
+        new_edge = [mapping[i] for i in edge]
+        sort!(new_edge)
+
+        if new_edge in A_motifs
+            matched_motifs += 1
+        end
+
+    end
+    return matched_motifs
+
+end
+
+function TAME_score(A::SymTensorUnweighted,B::SymTensorUnweighted, mapping::Dict{Int,Int})
+
+    @assert size(A.indices,1) == size(B.indices,1)
+
+
+    if size(B.indices,2) > size(A.indices,2)
+        inverted_mapping = Dict()
+
+        for (v,u) in mapping
+            if u != -1
+                inverted_mapping[u] = v
+            end
+        end
+
+        #return (-1,"ERROR:mapping needs to be inverted")
+        return motif_matching_count(B.indices, A.indices,inverted_mapping)
+    end
+
+    order =  size(A.indices,1)
+    A_motifs = Set(eachcol(A.indices))
+
+    matched_motifs = 0
+    gaped_motifs = 0
+
+    for idx =1:size(B.indices,2)
+        edge = B.indices[:,idx]
+        new_edge = [get(mapping,i,-1) for i in edge]
+        sort!(new_edge)
+
+        if new_edge in A_motifs
+            matched_motifs += 1
+        else
+            gaped_motifs += 1
+        end
+
+    end
+    return matched_motifs,gaped_motifs,  mapping
+
+end
+
+function TAME_score(A_motifs::Dict{Array{Int,1},Int}, B::SymTensorUnweighted, mapping::Dict{Int,Int})
+
+  
+    order =  size(B.indices,1)
+    #A_motifs = Set(eachcol(Indices_A))
+
+    matched_motifs = 0
+    gaped_motifs = 0
+
+    for idx =1:size(B.indices,2)
+        edge = B.indices[:,idx]
+        new_edge = [get(mapping,i,-1) for i in edge]
+        sort!(new_edge)
+
+        if haskey(A_motifs,new_edge)
+            matched_motifs += 1
+        else
+            gaped_motifs += 1
+        end
+
+    end
+    return matched_motifs, gaped_motifs, mapping
+
+end
+
+
+
 
 
 """------------------------------------------------------------------------------
@@ -404,6 +625,7 @@ function bipartite_matching_primal_dual(X::Matrix{Float64};tol::Float64=1e-8,
             for i=1:ntmod
                 bt[tmod[i]] += theta
             end
+
             continue
         end
 

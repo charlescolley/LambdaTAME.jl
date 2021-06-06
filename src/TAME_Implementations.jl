@@ -29,7 +29,8 @@
 	  and V components of the best iterate. 
 
 -----------------------------------------------------------------------------"""
-function align_tensors(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor;
+function align_tensors(A::Union{ThirdOrderSymTensor,SymTensorUnweighted}, 
+	                   B::Union{ThirdOrderSymTensor,SymTensorUnweighted};
 					   method::String="LambdaTAME",no_matching=false,kwargs...)
 
 	#put larger tensor on the left
@@ -123,7 +124,7 @@ function align_tensors_profiled(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor;
 end
 
 
-function ΛTAME_param_search(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor;
+function ΛTAME_param_search(A,B;#duck type tensor inputs
                             iter::Int = 15,tol::Float64=1e-6,
 							alphas::Array{F,1}=[.5,1.0],
 							betas::Array{F,1} =[1000.0,100.0,10.0,1.0,0.0,0.1,0.01,0.001]) where {F <: AbstractFloat}
@@ -157,8 +158,41 @@ function ΛTAME_param_search(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor;
 	return best_TAME_PP_tris, max_triangle_match, U[best_i,:], V[best_j,:], best_matching
 end
 
+function ΛTAME_param_search(A_tensors::Array{SymTensorUnweighted,1},B_tensors::Array{SymTensorUnweighted,1};
+							iter::Int = 15,tol::Float64=1e-6,
+							alphas::Array{F,1}=[.5,1.0],
+							betas::Array{F,1} =[1000.0,100.0,10.0,1.0,0.0,0.1,0.01,0.001]) where {F <: AbstractFloat}
 
-function ΛTAME_param_search_profiled(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor; 
+	max_triangle_match = min(size(A.indices,1),size(B.indices,1))
+	total_triangles = size(A.indices,1) + size(B.indices,1)
+
+	U = Array{Float64,2}(undef,A.n,iter)
+	V = Array{Float64,2}(undef,B.n,iter)
+
+	best_TAME_PP_tris = -1
+	best_i  = -1
+	best_j = -1
+	best_matching = Dict{Int,Int}()
+
+	for α in alphas
+		for beta in betas
+
+			U,V = ΛTAME(A_tensors,B_tensors,beta,iter,tol,α)
+			search_tris, i, j, matching = search_Krylov_space(A_tensors,B_tensors,U,V)
+			println("α:$(α) -- β:$(beta) finished -- tri_match:$search_tris -- max_tris $(max_triangle_match) -- best tri_match:$best_TAME_PP_tris")
+			if search_tris > best_TAME_PP_tris
+				best_TAME_PP_tris = search_tris
+				best_i = i
+				best_j = j
+				best_matching = matching
+			end
+		end
+	end
+	println("best i:$best_i -- best j:$best_j")
+	return best_TAME_PP_tris, max_triangle_match, U[best_i,:], V[best_j,:], best_matching
+end
+
+function ΛTAME_param_search_profiled(A,B; 
 	                                 iter::Int = 15,tol::Float64=1e-6, alphas::Array{F,1}=[.5,1.0],
 							         betas::Array{F,1} =[1000.0,100.0,10.0,1.0,0.0,0.1,0.01,0.001]) where {F <: AbstractFloat}
 
@@ -447,6 +481,140 @@ function ΛTAME(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor, β::Float64,
         end
 
     end
+
+end
+
+function ΛTAME(A::SymTensorUnweighted, B::SymTensorUnweighted, β::Float64,
+	max_iter::Int,tol::Float64,α::Float64;update_user=-1)
+
+	U = zeros(A.n,max_iter+1)
+	V = zeros(B.n,max_iter+1) #store initial in first column
+
+	U[:,1] = ones(A.n)
+	U[:,1] /=norm(U[:,1])
+
+	V[:,1] = ones(B.n)
+	V[:,1] /=norm(U[:,1])
+
+	sqrt_β = β^(.5)
+
+	lambda = Inf
+	i = 1
+
+	A_buf = zeros(A.n)
+	B_buf = zeros(A.n)
+
+	while true
+
+		contraction_divide_out!(A,U[:,i],A_buf)
+		contraction_divide_out!(B,V[:,i],B_buf)
+
+		U[:,i+1] .= A_buf
+		V[:,i+1] .= B_buf
+
+
+		lambda_A = (U[:,i+1]'*U[:,i])
+		lambda_B = (V[:,i+1]'*V[:,i])
+		new_lambda = lambda_A*lambda_B
+
+		if β != 0.0
+			U[:,i+1] .+= sqrt_β*U[:,i+1]
+			V[:,i+1] .+= sqrt_β*V[:,i+1]
+		end
+
+		if α != 1.0
+			U[:,i+1] = α*U[:,i+1] + (1 -α)*U[:,1]
+			V[:,i+1] = α*V[:,i+1] + (1 -α)*V[:,1]
+		end
+
+		U[:,i+1] ./= norm(U[:,i+1])
+		V[:,i+1] ./= norm(V[:,i+1])
+
+		if update_user != -1 && i % update_user == 0
+			println("iteration $(i)    λ_A: $(lambda_A) -- λ_B: $(lambda_B) -- newλ: $(new_lambda)")
+		end
+
+		if abs(new_lambda - lambda) < tol || i >= max_iter
+			return U[:,1:i], V[:,1:i]
+		else
+			lambda = new_lambda
+			A_buf .+= 0.0 
+			B_buf .+= 0.0 
+			i += 1
+		end
+
+	end
+
+end
+
+function ΛTAME(A_tensors::Array{SymTensorUnweighted,1}, B_tensors::Array{SymTensorUnweighted,1}, β::Float64,
+	max_iter::Int,tol::Float64,α::Float64;update_user=-1)
+
+	@assert length(A_tensors) == length(B_tensors)
+	for i =1:length(A_tensors)
+		@assert A_tensors[i].order == B_tensors[i].order
+	end
+
+	m = maximum([tensor.n for tensor in A_tensors])
+	n = maximum([tensor.n for tensor in A_tensors])
+
+	U = zeros(m,max_iter+1)
+	V = zeros(n,max_iter+1) #store initial in first column
+
+	U[:,1] = ones(m)
+	U[:,1] /=norm(U[:,1])
+
+	V[:,1] = ones(n)
+	V[:,1] /=norm(U[:,1])
+
+	sqrt_β = β^(.5)
+
+	lambda = Inf
+	i = 1
+
+	A_buf = zeros(m)
+	B_buf = zeros(n)
+
+	while true
+
+		contraction_divide_out!(A_tensors,U[:,i],A_buf)
+		contraction_divide_out!(B_tensors,V[:,i],B_buf)
+
+		U[:,i+1] .= A_buf
+		V[:,i+1] .= B_buf
+
+
+		lambda_A = (U[:,i+1]'*U[:,i])
+		lambda_B = (V[:,i+1]'*V[:,i])
+		new_lambda = lambda_A*lambda_B
+
+		if β != 0.0
+			U[:,i+1] .+= sqrt_β*U[:,i+1]
+			V[:,i+1] .+= sqrt_β*V[:,i+1]
+		end
+
+		if α != 1.0
+			U[:,i+1] = α*U[:,i+1] + (1 -α)*U[:,1]
+			V[:,i+1] = α*V[:,i+1] + (1 -α)*V[:,1]
+		end
+
+		U[:,i+1] ./= norm(U[:,i+1])
+		V[:,i+1] ./= norm(V[:,i+1])
+
+		if update_user != -1 && i % update_user == 0
+			println("iteration $(i)    λ_A: $(lambda_A) -- λ_B: $(lambda_B) -- newλ: $(new_lambda)")
+		end
+
+		if abs(new_lambda - lambda) < tol || i >= max_iter
+			return U[:,1:i], V[:,1:i]
+		else
+			lambda = new_lambda
+			A_buf .+= 0.0 
+			B_buf .+= 0.0 
+			i += 1
+		end
+
+	end
 
 end
 
@@ -813,6 +981,8 @@ function LowRankTAME_profiled(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor,
 
 	return best_U, best_V, best_triangle_count,best_matching, experiment_profile
 end
+
+
 
 function setup_tame_data(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor)
 	return _index_triangles_nodesym(A.n,A.indices), _index_triangles_nodesym(B.n,B.indices)
