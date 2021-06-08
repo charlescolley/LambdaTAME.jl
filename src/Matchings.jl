@@ -160,6 +160,7 @@ function search_Krylov_space(A::SymTensorUnweighted,B::SymTensorUnweighted,U::Ar
     return best_score, best_i, best_j, best_matching
 end
 
+#=
 function search_Krylov_space(A::Array{SymTensorUnweighted,1},B::Array{SymTensorUnweighted,1},U::Array{Float64,2},V::Array{Float64,2})
 
 
@@ -205,6 +206,73 @@ function search_Krylov_space(A::Array{SymTensorUnweighted,1},B::Array{SymTensorU
         end
     end
     return best_score, best_i, best_j, best_matching
+end
+=#
+
+function search_Krylov_space(A::Array{SymTensorUnweighted,1},B::Array{SymTensorUnweighted,1},U::Array{Float64,2},V::Array{Float64,2})
+
+    @assert length(A) == length(B)
+    for i = 1:length(A) #ensure orders are the same at each i
+        @assert size(A[i].indices,1) == size(B[i].indices,1)
+    end
+ 
+    #create sets of edges
+    larger_edge_sets = [ ]
+    
+    for (A_motifs,B_motifs) in zip(A,B)
+        if size(A_motifs.indices,2) > size(B_motifs.indices,2)  #larger set of edges gets 
+            #push!(larger_edge_sets,Set(eachcol(A_motifs.indices)))
+            push!(larger_edge_sets,Dict([(Array(col),1) for col in eachcol(A_motifs.indices)]))
+        else
+            push!(larger_edge_sets,Dict([(Array(col),1) for col in eachcol(B_motifs.indices)]))
+        end
+    end
+
+    best_matching_score = -1
+    best_matching_idx = (-1,-1)
+    best_matched_motifs::Array{Int,1} = []
+    best_mapping::Dict{Int,Int} = Dict()
+
+    max_iter = size(U,2) - 1 #skip the first column of U and V
+
+    for i=1:max_iter
+        for j=1:max_iter
+            A_to_B_mapping, _ = rank_one_matching(U[:,i],V[:,j])
+            B_to_A_mapping, _ = rank_one_matching(V[:,j],U[:,i])
+
+            
+            #TODO: handle mapping inversion 
+
+            #matched_motifs, matching_score = motif_matching_counts(A,B,mapping)
+            matched_motifs = zeros(Int,length(A))
+            for i =1:length(A)
+                if size(A[i].indices,2) >= size(B[i].indices,2)
+                    matched_motifs[i],_,_ = TAME_score(larger_edge_sets[i], B[i], B_to_A_mapping)
+                else
+                    matched_motifs[i],_,_ = TAME_score(larger_edge_sets[i], A[i], A_to_B_mapping)
+                end
+            end
+                #matching_score = motif_matching_count(B[end], A[end], mapping)
+            
+            matching_score = 0 
+            for i= 1:length(A)
+                #println(binomial(size(A[i],1),2))
+                #println(matched_motifs[i])
+                matching_score += binomial(size(A[i].indices,1),2)*matched_motifs[i]
+            end
+
+            if matching_score > best_matching_score
+                best_matching_score = matching_score
+                best_matching_idx = (i,j)
+                best_matched_motifs = copy(matched_motifs)
+                best_mapping = A_to_B_mapping
+            end
+        
+        end
+    end
+
+    best_i, best_j = best_matching_idx
+    return best_matching_score, best_matched_motifs,  best_i, best_j, best_mapping
 end
 
 #used when we don't want to recreate the triangle matching dictionary multiple times
@@ -369,7 +437,7 @@ function TAME_score(A::SymTensorUnweighted,B::SymTensorUnweighted, mapping::Arra
         end
 
         #return (-1,"ERROR:mapping needs to be inverted")
-        return motif_matching_count(B.indices, A.indices,inverted_mapping)
+        return TAME_score(B, A,inverted_mapping)
     end
 
     order =  size(A.indices,1)
@@ -478,7 +546,6 @@ function TAME_score(A_motifs::Dict{Array{Int,1},Int}, B::SymTensorUnweighted, ma
     return matched_motifs, gaped_motifs, mapping
 
 end
-
 
 
 

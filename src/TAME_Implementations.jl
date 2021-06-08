@@ -1,4 +1,5 @@
 #TODO: convert two function calls into Union{COOTen,ThirdOrderSymTensor}
+#TODO: update new DistributedTensorConstructio types in docs
 #=------------------------------------------------------------------------------
               Routines for searching over alpha/beta parameters
 ------------------------------------------------------------------------------=#
@@ -6,15 +7,16 @@
   This function aligns graphs using their tensor representations. These routines
   call the param_search functions for the associated method used.
 
+
   Inputs
   ------
-  * A, B - (ThirdOrderSymTensor):
+  * A, B - (ThirdOrderSymTensor,SymTensorUnweighted,Array{SymTensorUnweighted,1}):
 	Two third order tensors representing the presence of triangles within the 
 	network. A must be larger than B, else the routines will be called with the
 	parameters swapped. 
-  * method - (String):
-	The choice of method used to align the methods. Options include 'LambdaTAME',
-	'LowRankTAME', and 'TAME'. 
+  * method - (AlignmentMethod):
+	The choice of method used to align the methods. Options include LambdaTAME_M,
+	LowRankTAME_M, and TAME_M. 
   
   Outputs
   -------
@@ -29,31 +31,32 @@
 	  and V components of the best iterate. 
 
 -----------------------------------------------------------------------------"""
-function align_tensors(A::Union{ThirdOrderSymTensor,SymTensorUnweighted}, 
-	                   B::Union{ThirdOrderSymTensor,SymTensorUnweighted};
-					   method::String="LambdaTAME",no_matching=false,kwargs...)
+function align_tensors(A::Union{ThirdOrderSymTensor,SymTensorUnweighted,Array{SymTensorUnweighted,1}}, 
+	                   B::Union{ThirdOrderSymTensor,SymTensorUnweighted,Array{SymTensorUnweighted,1}};
+					   method::AlignmentMethod=ΛTAME_M(),no_matching=false,kwargs...)
 
+	#TODO: test if ternary is a problem
 	#put larger tensor on the left
-	if B.n > A.n
+	if typeof(A) !== Array{SymTensorUnweighted,1} && B.n > A.n
 		results = align_tensors(B,A;method = method, no_matching=no_matching,kwargs...)
 		#flip the matchings if A and B were swapped
-		if method == "LambdaTAME" ||  method == "LowRankTAME"
+		if typeof(method) === ΛTAME_M ||  typeof(method) === LowRankTAME_M
 			best_TAME_PP_tris, max_triangle_match, U_best, V_best, best_matching = results
 			return best_TAME_PP_tris, max_triangle_match, U_best, V_best, Dict((j,i) for (i,j) in best_matching)
-		elseif method == "TAME"
+		elseif typeof(method) === TAME_M
 			best_TAME_PP_tris, max_triangle_match, best_TAME_PP_x, best_matching = results
 			return best_TAME_PP_tris, max_triangle_match, best_TAME_PP_x, Dict((j,i) for (i,j) in best_matching)
 		end
 	end
 
-	if method == "LambdaTAME"
+	if typeof(method) === ΛTAME_M || typeof(method) === ΛTAME_MultiMotif_M
 		return ΛTAME_param_search(A,B;kwargs...)
-	elseif method == "LowRankTAME"
+	elseif typeof(method) === LowRankTAME_M
 		return LowRankTAME_param_search(A,B;no_matching = no_matching,kwargs...)
-	elseif method == "TAME"
+	elseif typeof(method) === TAME_M
 		return TAME_param_search(A,B;no_matching = no_matching,kwargs...)
 	else
-		throw(ArgumentError("method must be one of 'LambdaTAME', 'LowRankTAME',or 'TAME'."))
+		throw(ArgumentError("method must be one of LambdaTAME_M,ΛTAME_MultiMotif_M, LowRankTAME_M, or TAME_M."))
 	end
 
 end
@@ -96,27 +99,27 @@ end
 	function.
 ------------------------------------------------------------------------------"""
 function align_tensors_profiled(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor;
-					            method::String="LambdaTAME",no_matching=false,kwargs...)
+					            method::AlignmentMethod=ΛTAME_M(),no_matching=false,kwargs...)
 
 	#put larger tensor on the left
 	if B.n > A.n
 		results =  align_tensors_profiled(B,A;method = method, no_matching=no_matching,kwargs...)
 		#flip the matchings if A and B were swapped
-		if method == "LambdaTAME" ||  method == "LowRankTAME"
+		if typof(method) === ΛTAME_M ||  typeof(method) == LowRankTAME_M
 			best_TAME_PP_tris, max_triangle_match, U_best, V_best, best_matching,profile = results
 			return best_TAME_PP_tris, max_triangle_match, U_best, V_best, Dict((j,i) for (i,j) in best_matching), profile
-		elseif method == "TAME"
+		elseif typeof(method) === TAME_M
 			best_TAME_PP_tris, max_triangle_match, best_TAME_PP_x, best_matching,profile = results
 			return best_TAME_PP_tris, max_triangle_match, best_TAME_PP_x, Dict((j,i) for (i,j) in best_matching), profile
 		end
 
 	end
 
-	if method == "LambdaTAME"
+	if typeof(method) == ΛTAME_M
 		return ΛTAME_param_search_profiled(A,B;kwargs...)
-	elseif method == "LowRankTAME"
+	elseif typeof(method) === LowRankTAME_M
 		return LowRankTAME_param_search_profiled(A,B;no_matching = no_matching,kwargs...)
-	elseif method == "TAME"
+	elseif typeof(method) === TAME_M
 		return TAME_param_search_profiled(A,B;no_matching = no_matching,kwargs...)
 	else
 		throw(ArgumentError("method must be one of 'LambdaTAME', 'LowRankTAME', or 'TAME'."))
@@ -163,33 +166,41 @@ function ΛTAME_param_search(A_tensors::Array{SymTensorUnweighted,1},B_tensors::
 							alphas::Array{F,1}=[.5,1.0],
 							betas::Array{F,1} =[1000.0,100.0,10.0,1.0,0.0,0.1,0.01,0.001]) where {F <: AbstractFloat}
 
-	max_triangle_match = min(size(A.indices,1),size(B.indices,1))
-	total_triangles = size(A.indices,1) + size(B.indices,1)
+	max_motif_match = [min(size(A.indices,2),size(B.indices,2)) for (A,B) in zip(A_tensors,B_tensors)]
+	total_triangles = [size(A.indices,2) + size(B.indices,2) for (A,B) in zip(A_tensors,B_tensors)]
+	#total_triangles = size(A.indices,1) + size(B.indices,1)
 
-	U = Array{Float64,2}(undef,A.n,iter)
-	V = Array{Float64,2}(undef,B.n,iter)
+	m = maximum([A.n for A in A_tensors])
+	n = maximum([B.n for B in B_tensors])
 
-	best_TAME_PP_tris = -1
+	U = Array{Float64,2}(undef,m,iter)
+	V = Array{Float64,2}(undef,n,iter)
+
+	best_matching_score = -1
 	best_i  = -1
 	best_j = -1
+	best_matched_motifs::Array{Int,1} = []
 	best_matching = Dict{Int,Int}()
 
 	for α in alphas
 		for beta in betas
 
 			U,V = ΛTAME(A_tensors,B_tensors,beta,iter,tol,α)
-			search_tris, i, j, matching = search_Krylov_space(A_tensors,B_tensors,U,V)
-			println("α:$(α) -- β:$(beta) finished -- tri_match:$search_tris -- max_tris $(max_triangle_match) -- best tri_match:$best_TAME_PP_tris")
-			if search_tris > best_TAME_PP_tris
-				best_TAME_PP_tris = search_tris
+			matching_score, matched_motifs, i, j, matching = search_Krylov_space(A_tensors,B_tensors,U,V)
+			
+			if matching_score > best_matching_score
+				best_matching_score = matching_score
+				best_matched_motifs = matched_motifs
 				best_i = i
 				best_j = j
 				best_matching = matching
 			end
+			println("α:$(α) -- β:$(beta) finished -- motif_match:$matched_motifs -- max_motifs:$max_motif_match -- matching_score:$matching_score -- best score:$best_matching_score")
+			
 		end
 	end
 	println("best i:$best_i -- best j:$best_j")
-	return best_TAME_PP_tris, max_triangle_match, U[best_i,:], V[best_j,:], best_matching
+	return best_matching_score, max_motif_match, best_matched_motifs, U[best_i,:], V[best_j,:], best_matching
 end
 
 function ΛTAME_param_search_profiled(A,B; 
@@ -502,7 +513,7 @@ function ΛTAME(A::SymTensorUnweighted, B::SymTensorUnweighted, β::Float64,
 	i = 1
 
 	A_buf = zeros(A.n)
-	B_buf = zeros(A.n)
+	B_buf = zeros(B.n)
 
 	while true
 
@@ -538,8 +549,8 @@ function ΛTAME(A::SymTensorUnweighted, B::SymTensorUnweighted, β::Float64,
 			return U[:,1:i], V[:,1:i]
 		else
 			lambda = new_lambda
-			A_buf .+= 0.0 
-			B_buf .+= 0.0 
+			A_buf .= 0.0 
+			B_buf .= 0.0 
 			i += 1
 		end
 
@@ -556,7 +567,7 @@ function ΛTAME(A_tensors::Array{SymTensorUnweighted,1}, B_tensors::Array{SymTen
 	end
 
 	m = maximum([tensor.n for tensor in A_tensors])
-	n = maximum([tensor.n for tensor in A_tensors])
+	n = maximum([tensor.n for tensor in B_tensors])
 
 	U = zeros(m,max_iter+1)
 	V = zeros(n,max_iter+1) #store initial in first column
@@ -577,8 +588,13 @@ function ΛTAME(A_tensors::Array{SymTensorUnweighted,1}, B_tensors::Array{SymTen
 
 	while true
 
-		contraction_divide_out!(A_tensors,U[:,i],A_buf)
-		contraction_divide_out!(B_tensors,V[:,i],B_buf)
+		#DistributedTensorConstruction.embedded_contraction!(A_tensors,U[:,i],A_buf)
+		#DistributedTensorConstruction.embedded_contraction!(B_tensors,V[:,i],B_buf)
+		embedded_contraction!(A_tensors,U[:,i],A_buf)
+		embedded_contraction!(B_tensors,V[:,i],B_buf)
+
+		#contraction_divide_out!(A_tensors,U[:,i],A_buf)
+		#contraction_divide_out!(B_tensors,V[:,i],B_buf)
 
 		U[:,i+1] .= A_buf
 		V[:,i+1] .= B_buf
@@ -609,8 +625,8 @@ function ΛTAME(A_tensors::Array{SymTensorUnweighted,1}, B_tensors::Array{SymTen
 			return U[:,1:i], V[:,1:i]
 		else
 			lambda = new_lambda
-			A_buf .+= 0.0 
-			B_buf .+= 0.0 
+			A_buf .= 0.0 
+			B_buf .= 0.0 
 			i += 1
 		end
 
