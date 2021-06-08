@@ -1,3 +1,18 @@
+abstract type AlignmentMethod end
+struct ΛTAME_M <: AlignmentMethod end
+struct ΛTAME_MultiMotif_M <: AlignmentMethod end
+struct LowRankTAME_M <: AlignmentMethod end
+struct TAME_M <: AlignmentMethod end
+struct EigenAlign_M <: AlignmentMethod end
+struct LowRankEigenAlign_M <: AlignmentMethod end
+struct Degree_M <: AlignmentMethod end
+struct Random_M <: AlignmentMethod end
+
+abstract type RandomGraphType end 
+struct ErdosRenyi <: RandomGraphType end 
+struct RandomGeometric <: RandomGraphType end 
+struct HyperKron <: RandomGraphType end
+
 #=------------------------------------------------------------------------------
                         Formatting Routines
 ------------------------------------------------------------------------------=#
@@ -362,7 +377,7 @@ Output
     with the profile flag on, is appended at the end.     
 ------------------------------------------------------------------------------"""
 function distributed_random_trials(trial_count::Int,seed_exps::Bool=false
-                                   ;method="LambdaTAME",graph_type::String="ER",
+                                   ;method::AlignmentMethod=ΛTAME(),graph::RandomGraphType=ErdosRenyi(),
 								   n_sizes = [100, 500, 1000, 2000,5000], p_remove = [.01,.05],
 								   profile=false,kwargs...)
 
@@ -396,7 +411,8 @@ function distributed_random_trials(trial_count::Int,seed_exps::Bool=false
                 if seed_exps
                     seed = seeds[p_index,n_index,trial]
                 end
-                future = @spawn random_graph_exp(n,p,graph_type;
+                println(seed)
+                future = @spawn random_graph_exp(n,p,graph;
                                                     profile=profile,seed=seed,method=method,
                                                     kwargs...)
                 push!(futures,(seed,p,n,future))
@@ -411,9 +427,9 @@ function distributed_random_trials(trial_count::Int,seed_exps::Bool=false
 
     for (seed,p,n,future) in futures
         if profile 
-            if method == "LambdaTAME" ||  method == "LowRankTAME"
+            if typeof(method) === ΛTAME_M ||  typeof(method) === LowRankTAME_M
                 d_A, d_B, perm, (A_tris, B_tris,(matched_tris, max_tris, _, _,best_matching, exp_results))= fetch(future)
-            elseif method == "TAME"
+            elseif typeof(method) == TAME_M
                 d_A, d_B, perm, (A_tris, B_tris,(matched_tris, max_tris, _, best_matching, exp_results))= fetch(future)
             end
 
@@ -424,11 +440,13 @@ function distributed_random_trials(trial_count::Int,seed_exps::Bool=false
       
             push!(results,(seed, p, n, accuracy, degree_weighted_accuracy, matched_tris, A_tris, B_tris, max_tris, exp_results))
         else
-            if method == "LambdaTAME" ||  method == "LowRankTAME"
+            if typeof(method) === ΛTAME_M ||  typeof(method) === LowRankTAME_M
                 d_A, d_B, perm, (A_tris, B_tris,(matched_tris, max_tris, _, _, best_matching)) = fetch(future)
-            elseif method == "TAME"
+            elseif typeof(method) === ΛTAME_MultiMotif_M
+                d_A, d_B, perm, (best_matching_score, max_motif_match,best_matched_motifs, _, _, best_matching) = fetch(future)
+            elseif typeof(method) === TAME_M
                 d_A, d_B, perm, (A_tris, B_tris, (matched_tris, max_tris, _, best_matching)) = fetch(future)
-            elseif method == "EigenAlign" || method == "Degree" || method == "Random" || method == "LowRankEigenAlign"
+            elseif typeof(method) === EigenAlign_M || typeof(method) == Degree_M || typeof(method) === Random_M || typeof(method) === LowRankEigenAlign_M
                 d_A, d_B, perm, (A_tris, B_tris, matched_tris, best_matching, _) = fetch(future)
                 max_tris = minimum((A_tris,B_tris))
             end
@@ -438,7 +456,11 @@ function distributed_random_trials(trial_count::Int,seed_exps::Bool=false
             D_B = sum(d_B)
             degree_weighted_accuracy = sum([(get(best_matching,j,-1) == i) ? ((d_A[i] + d_B[j])/(D_A+D_B)) : 0.0 for (i,j) in enumerate(perm)])
       
-            push!(results,( seed, p, n, accuracy, degree_weighted_accuracy, matched_tris, A_tris, B_tris, max_tris))
+            if typeof(method) === ΛTAME_MultiMotif_M
+                push!(results,( seed, p, n, accuracy, degree_weighted_accuracy, best_matching_score, max_motif_match, best_matched_motifs))
+            else
+                push!(results,( seed, p, n, accuracy, degree_weighted_accuracy, matched_tris, A_tris, B_tris, max_tris))
+            end
         end                    
     end
 
@@ -493,14 +515,14 @@ end
       the precision of the methods. 
     * All additional return variables are from 'align_matrices' function call. 
 -----------------------------------------------------------------------------"""
-function random_graph_exp(n::Int, p_remove::Float64,graph_type::String;
+function random_graph_exp(n::Int, p_remove::Float64,graph::RandomGraphType;
                           seed=nothing,use_metis=false,degreedist=nothing,p_edges=nothing,kwargs...)
 
 	if seed !== nothing
 		Random.seed!(seed)
 	end
 
-    if graph_type == "ER"
+    if typeof(graph) === ErdosRenyi
         if degreedist === nothing
             if p_edges === nothing 
                 p = 2*log(n)/n
@@ -513,7 +535,8 @@ function random_graph_exp(n::Int, p_remove::Float64,graph_type::String;
             A = erdos_renyi(n;degreedist)
             p = nnz(A)/n^2
         end
-	elseif graph_type == "RandomGeometric"
+        
+	elseif typeof(graph) === RandomGeometric
 
 		if degreedist === nothing
             k = 10
@@ -527,7 +550,7 @@ function random_graph_exp(n::Int, p_remove::Float64,graph_type::String;
 			p = nnz(A)/n^2
 		end
 
-    elseif graph_type == "HyperKron"
+    elseif typeof(graph) == HyperKron
         if p_edges === nothing 
             p = .4#2*log(n)/n
         end
@@ -540,7 +563,7 @@ function random_graph_exp(n::Int, p_remove::Float64,graph_type::String;
 	end
 
     p_add = (p*p_remove)/(1-p)
-	B = ER_noise_model(A,n,p_remove,p_add)
+	B = ER_noise_model(A,p_remove,p_add)
 
     perm = shuffle(1:n)
     B = B[perm,perm]
@@ -557,7 +580,8 @@ function random_graph_exp(n::Int, p_remove::Float64,graph_type::String;
    
 end
 
-function ER_noise_model(A,n::Int,p_remove::F,p_add::F) where {F <: AbstractFloat}
+function ER_noise_model(A,p_remove::F,p_add::F) where {F <: AbstractFloat}
+    n = size(A,1)
     B = copy(A)
 
     is,js,_ = findnz(erdos_renyi(n,p_remove))
@@ -576,6 +600,7 @@ function ER_noise_model(A,n::Int,p_remove::F,p_add::F) where {F <: AbstractFloat
         end
     end
 
+    dropzeros!(B)
     return B
 end
 
@@ -611,26 +636,35 @@ function align_matrices(A::SparseMatrixCSC{T,Int},B::SparseMatrixCSC{T,Int};prof
     A_ten = graph_to_ThirdOrderTensor(A)
     B_ten = graph_to_ThirdOrderTensor(B)
     
-    if kwargs[:method] == "LambdaTAME" || kwargs[:method] == "LowRankTAME" || kwargs[:method] == "TAME"
+    method = typeof(kwargs[:method])
+
+    if method === ΛTAME_M || method === LowRankTAME_M  || method === TAME_M
         if profile
             return size(A_ten.indices,1), size(B_ten.indices,1), align_tensors_profiled(A_ten,B_ten;kwargs...)
         else
             return size(A_ten.indices,1), size(B_ten.indices,1), align_tensors(A_ten,B_ten;kwargs...)
         end
+    elseif method === ΛTAME_MultiMotif_M
 
-    elseif kwargs[:method] == "EigenAlign" || kwargs[:method] == "Degree" || kwargs[:method] == "Random" || kwargs[:method] == "LowRankEigenAlign"
+        A_tensors = tensors_from_graph(A,kwargs[:orders],kwargs[:samples])        
+        B_tensors = tensors_from_graph(B,kwargs[:orders],kwargs[:samples])
 
-        if kwargs[:method] == "LowRankEigenAlign"
+        subkwargs = Dict([(k,v) for (k,v) in kwargs if k != :orders && k != :samples])
+        return align_tensors(A_tensors,B_tensors;subkwargs...)
+
+    elseif method === EigenAlign_M || method === Degree_M || method === Random_M || method === LowRankEigenAlign_M
+        
+        if method === LowRankEigenAlign_M
             iters = 10
             (ma,mb,_,_),t = @timed align_networks_eigenalign(A,B,iters,"lowrank_svd_union",3)
             matching = Dict{Int,Int}([i=>j for (i,j) in zip(ma,mb)]) 
-        elseif kwargs[:method] == "EigenAlign"
+        elseif method === EigenAlign_M
             (ma,mb),t = @timed NetworkAlignment.EigenAlign(A,B)
             matching = Dict{Int,Int}(zip(ma,mb))
-        elseif kwargs[:method] == "Degree"
+        elseif method === Degree_M
             (ma,mb),t = @timed degree_based_matching(A,B)
             matching = Dict{Int,Int}(zip(ma,mb))
-        elseif kwargs[:method] == "Random"
+        elseif kwargs[:method] === Random_M
             n,n = size(B)
             
             matching,t = @timed Dict{Int,Int}(enumerate(shuffle(1:n)))
@@ -640,7 +674,7 @@ function align_matrices(A::SparseMatrixCSC{T,Int},B::SparseMatrixCSC{T,Int};prof
         triangle_count, gaped_triangles, _ = TAME_score(A_ten,B_ten,matching) 
         return size(A_ten.indices,1), size(B_ten.indices,1), triangle_count, matching, t 
     else
-        throw(ArgumentError("method must be one of 'LambdaTAME', 'LowRankTAME', 'TAME', 'EigenAlign', 'LowRankEigenAlign', 'Degree', or 'Random'."))
+        throw(ArgumentError("method must be of type LambdaTAME_M, LowRankTAME_M, TAME_M, EigenAlign_M, LowRankEigenAlign_M, Degree_M, or Random_M."))
     end
 
     
