@@ -68,13 +68,21 @@ end
 include("Contraction.jl")
 include("Matchings.jl")
 include("PostProcessing.jl")
+include("Experiments.jl")
 include("TAME_Implementations.jl")
 #include("Experimental_code.jl")
-include("Experiments.jl")
+
 #include("SparseSymmetricTensorCode.jl")
 
 
+
 #  --  From Experiments.jl --  #
+
+#all alignment method flag types
+export ΛTAME_M, ΛTAME_MultiMotif_M, LowRankTAME_M, TAME_M, EigenAlign_M, LowRankEigenAlign_M, Degree_M ,Random_M
+#random graph flag types
+export ErdosRenyi, RandomGeometric, HyperKron
+
 
 export distributed_pairwise_alignment 
 export distributed_random_trials
