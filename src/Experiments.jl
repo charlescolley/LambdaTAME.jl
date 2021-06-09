@@ -13,6 +13,10 @@ struct ErdosRenyi <: RandomGraphType end
 struct RandomGeometric <: RandomGraphType end 
 struct HyperKron <: RandomGraphType end
 
+abstract type NoiseModelFlag end 
+struct ErdosRenyiNoise  <: NoiseModelFlag end 
+struct DuplicationNoise <: NoiseModelFlag end 
+
 #=------------------------------------------------------------------------------
                         Formatting Routines
 ------------------------------------------------------------------------------=#
@@ -515,10 +519,11 @@ end
       the precision of the methods. 
     * All additional return variables are from 'align_matrices' function call. 
 -----------------------------------------------------------------------------"""
-function random_graph_exp(n::Int, p_remove::Float64,graph::RandomGraphType;
+function random_graph_exp(n::Int, perturbation_p::Float64,graph::RandomGraphType;noise_model::NoiseModelFlag,
                           seed=nothing,use_metis=false,degreedist=nothing,p_edges=nothing,kwargs...)
 
-	if seed !== nothing
+    if seed !== nothing
+        
 		Random.seed!(seed)
 	end
 
@@ -562,10 +567,16 @@ function random_graph_exp(n::Int, p_remove::Float64,graph::RandomGraphType;
 		error("invalid graph type: $graph_type\n must be either 'ER','RandomGeometric' or 'HyperKron'")
 	end
 
-    p_add = (p*p_remove)/(1-p)
-	B = ER_noise_model(A,p_remove,p_add)
+    if typeof(noise_model) === ErdosRenyiNoise
+        p_add = (p*perturbation_p)/(1-p)
+        B = ER_noise_model(A,perturbation_p,p_add)
+    elseif  typeof(noise_model) === DuplicationNoise
+       
+        steps = Int(ceil(.1*size(A,1))) #adds in 10% new nodes
+        B = duplication_perturbation_noise_model(A,steps, perturbation_p)
+    end
 
-    perm = shuffle(1:n)
+    perm = shuffle(1:size(B,1))
     B = B[perm,perm]
 
 	if use_metis
@@ -573,12 +584,13 @@ function random_graph_exp(n::Int, p_remove::Float64,graph::RandomGraphType;
 		apply_Metis_permutation!(B,100)
 	end
 
-    d_A = A*ones(n)
-    d_B = B*ones(n)
+    d_A = A*ones(size(A,1))
+    d_B = B*ones(size(B,1))
 
     return d_A,d_B,perm,align_matrices(A,B;kwargs...)
    
 end
+
 
 function ER_noise_model(A,p_remove::F,p_add::F) where {F <: AbstractFloat}
     n = size(A,1)
@@ -602,6 +614,113 @@ function ER_noise_model(A,p_remove::F,p_add::F) where {F <: AbstractFloat}
 
     dropzeros!(B)
     return B
+end
+
+function duplication_perturbation_noise_model(A::SparseMatrixCSC{T,Int},steps::Int, new_edge_p::Float64) where T
+
+    n,m = size(A)
+    @assert n == m 
+    @assert new_edge_p > 0 && new_edge_p <= 1
+
+    #TODO: test preallocating with zeros(Int)
+    new_Is = Array{Int}(undef,0)
+    new_Js = Array{Int}(undef,0)
+    new_Vs = Array{T}(undef,0)
+    edge_ptrs = zeros(Int,steps+1)
+    edge_ptrs[1] = 1
+
+    #store the edges to new vertices, so they're fast to sample from
+    extended_A = Array{Array{Tuple{Int,Float64},1},1}(undef,n)
+    for i = 1:n
+        extended_A[i] = Array{Tuple{Int,Float64},1}(undef,0)
+    end
+
+
+    for step in 1:steps
+
+        dup_vertex = rand(1:n)
+        #println(dup_vertex)
+        new_edges = 0 
+        if dup_vertex <= m # draw from original edges
+            
+
+            #sample from the extended A structure first to avoid sampling newly added edges
+            #println(dup_vertex)
+            #println(extended_A[dup_vertex])
+            for i = 1:length(extended_A[dup_vertex])
+                if rand() < new_edge_p
+
+                    push!(new_Is,extended_A[dup_vertex][i][1])
+                    push!(new_Js,n+1)
+                    push!(new_Vs,extended_A[dup_vertex][i][2])
+
+                    push!(new_Js,extended_A[dup_vertex][i][1])
+                    push!(new_Is,n+1)
+                    push!(new_Vs,extended_A[dup_vertex][i][2])
+
+                    new_edges += 2
+
+                end
+            end
+
+            col = A[:,dup_vertex]
+            indices, weights = findnz(col)
+
+            for i = 1:length(indices)
+                if rand() < new_edge_p
+
+                    push!(new_Is,indices[i])
+                    push!(new_Js,n+1)
+                    push!(new_Vs,weights[i])
+
+                    push!(new_Js,indices[i])
+                    push!(new_Is,n+1)
+                    push!(new_Vs,weights[i])
+
+                    new_edges += 2
+
+                    push!(extended_A[indices[i]],(n+1,weights[i]))
+
+                end
+            end
+
+
+
+        else # draw from newly created edges
+
+            remapped_vertex = dup_vertex - m  #point to entry in edge_ptrs
+            
+            for i = edge_ptrs[remapped_vertex]:2:(edge_ptrs[remapped_vertex+1] - 1)
+                if rand() < new_edge_p
+                    
+                    push!(new_Is,new_Is[i])
+                    push!(new_Js,n+1)
+                    push!(new_Vs,new_Vs[i])
+
+                    push!(new_Is,n+1)
+                    push!(new_Js,new_Is[i])
+                    push!(new_Vs,new_Vs[i])
+                    new_edges += 2
+
+                end
+
+            end
+
+        end
+
+        n += 1 
+        #update new edge ptr to where next duplicated vertex edges will start
+        edge_ptrs[step + 1] = edge_ptrs[step] + new_edges
+
+    end
+
+    #return new_Is, new_Js, new_Vs
+    Is, Js, Vs = findnz(A)
+
+    println("starting sparse matrix productions")
+    return sparse(vcat(Is,new_Is),vcat(Js,new_Js),vcat(Vs,new_Vs),n,n)
+
+
 end
 
 """------------------------------------------------------------------------------

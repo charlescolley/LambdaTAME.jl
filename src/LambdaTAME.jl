@@ -82,6 +82,8 @@ include("TAME_Implementations.jl")
 export ΛTAME_M, ΛTAME_MultiMotif_M, LowRankTAME_M, TAME_M, EigenAlign_M, LowRankEigenAlign_M, Degree_M ,Random_M
 #random graph flag types
 export ErdosRenyi, RandomGeometric, HyperKron
+#noise model flag types
+export ErdosRenyiNoise, DuplicationNoise
 
 
 export distributed_pairwise_alignment 
