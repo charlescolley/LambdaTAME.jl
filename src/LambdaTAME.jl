@@ -2,6 +2,7 @@ module LambdaTAME
 
 using LinearAlgebra
 using NPZ
+using JSON
 using Distributed
 using SparseArrays
 using Random

@@ -472,6 +472,113 @@ function distributed_random_trials(trial_count::Int,seed_exps::Bool=false
 
 end
 
+"""-----------------------------------------------------------------------------
+  
+-----------------------------------------------------------------------------"""
+function distributed_SSHOPM_exps(tensor_files::Array{String,1},output_path::String,seed::Bool;kwargs...)
+
+    #TODO: test
+    seeds = Array{UInt,2}(undef,1,1) 
+
+    if seed
+        seeds = rand(UInt,length(tensor_files),length(tensor_files))
+    end
+
+    futures = []
+    for i =1:length(tensor_files)
+        for j=i+1:length(tensor_files)
+
+            future = @spawn SSHOPM_exp(tensor_files[i],tensor_files[j],output_path,seeds[i,j])
+            push!(futures,(tensor_files[i],tensor_files[j],future))
+        end
+    end
+
+    #TODO: join using a sigpoll equivilant
+    for (ten_A, ten_B, future) in futures
+        fetch(future)
+        println("joined experiment $ten_A + $ten_B")
+    end
+end
+
+function SSHOPM_exp(tensor_A_file::String, tensor_B_file::String,output_path::String,seed::UInt)
+
+    @assert tensor_A_file[end-5:end] == ".ssten"
+    @assert tensor_B_file[end-5:end] == ".ssten"
+    @assert output_path[end] == '/'
+
+    A = load_ThirdOrderSymTensor(tensor_A_file)
+    B = load_ThirdOrderSymTensor(tensor_B_file)
+
+    A_root = split(split(tensor_A_file,"/")[end],".ssten")[1]
+    B_root = split(split(tensor_B_file,"/")[end],".ssten")[1]
+    
+    tol = 1e-16
+    max_iter = 50 
+    β = 0.0
+    samples = 1000
+
+    #delimeter heirarchy:
+    #    - > : > + 
+    exp_filename = output_path*"align:$(A_root)+$(B_root)-beta:$β-max_iter:$max_iter-samples:$samples-seed:$seed-tol:$tol-results.json"
+
+
+    relative_λ_diff, extremal_idx, eig_vals, extremal_vecs = SSHOPM_exp(A,B,samples,tol,max_iter,β,seed)
+
+    #TODO: add in json save
+    open(exp_filename,"w") do f 
+        JSON.print(f,[relative_λ_diff, extremal_idx, eig_vals, extremal_vecs])
+    end
+
+
+end
+
+function SSHOPM_exp(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor, samples::Int, tol::Float64,max_iter::Int,β::Float64,seed::UInt=nothing)
+
+    if seed !== nothing
+        Random.seed!(seed)
+    end 
+
+    A_V,A_Λ = SSHOPM_sample(A,samples,β,max_iter,tol)
+    B_V,B_Λ = SSHOPM_sample(B,samples,β,max_iter,tol)
+    AB_V,AB_Λ = SSHOPM_sample(A,B,samples,β,max_iter,tol)
+
+    A_i  = argmax([abs(x) for x in A_Λ])
+    B_i  = argmax([abs(x) for x in B_Λ])
+    AB_i = argmax([abs(x) for x in AB_Λ])
+
+    relative_λ_diff = abs(A_Λ[A_i]*B_Λ[B_i] - AB_Λ[AB_i])/abs(AB_Λ[AB_i])
+
+    println(relative_λ_diff)
+
+#    r = rank(AB_V[:,:,AB_i])
+ #   U,S,Vt = svd(AB_V[:,:,AB_i])
+
+
+
+    # not assuming anything about the rank of argmax(AB_Λ), 
+    # error will trigger if not rank 1.
+    #u_Avec_inner_prod = dot(U[:,1:r],A_V[:,A_i])
+    #v_Bvec_inner_prod = dot(Vt[:,1:r],B_V[:,B_i])
+    
+
+    #  -- subspace angle  --  #
+    #u_Av_subspaceAngle = acos(dot(U[:,1:r],A_V[:,A_i]))
+    #v_Bv_subspaceAngle = acos(dot(Vt[:,1:r],B_V[:,B_i]))
+
+    #  -- relative norm code  --  #
+    #first_nnz_sign = x-> sign(x[findfirst(x .!= 0.0)])
+    #relative_u_norm = norm( U[:,1:r]*Diagonal([first_nnz_sign( U[:,j]) for j in 1:r]) - first_nnz_sign(A_V[:,A_i])*A_V[:,A_i])/norm(A_V[:,A_i])
+    #relative_v_norm = norm(Vt[:,1:r]*Diagonal([first_nnz_sign(Vt[:,j]) for j in 1:r]) - first_nnz_sign(B_V[:,B_i])*B_V[:,B_i])/norm(B_V[:,B_i])
+   
+
+    # -- group the variables to return from the experiment -- #
+    #comparisons = (relative_λ_diff, u_Avec_inner_prod, v_Bvec_inner_prod)
+    extremal_idx = (A_i, B_i, AB_i)
+    eig_vals = (A_Λ, B_Λ, AB_Λ)
+    extremal_vecs = (A_V[:,A_i],B_V[:,B_i], AB_V[:,:,AB_i])
+
+    return relative_λ_diff, extremal_idx, eig_vals, extremal_vecs
+end
 
 """-----------------------------------------------------------------------------
   Runs an instance of a graph alignment problem using a random graph model. Once 

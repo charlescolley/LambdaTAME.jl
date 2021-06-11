@@ -383,6 +383,24 @@ end
 """-----------------------------------------------------------------------------
                          Iterative method primatives
 -----------------------------------------------------------------------------"""
+function SSHOPM_sample(A::Union{ThirdOrderSymTensor,SymTensorUnweighted}, samples::Int, β::Float64, max_iter::Int, tol::Float64)
+
+	#X = rand(A.n,samples)
+	X = rand(Uniform(-1,1),A.n,samples)
+
+	V = Array{Float64,2}(undef,A.n,samples)
+	Λ = Array{Float64,1}(undef,samples)
+
+	for i=1:samples
+		vec, val = SSHOPM(A,β,max_iter,tol,X[:,i])
+		V[:,i] .= vec
+		Λ[i] = val
+	end
+	
+	V,Λ
+
+end
+
 
 #TODO: move to appropriate file 
 function SSHOPM(A::ThirdOrderSymTensor,β::Float64, max_iter::Int, tol::Float64,
@@ -422,4 +440,153 @@ function SSHOPM(A::ThirdOrderSymTensor,β::Float64, max_iter::Int, tol::Float64,
 
     end
 
+end
+
+function SSHOPM(A::SymTensorUnweighted,β::Float64, max_iter::Int, tol::Float64,
+	x_0::Array{Float64,1}=ones(A.n);update_user::Int=-1)
+
+	#normalize init vector
+	buf = zeros(Float64,A.n)
+	x_k_1 = Array{Float64,1}(undef,A.n)
+	x_k = copy(x_0)
+	x_k ./=norm(x_0)
+
+	lambda_k = Inf
+	i = 1
+
+	while true
+
+		DistributedTensorConstruction.contraction!(A,x_k,buf)
+		x_k_1 .= buf 
+		lambda_k_1 = x_k_1'*x_k
+
+
+		if β != 0.0
+			x_k_1 .+= β*x_k
+		end
+
+		x_k_1 ./= norm(x_k_1)
+
+		res = abs(lambda_k_1 - lambda_k)
+		if update_user != -1 && i % update_user == 0
+			println("iteration $(i)    λ: $(lambda_k_1)   |λ_k_1 - λ_k| = $res")
+		end
+
+		if res < tol || i >= max_iter
+			return x_k_1, lambda_k_1
+		else
+			lambda_k = copy(lambda_k_1)
+			x_k = copy(x_k_1)
+			i += 1
+			buf .= 0.0
+		end
+
+	end
+
+end
+
+
+function SSHOPM_sample(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor, samples::Int, β::Float64, max_iter::Int, tol::Float64,kwargs...)
+
+	#X = rand(A.n,samples)
+	X = rand(Uniform(-1,1),A.n,B.n,samples)
+
+	Vecs = Array{Float64,3}(undef,A.n,B.n,samples)
+	Λ = Array{Float64,1}(undef,samples)
+
+	for i=1:samples
+		#U,V, val
+		U,V, val = SSHOPM(A,B,X[:,:,i],β,max_iter,tol;kwargs...)
+		Vecs[:,:,i] = U*V'
+		Λ[i] = val
+	end
+	
+	Vecs,Λ
+
+end
+
+function SSHOPM(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor,W::Array{F,2},
+				β::F, max_iter::Int,tol::F;
+				max_rank::Int = minimum((A.n,B.n)),kwargs...) where {F <:AbstractFloat}
+
+	dimension = minimum((A.n,B.n))
+
+	U_k,S,VT =svd(W)
+	singular_indexes = [i for i in 1:minimum((max_rank,length(S))) if S[i] > S[1]*eps(Float64)*dimension]
+
+	U = U_k[:,singular_indexes]
+	V = VT[:,singular_indexes]*diagm(S[singular_indexes])
+
+	return SSHOPM(A,B,U,V,β,max_iter,tol;kwargs...)
+end
+
+function SSHOPM(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor,
+				U_0::Array{F,2},V_0::Array{F,2}, β::F, max_iter::Int,tol::F;
+				max_rank::Int = minimum((A.n,B.n)),update_user::Int=-1) where {F <:AbstractFloat}
+
+	@assert size(U_0,2) == size(V_0,2)
+
+	dimension = minimum((A.n,B.n))
+
+	normalization_factor = sqrt(tr((V_0'*V_0)*(U_0'*U_0)))
+	U_0 ./= sqrt(normalization_factor)
+	V_0 ./= sqrt(normalization_factor)
+
+	U_k = copy(U_0)
+	V_k = copy(V_0)
+
+	best_U::Array{F,2} = copy(U_k)
+	best_V::Array{F,2} = copy(U_k)
+
+	λ_k = Inf
+
+	for i in 1:max_iter
+
+		A_comps, B_comps = get_kron_contract_comps(A,B,U_k,V_k)
+		
+		λ_k_1 = tr((U_k'*A_comps)*(B_comps'*V_k))
+
+		if β != 0.0
+			U_temp = hcat(A_comps, sqrt(β) * U_k)
+			V_temp = hcat(B_comps, sqrt(β) * V_k)
+		else
+			U_temp = A_comps
+			V_temp = B_comps
+		end
+
+		A_Q,A_R = qr(U_temp)
+		B_Q,B_R = qr(V_temp)
+
+		core = A_R*B_R'
+		C_U,C_S,C_Vt = svd(core)
+		singular_indexes= [i for i in 1:1:minimum((max_rank,length(C_S))) if C_S[i] > C_S[1]*eps(Float64)*dimension]
+
+		U_k_1 = A_Q*C_U[:,singular_indexes]
+		V_k_1 = B_Q*(C_Vt[:,singular_indexes]*diagm(C_S[singular_indexes]))
+
+		normalization_factor = sqrt(tr((V_k_1'*V_k_1)*(U_k_1'*U_k_1)))
+
+		U_k_1 ./= sqrt(normalization_factor)
+		V_k_1 ./= sqrt(normalization_factor)
+
+		#Y, Z = get_kron_contract_comps(A,B,U_k_1,V_k_1)
+
+		
+		if update_user != -1 && i % update_user == 0
+			println("λ_$i: $(λ_k_1) -- rank:$(length(singular_indexes))")
+		end
+
+		if abs(λ_k_1 - λ_k) < tol || i == max_iter
+			return U_k_1, V_k_1, λ_k_1
+		end
+
+		#get the low rank factorization for the next one
+		U_k = copy(U_k_1)
+		V_k = copy(V_k_1)
+
+		λ_k = λ_k_1
+
+	end
+
+	
 end
