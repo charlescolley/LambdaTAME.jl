@@ -383,7 +383,7 @@ end
 """-----------------------------------------------------------------------------
                          Iterative method primatives
 -----------------------------------------------------------------------------"""
-function SSHOPM_sample(A::Union{ThirdOrderSymTensor,SymTensorUnweighted}, samples::Int, β::Float64, max_iter::Int, tol::Float64)
+function SSHOPM_sample_return_all(A::Union{ThirdOrderSymTensor,SymTensorUnweighted}, samples::Int, β::Float64, max_iter::Int, tol::Float64)
 
 	#X = rand(A.n,samples)
 	X = rand(Uniform(-1,1),A.n,samples)
@@ -398,6 +398,33 @@ function SSHOPM_sample(A::Union{ThirdOrderSymTensor,SymTensorUnweighted}, sample
 	end
 	
 	V,Λ
+
+end
+
+function SSHOPM_sample(A::ThirdOrderSymTensor, samples::Int, β::Float64, max_iter::Int, tol::Float64,kwargs...)
+
+	#X = rand(A.n,samples)
+	#X = rand(Uniform(-1,1),A.n,ssample)
+
+
+	argmax_vec = Array{Float64,1}(undef,A.n)
+	argmax_val::Float64 = 0.0
+	#Vecs = Array{Float64,3}(undef,A.n,B.n,samples)
+	Λ = Array{Float64,1}(undef,samples)
+
+	for i=1:samples
+		#U,V, val
+		vec, val =  SSHOPM(A,β,max_iter,tol,rand(Uniform(-1,1),A.n))
+
+		if abs(val) > abs(argmax_val) 
+			argmax_vec = vec
+			argmax_val = val
+		end
+		
+		Λ[i] = val
+	end
+	
+	argmax_vec,argmax_val,Λ
 
 end
 
@@ -486,7 +513,7 @@ function SSHOPM(A::SymTensorUnweighted,β::Float64, max_iter::Int, tol::Float64,
 end
 
 
-function SSHOPM_sample(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor, samples::Int, β::Float64, max_iter::Int, tol::Float64,kwargs...)
+function SSHOPM_sample_return_all(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor, samples::Int, β::Float64, max_iter::Int, tol::Float64,kwargs...)
 
 	#X = rand(A.n,samples)
 	X = rand(Uniform(-1,1),A.n,B.n,samples)
@@ -502,6 +529,33 @@ function SSHOPM_sample(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor, samples::I
 	end
 	
 	Vecs,Λ
+
+end
+
+function SSHOPM_sample(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor, samples::Int, β::Float64, max_iter::Int, tol::Float64,kwargs...)
+
+	#X = rand(A.n,samples)
+	X = rand(Uniform(-1,1),A.n,B.n,samples)
+
+
+	argmax_vec = Array{Float64,2}(undef,A.n,B.n)
+	argmax_val::Float64 = 0.0
+	#Vecs = Array{Float64,3}(undef,A.n,B.n,samples)
+	Λ = Array{Float64,1}(undef,samples)
+
+	for i=1:samples
+		#U,V, val
+		U,V, val = SSHOPM(A,B,rand(Uniform(-1,1),A.n,B.n),β,max_iter,tol;kwargs...)
+
+		if abs(val) > abs(argmax_val) 
+			argmax_vec = U*V'
+			argmax_val = val
+		end
+		
+		Λ[i] = val
+	end
+	
+	argmax_vec,argmax_val,Λ
 
 end
 

@@ -500,6 +500,31 @@ function distributed_SSHOPM_exps(tensor_files::Array{String,1},output_path::Stri
     end
 end
 
+function distributed_SSHOPM_exps(tensor_files::Array{Tuple{String,String},1},output_path::String,seed::Bool;kwargs...)
+
+    #TODO: test
+    seeds = Array{UInt,2}(undef,1,1) 
+
+    if seed
+        seeds = rand(UInt,length(tensor_files),length(tensor_files))
+    end
+
+    futures = []
+    for (tensor_A_file, tensor_B_file) in tensor_files
+
+        future = @spawn SSHOPM_exp(tensor_A_file, tensor_B_file, output_path,seeds[i,j])
+        push!(futures,(tensor_A_file, tensor_B_file,future))
+
+    end
+
+    #TODO: join using a sigpoll equivilant
+    for (ten_A, ten_B, future) in futures
+        fetch(future)
+        println("joined experiment $ten_A + $ten_B")
+    end
+end
+
+
 function SSHOPM_exp(tensor_A_file::String, tensor_B_file::String,output_path::String,seed::UInt)
 
     @assert tensor_A_file[end-5:end] == ".ssten"
@@ -538,15 +563,20 @@ function SSHOPM_exp(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor, samples::Int
         Random.seed!(seed)
     end 
 
-    A_V,A_Λ = SSHOPM_sample(A,samples,β,max_iter,tol)
-    B_V,B_Λ = SSHOPM_sample(B,samples,β,max_iter,tol)
-    AB_V,AB_Λ = SSHOPM_sample(A,B,samples,β,max_iter,tol)
+    #A_V,A_Λ = SSHOPM_sample(A,samples,β,max_iter,tol)
+    #B_V,B_Λ = SSHOPM_sample(B,samples,β,max_iter,tol)
+    #AB_V,AB_Λ = SSHOPM_sample(A,B,samples,β,max_iter,tol)
+
+
+    A_argmax_vec,A_argmax_val,A_Λ = SSHOPM_sample(A,samples,β,max_iter,tol)
+    B_argmax_vec,B_argmax_val,B_Λ = SSHOPM_sample(B,samples,β,max_iter,tol)
+    AB_argmax_vec,AB_argmax_val,AB_Λ = SSHOPM_sample(A,B,samples,β,max_iter,tol)
 
     A_i  = argmax([abs(x) for x in A_Λ])
     B_i  = argmax([abs(x) for x in B_Λ])
     AB_i = argmax([abs(x) for x in AB_Λ])
 
-    relative_λ_diff = abs(A_Λ[A_i]*B_Λ[B_i] - AB_Λ[AB_i])/abs(AB_Λ[AB_i])
+    relative_λ_diff = abs(A_argmax_val*B_argmax_val - AB_argmax_val)/abs(AB_argmax_val)
 
     println(relative_λ_diff)
 
@@ -575,7 +605,7 @@ function SSHOPM_exp(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor, samples::Int
     #comparisons = (relative_λ_diff, u_Avec_inner_prod, v_Bvec_inner_prod)
     extremal_idx = (A_i, B_i, AB_i)
     eig_vals = (A_Λ, B_Λ, AB_Λ)
-    extremal_vecs = (A_V[:,A_i],B_V[:,B_i], AB_V[:,:,AB_i])
+    extremal_vecs = (A_argmax_vec, B_argmax_vec, AB_argmax_vec)
 
     return relative_λ_diff, extremal_idx, eig_vals, extremal_vecs
 end
