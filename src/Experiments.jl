@@ -538,14 +538,15 @@ function SSHOPM_exp(tensor_A_file::String, tensor_B_file::String,output_path::St
     B_root = split(split(tensor_B_file,"/")[end],".ssten")[1]
     
     tol = 1e-16
-    max_iter = 50 
+    max_iter = 30 
     β = 0.0
-    samples = 1000
+    samples = 200
 
     #delimeter heirarchy:
     #    - > : > + 
     exp_filename = output_path*"align:$(A_root)+$(B_root)-beta:$β-max_iter:$max_iter-samples:$samples-seed:$seed-tol:$tol-results.json"
 
+    println("test")
 
     relative_λ_diff, extremal_idx, eig_vals, extremal_vecs = SSHOPM_exp(A,B,samples,tol,max_iter,β,seed)
 

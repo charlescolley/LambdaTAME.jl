@@ -538,7 +538,9 @@ function SSHOPM_sample(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor, samples::I
 	X = rand(Uniform(-1,1),A.n,B.n,samples)
 
 
-	argmax_vec = Array{Float64,2}(undef,A.n,B.n)
+	#argmax_vec = Array{Float64,2}(undef,A.n,B.n)
+	argmax_U = Array{Float64,2}(undef,A.n,1)
+	argmax_V = Array{Float64,2}(undef,A.n,1)
 	argmax_val::Float64 = 0.0
 	#Vecs = Array{Float64,3}(undef,A.n,B.n,samples)
 	Λ = Array{Float64,1}(undef,samples)
@@ -548,14 +550,15 @@ function SSHOPM_sample(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor, samples::I
 		U,V, val = SSHOPM(A,B,rand(Uniform(-1,1),A.n,B.n),β,max_iter,tol;kwargs...)
 
 		if abs(val) > abs(argmax_val) 
-			argmax_vec = U*V'
+			argmax_U = U 
+			argmax_V = V
 			argmax_val = val
 		end
 		
 		Λ[i] = val
 	end
 	
-	argmax_vec,argmax_val,Λ
+	argmax_U*argmax_V',argmax_val,Λ
 
 end
 
