@@ -380,6 +380,7 @@ function impTTVnodesym(nG::Int,nH::Int,x::Vector{Float64},Gti, Hti)
 end
 
 
+
 """-----------------------------------------------------------------------------
                          Iterative method primatives
 -----------------------------------------------------------------------------"""
@@ -535,33 +536,31 @@ end
 function SSHOPM_sample(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor, samples::Int, β::Float64, max_iter::Int, tol::Float64,kwargs...)
 
 	#X = rand(A.n,samples)
-	X = rand(Uniform(-1,1),A.n,B.n,samples)
+	#X = rand(Uniform(-1,1),A.n,B.n,samples)
 
 
-	#argmax_vec = Array{Float64,2}(undef,A.n,B.n)
-	argmax_U = Array{Float64,2}(undef,A.n,1)
-	argmax_V = Array{Float64,2}(undef,A.n,1)
+	argmax_vec = Array{Float64,1}(undef,A.n*B.n)
 	argmax_val::Float64 = 0.0
 	#Vecs = Array{Float64,3}(undef,A.n,B.n,samples)
 	Λ = Array{Float64,1}(undef,samples)
 
 	for i=1:samples
 		#U,V, val
-		U,V, val = SSHOPM(A,B,rand(Uniform(-1,1),A.n,B.n),β,max_iter,tol;kwargs...)
+		vec, val = SSHOPM(A,B,rand(Uniform(-1,1),A.n,B.n),β,max_iter,tol;kwargs...)
 
 		if abs(val) > abs(argmax_val) 
-			argmax_U = U 
-			argmax_V = V
+			argmax_vec = vec
 			argmax_val = val
 		end
 		
 		Λ[i] = val
 	end
 	
-	argmax_U*argmax_V',argmax_val,Λ
+	reshape(argmax_vec,A.n,B.n),argmax_val,Λ
 
 end
 
+#=
 function SSHOPM(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor,W::Array{F,2},
 				β::F, max_iter::Int,tol::F;
 				max_rank::Int = minimum((A.n,B.n)),kwargs...) where {F <:AbstractFloat}
@@ -575,6 +574,54 @@ function SSHOPM(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor,W::Array{F,2},
 	V = VT[:,singular_indexes]*diagm(S[singular_indexes])
 
 	return SSHOPM(A,B,U,V,β,max_iter,tol;kwargs...)
+end
+=#
+
+#uses implicit contraction 
+function SSHOPM(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor,W::Array{F,2},
+				β::F, max_iter::Int,tol::F;update_user::Int=-1) where {F <:AbstractFloat}
+
+	dimension = minimum((A.n,B.n))
+
+
+	A_Ti, B_Ti = setup_tame_data(A,B)
+
+    x0 = reshape(W,A.n*B.n)
+	x0 ./=norm(x0)
+    x_k = copy(x0)
+
+    i = 1
+    lambda = Inf
+
+    while true
+
+	    x_k_1 = impTTVnodesym(A.n, B.n, x_k, A_Ti, B_Ti)
+		#x_k_1 = implicit_contraction(A,B,x_k)
+
+		#println("norm diff is:",norm(x_k_1_test - x_k_1)/norm(x_k_1_test))
+        new_lambda = dot(x_k_1,x_k)
+
+        if β != 0.0
+            x_k_1 .+= β * x_k
+        end
+
+		x_k_1 ./= norm(x_k_1)
+		
+		if update_user != -1 && i % update_user == 0
+			println("λ: $(new_lambda)")
+		end
+
+
+        if abs(new_lambda - lambda) < tol || i >= max_iter
+  			return x_k_1, new_lambda
+        else
+            x_k = copy(x_k_1)
+            lambda = new_lambda
+            i += 1
+        end
+
+    end
+
 end
 
 function SSHOPM(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor,
