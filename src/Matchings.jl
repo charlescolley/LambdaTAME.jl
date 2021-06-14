@@ -246,13 +246,13 @@ function search_Krylov_space(A::Array{SymTensorUnweighted,1},B::Array{SymTensorU
             #matched_motifs, matching_score = motif_matching_counts(A,B,mapping)
             matched_motifs = zeros(Int,length(A))
             for i =1:length(A)
-                if size(A[i].indices,2) >= size(B[i].indices,2)
+                if size(A[i].indices,2) > size(B[i].indices,2)
                     matched_motifs[i],_,_ = TAME_score(larger_edge_sets[i], B[i], B_to_A_mapping)
                 else
                     matched_motifs[i],_,_ = TAME_score(larger_edge_sets[i], A[i], A_to_B_mapping)
                 end
             end
-                #matching_score = motif_matching_count(B[end], A[end], mapping)
+            #matching_score = motif_matching_count(B[end], A[end], mapping)
             
             matching_score = 0 
             for i= 1:length(A)
