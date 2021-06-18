@@ -1,5 +1,11 @@
 #TODO: convert two function calls into Union{COOTen,ThirdOrderSymTensor}
 #TODO: update new DistributedTensorConstructio types in docs
+
+abstract type MatchingMethod end
+struct ΛTAME_GramMatching <: MatchingMethod end
+struct ΛTAME_rankOneMatching <: MatchingMethod end
+
+
 #=------------------------------------------------------------------------------
               Routines for searching over alpha/beta parameters
 ------------------------------------------------------------------------------=#
@@ -130,7 +136,8 @@ end
 function ΛTAME_param_search(A,B;#duck type tensor inputs
                             iter::Int = 15,tol::Float64=1e-6,
 							alphas::Array{F,1}=[.5,1.0],
-							betas::Array{F,1} =[1000.0,100.0,10.0,1.0,0.0,0.1,0.01,0.001]) where {F <: AbstractFloat}
+							betas::Array{F,1} =[1000.0,100.0,10.0,1.0,0.0,0.1,0.01,0.001],
+							matchingMethod::MatchingMethod=ΛTAME_rankOneMatching()) where {F <: AbstractFloat}
 
     max_triangle_match = min(size(A.indices,1),size(B.indices,1))
     total_triangles = size(A.indices,1) + size(B.indices,1)
@@ -147,7 +154,16 @@ function ΛTAME_param_search(A,B;#duck type tensor inputs
         for beta in betas
 
 			U,V = ΛTAME(A,B,beta,iter,tol,α)
-			search_tris, i, j, matching = search_Krylov_space(A,B,U,V)
+			if typeof(matchingMethod) === ΛTAME_rankOneMatching
+				search_tris, i, j, matching = search_Krylov_space(A,B,U,V)
+			
+			elseif typeof(matchingMethod) === ΛTAME_GramMatching
+				search_tris, matching,matching = TAME_score(A,B,U*V')
+				i = -1
+				j = -1
+			else 
+				throw(TypeError("typeof MatchingMethod must be either ΛTAME_rankOneMatching or ΛTAME_GramMatching"))
+			end
 			println("α:$(α) -- β:$(beta) finished -- tri_match:$search_tris -- max_tris $(max_triangle_match) -- best tri_match:$best_TAME_PP_tris")
             if search_tris > best_TAME_PP_tris
                 best_TAME_PP_tris = search_tris
@@ -158,13 +174,19 @@ function ΛTAME_param_search(A,B;#duck type tensor inputs
         end
     end
 	println("best i:$best_i -- best j:$best_j")
-	return best_TAME_PP_tris, max_triangle_match, U[best_i,:], V[best_j,:], best_matching
+	if typeof(matchingMethod) === ΛTAME_rankOneMatching
+		return best_TAME_PP_tris, max_triangle_match, U[best_i,:], V[best_j,:], best_matching
+	else
+		return best_TAME_PP_tris, max_triangle_match, best_matching
+	end
+
 end
 
 function ΛTAME_param_search(A_tensors::Array{SymTensorUnweighted,1},B_tensors::Array{SymTensorUnweighted,1};
 							iter::Int = 15,tol::Float64=1e-6,
 							alphas::Array{F,1}=[.5,1.0],
-							betas::Array{F,1} =[1000.0,100.0,10.0,1.0,0.0,0.1,0.01,0.001]) where {F <: AbstractFloat}
+							betas::Array{F,1} =[1000.0,100.0,10.0,1.0,0.0,0.1,0.01,0.001],
+							matchingMethod::MatchingMethod=ΛTAME_rankOneMatching()) where {F <: AbstractFloat}
 
 	max_motif_match = [min(size(A.indices,2),size(B.indices,2)) for (A,B) in zip(A_tensors,B_tensors)]
 	total_triangles = [size(A.indices,2) + size(B.indices,2) for (A,B) in zip(A_tensors,B_tensors)]
@@ -186,8 +208,18 @@ function ΛTAME_param_search(A_tensors::Array{SymTensorUnweighted,1},B_tensors::
 		for beta in betas
 
 			U,V = ΛTAME(A_tensors,B_tensors,beta,iter,tol,α)
-			matching_score, matched_motifs, i, j, matching = search_Krylov_space(A_tensors,B_tensors,U,V)
+
 			
+			if typeof(matchingMethod) === ΛTAME_rankOneMatching
+				matching_score, matched_motifs, i, j, matching = search_Krylov_space(A_tensors,B_tensors,U,V)
+			elseif typeof(matchingMethod) === ΛTAME_GramMatching
+				matching_score, matched_motifs, matching= TAME_score(A_tensors,B_tensors,U*V')
+				i = -1
+				j = -1
+			else 
+				throw(TypeError("typeof MatchingMethod must be either ΛTAME_rankOneMatching or ΛTAME_GramMatching"))
+			end
+
 			if matching_score > best_matching_score
 				best_matching_score = matching_score
 				best_matched_motifs = matched_motifs
@@ -200,12 +232,18 @@ function ΛTAME_param_search(A_tensors::Array{SymTensorUnweighted,1},B_tensors::
 		end
 	end
 	println("best i:$best_i -- best j:$best_j")
-	return best_matching_score, max_motif_match, best_matched_motifs, U[best_i,:], V[best_j,:], best_matching
+	if typeof(matchingMethod) === ΛTAME_rankOneMatching
+		return best_matching_score, max_motif_match, best_matched_motifs, U[best_i,:], V[best_j,:], best_matching
+	else
+		return best_matching_score, max_motif_match, best_matched_motifs, best_matching
+	end
+
 end
 
 function ΛTAME_param_search_profiled(A,B; 
 	                                 iter::Int = 15,tol::Float64=1e-6, alphas::Array{F,1}=[.5,1.0],
-							         betas::Array{F,1} =[1000.0,100.0,10.0,1.0,0.0,0.1,0.01,0.001]) where {F <: AbstractFloat}
+									 betas::Array{F,1} =[1000.0,100.0,10.0,1.0,0.0,0.1,0.01,0.001],
+									 matching_method::MatchingMethod=ΛTAME_rankOneMatching()) where {F <: AbstractFloat}
 
     max_triangle_match = min(size(A.indices,1),size(B.indices,1))
     best_TAME_PP_tris = -1

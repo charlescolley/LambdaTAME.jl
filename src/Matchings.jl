@@ -311,7 +311,8 @@ function TAME_score(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor, X::SparseMat
 
 end
 
-function TAME_score(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor,X::Array{Float64,2};return_timings=false)
+function TAME_score(A::Union{ThirdOrderSymTensor,SymTensorUnweighted,Array{SymTensorUnweighted,1}},
+                    B::Union{ThirdOrderSymTensor,SymTensorUnweighted,Array{SymTensorUnweighted,1}},X::Array{Float64,2};return_timings=false)
 
     if return_timings
         (_,_,matching,_) ,matching_time = @timed bipartite_matching_primal_dual(X)
@@ -342,6 +343,7 @@ end
 """
    Match_mapping is expected to map V_A -> V_B
 """
+
 function TAME_score(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor,Match_mapping::Dict{Int,Int})
     
     match_len = length(Match_mapping)
@@ -457,6 +459,50 @@ function TAME_score(A::SymTensorUnweighted,B::SymTensorUnweighted, mapping::Arra
     end
     return matched_motifs
 
+end
+
+function TAME_score(A::Array{SymTensorUnweighted,1},B::Array{SymTensorUnweighted,1},A_to_B_mapping::Dict{Int,Int})
+
+    @assert length(A) == length(B)
+    for i = 1:length(A) #ensure orders are the same at each i
+        @assert size(A[i].indices,1) == size(B[i].indices,1)
+    end
+
+    B_to_A_mapping::Dict{Int,Int} = Dict([(j,i) for (i,j) in A_to_B_mapping])
+
+    #create sets of edges
+    larger_edge_sets = [ ]
+    
+    for (A_motifs,B_motifs) in zip(A,B)
+        if size(A_motifs.indices,2) > size(B_motifs.indices,2)  #larger set of edges gets 
+            #push!(larger_edge_sets,Set(eachcol(A_motifs.indices)))
+            push!(larger_edge_sets,Dict([(Array(col),1) for col in eachcol(A_motifs.indices)]))
+        else
+            push!(larger_edge_sets,Dict([(Array(col),1) for col in eachcol(B_motifs.indices)]))
+        end
+    end
+
+    best_matching_score = -1
+    best_matched_motifs::Array{Int,1} = []
+
+    matched_motifs = zeros(Int,length(A))
+    for i =1:length(A)
+        if size(A[i].indices,2) > size(B[i].indices,2)
+            matched_motifs[i],_,_ = TAME_score(larger_edge_sets[i], B[i], B_to_A_mapping)
+        else
+            matched_motifs[i],_,_ = TAME_score(larger_edge_sets[i], A[i], A_to_B_mapping)
+        end
+    end
+    #matching_score = motif_matching_count(B[end], A[end], mapping)
+    
+    matching_score = 0 
+    for i= 1:length(A)
+        #println(binomial(size(A[i],1),2))
+        #println(matched_motifs[i])
+        matching_score += binomial(size(A[i].indices,1),2)*matched_motifs[i]
+    end
+
+    return matching_score, matched_motifs, A_to_B_mapping
 end
 
 #TODO: may remove, see above
