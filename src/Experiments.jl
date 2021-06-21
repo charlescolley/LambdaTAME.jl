@@ -754,112 +754,60 @@ function ER_noise_model(A,p_remove::F,p_add::F) where {F <: AbstractFloat}
     return B
 end
 
-function duplication_perturbation_noise_model(A::SparseMatrixCSC{T,Int},steps::Int, new_edge_p::Float64) where T
+function duplication_perturbation_noise_model(A::SparseMatrixCSC{T,Int},steps::Integer, new_edge_p::Float64) where T
+ 
+    is_undirected(A)                      || throw(ArgumentError("A must be undirected."))
+    (new_edge_p >= 0 && new_edge_p <= 1)  || throw(ArgumentError("new_edge_p must be a probability."))
+    steps >= 0                            || throw(ArgumentError("Must take a non-negative number of steps."))
+    # let it steps equal 0 for testing purposes
 
-    n,m = size(A)
-    @assert n == m 
-    @assert new_edge_p > 0 && new_edge_p <= 1
+    n,_ = size(A) # n will be updated
 
-    #TODO: test preallocating with zeros(Int)
-    new_Is = Array{Int}(undef,0)
-    new_Js = Array{Int}(undef,0)
-    new_Vs = Array{T}(undef,0)
-    edge_ptrs = zeros(Int,steps+1)
-    edge_ptrs[1] = 1
-
-    #store the edges to new vertices, so they're fast to sample from
-    extended_A = Array{Array{Tuple{Int,Float64},1},1}(undef,n)
+    #store A as an edge list so it's fast to sample
+    A_edge_list = Array{Array{Tuple{Int,T},1},1}(undef,n+steps)
     for i = 1:n
-        extended_A[i] = Array{Tuple{Int,Float64},1}(undef,0)
+        A_edge_list[i] = collect(zip(findnz(A[i,:])...))
     end
-
+    for i = n+1:n+steps
+        A_edge_list[i] = Array{Tuple{Int,T},1}(undef,0)
+    end
 
     for step in 1:steps
 
         dup_vertex = rand(1:n)
-        #println(dup_vertex)
-        new_edges = 0 
-        if dup_vertex <= m # draw from original edges
-            
-
-            #sample from the extended A structure first to avoid sampling newly added edges
-            #println(dup_vertex)
-            #println(extended_A[dup_vertex])
-            for i = 1:length(extended_A[dup_vertex])
-                if rand() < new_edge_p
-
-                    push!(new_Is,extended_A[dup_vertex][i][1])
-                    push!(new_Js,n+1)
-                    push!(new_Vs,extended_A[dup_vertex][i][2])
-
-                    push!(new_Js,extended_A[dup_vertex][i][1])
-                    push!(new_Is,n+1)
-                    push!(new_Vs,extended_A[dup_vertex][i][2])
-
-                    new_edges += 2
-
-                end
+        for (neighbor,weight) in A_edge_list[dup_vertex]
+            if rand() < new_edge_p
+                push!(A_edge_list[n+1],(neighbor,weight))
+                push!(A_edge_list[neighbor],(n+1,weight))
             end
-
-            col = A[:,dup_vertex]
-            indices, weights = findnz(col)
-
-            for i = 1:length(indices)
-                if rand() < new_edge_p
-
-                    push!(new_Is,indices[i])
-                    push!(new_Js,n+1)
-                    push!(new_Vs,weights[i])
-
-                    push!(new_Js,indices[i])
-                    push!(new_Is,n+1)
-                    push!(new_Vs,weights[i])
-
-                    new_edges += 2
-
-                    push!(extended_A[indices[i]],(n+1,weights[i]))
-
-                end
-            end
-
-
-
-        else # draw from newly created edges
-
-            remapped_vertex = dup_vertex - m  #point to entry in edge_ptrs
-            
-            for i = edge_ptrs[remapped_vertex]:2:(edge_ptrs[remapped_vertex+1] - 1)
-                if rand() < new_edge_p
-                    
-                    push!(new_Is,new_Is[i])
-                    push!(new_Js,n+1)
-                    push!(new_Vs,new_Vs[i])
-
-                    push!(new_Is,n+1)
-                    push!(new_Js,new_Is[i])
-                    push!(new_Vs,new_Vs[i])
-                    new_edges += 2
-
-                end
-
-            end
-
         end
-
-        n += 1 
-        #update new edge ptr to where next duplicated vertex edges will start
-        edge_ptrs[step + 1] = edge_ptrs[step] + new_edges
-
+        n += 1
     end
 
-    #return new_Is, new_Js, new_Vs
-    Is, Js, Vs = findnz(A)
 
-    println("starting sparse matrix productions")
-    return sparse(vcat(Is,new_Is),vcat(Js,new_Js),vcat(Vs,new_Vs),n,n)
+    #convert edge list back into a MatrixNetwork
+    total_edges = 0
+    for i=1:n
+        total_edges += length(A_edge_list[i])
+    end
 
+    Is = Array{Int,1}(undef,total_edges)
+    Js = Array{Int,1}(undef,total_edges)
+    Vs = Array{T,1}(undef,total_edges)
 
+    edge_idx = 1
+    for i=1:n
+        for (n_j,weight) in A_edge_list[i]
+            Is[edge_idx] = i 
+            Js[edge_idx] = n_j
+            Vs[edge_idx] = weight
+            edge_idx += 1
+        end
+    end
+
+    return sparse(Js,Is,Vs,n,n)
 end
+
 
 """------------------------------------------------------------------------------
   This function takes in a pair of sparse matrices and aligns them with with the
