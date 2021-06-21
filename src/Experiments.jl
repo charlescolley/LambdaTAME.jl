@@ -455,7 +455,10 @@ function distributed_random_trials(trial_count::Int,seed_exps::Bool=false
                 max_tris = minimum((A_tris,B_tris))
             end
 
-            accuracy = sum([1 for (i,j) in enumerate(perm) if get(best_matching,j,-1) == i])/n
+            accuracy_B_to_A = sum([1 for (i,j) in enumerate(perm) if get(best_matching,j,-1) == i])/n
+            accuracy_A_to_B = sum([1 for (i,j) in enumerate(perm) if get(best_matching,i,-1) == j])/n
+
+            accuracy = max(accuracy_B_to_A,accuracy_A_to_B)
             D_A = sum(d_A)
             D_B = sum(d_B)
             degree_weighted_accuracy = sum([(get(best_matching,j,-1) == i) ? ((d_A[i] + d_B[j])/(D_A+D_B)) : 0.0 for (i,j) in enumerate(perm)])
@@ -707,6 +710,7 @@ function random_graph_exp(n::Int, perturbation_p::Float64,graph::RandomGraphType
 
     if typeof(noise_model) === ErdosRenyiNoise
         p_add = (p*perturbation_p)/(1-p)
+        #B = ER_noise_model(A,0.0,perturbation_p)#,p_add)
         B = ER_noise_model(A,perturbation_p,p_add)
     elseif  typeof(noise_model) === DuplicationNoise
        
@@ -714,8 +718,13 @@ function random_graph_exp(n::Int, perturbation_p::Float64,graph::RandomGraphType
         B = duplication_perturbation_noise_model(A,steps, perturbation_p)
     end
 
+
+    println(nnz(A))   
+    println(nnz(B))
     perm = shuffle(1:size(B,1))
     B = B[perm,perm]
+
+    #return A, B , perm
 
 	if use_metis
 		apply_Metis_permutation!(A,100)
@@ -836,7 +845,7 @@ end
   If a tensor method is used, the number of triangles in A and B are returned, in
   addition to whatever is returned by 'align_tensors(_profiled)'.
 ------------------------------------------------------------------------------"""
-function align_matrices(A::SparseMatrixCSC{T,Int},B::SparseMatrixCSC{T,Int};profile=false,kwargs...) where T
+function align_matrices(A::SparseMatrixCSC{T,Int},B::SparseMatrixCSC{S,Int};profile=false,kwargs...) where {T,S}
 
     A_ten = graph_to_ThirdOrderTensor(A)
     B_ten = graph_to_ThirdOrderTensor(B)

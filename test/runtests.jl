@@ -1,6 +1,7 @@
 using Test
 using Suppressor
 
+
 #src: https://github.com/charlescolley/DistributedTensorConstruction.jl.git
 using DistributedTensorConstruction
 
@@ -42,8 +43,8 @@ B_UST_MM = [B_UST, B_UST]
 
 
 include("Contraction_test.jl")
-include("Matchings_test.jl")
-include("TAME_Implementations_test.jl")
+#include("Matchings_test.jl")
+#include("TAME_Implementations_test.jl")
 
 
 

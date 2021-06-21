@@ -40,9 +40,9 @@ PROJECT_PATH = "."
 #include(NETWORK_ALIGNMENT_PATH*"NetworkAlignment.jl")
 
 
-#LOWRANK_EIGENALIGN_PATH = "/Users/ccolley/Code/lowrank_spectral_v1_julia/all_code/include_all.jl" #local
+LOWRANK_EIGENALIGN_PATH = "/Users/ccolley/Code/lowrank_spectral_v1_julia/all_code/include_all.jl" #local
 #LOWRANK_EIGENALIGN_PATH = "/homes/ccolley/Documents/Software/lowrank_spectral_v1_julia/all_code/include_all.jl"#nilpotent
-#include(LOWRANK_EIGENALIGN_PATH)
+include(LOWRANK_EIGENALIGN_PATH)
 
 
 #TODO: Check to see if this can be run straight out of the box.
@@ -81,6 +81,7 @@ include("TAME_Implementations.jl")
 
 #all alignment method flag types
 export ΛTAME_M, ΛTAME_MultiMotif_M, LowRankTAME_M, TAME_M, EigenAlign_M, LowRankEigenAlign_M, Degree_M ,Random_M
+export ΛTAME_GramMatching, ΛTAME_rankOneMatching
 #random graph flag types
 export ErdosRenyi, RandomGeometric, HyperKron
 #noise model flag types

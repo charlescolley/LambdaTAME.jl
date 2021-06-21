@@ -12,15 +12,19 @@
         #TOST_y = LambdaTAME.implicit_contraction(A_TOST,B_TOST,reshape(X,A_TOST.n*B_TOST.n))   #TODO: known problem with code, unused in experiment
         TOST_U, TOST_V = LambdaTAME.get_kron_contract_comps(A_TOST,B_TOST,U,V)
         LR_TOST_y = LambdaTAME.reshape(TOST_U*TOST_V',A_TOST.n*B_TOST.n)
-
-
+        UST_U, UST_V = LambdaTAME.get_kron_contract_comps(A_UST,B_UST,U,V)
+        
         #ensure all vectors are pairwise equal
         #@test norm(UTOST_y   - TOST_y)/norm(TOST_y) < tol
         #@test norm(LR_TOST_y - TOST_y)/norm(TOST_y) < tol
         @test norm(LR_TOST_y - UTOST_y)/norm(UTOST_y) < tol
+        @test norm(TOST_U - UST_U)/norm(TOST_U) < tol
+        @test norm(TOST_V - UST_V)/norm(TOST_V) < tol
     end
 
+    
     @testset "Multiple Motif Contraction" begin
+        #=
         seed!(54321)
         n= 100 
         k = 25
@@ -38,7 +42,12 @@
         end
 
 
+        =#
+    end
 
+    @testset "SSHOPM" begin
+        
+        
     end
 
 end

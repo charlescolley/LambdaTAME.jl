@@ -2,7 +2,8 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/.idea/src.iml" filepath="$PROJECT_DIR$/.idea/src.iml" />
+      <module fileurl="file://$PROJECT_DIR$/../.idea/LambdaTAME.iml" filepath="$PROJECT_DIR$/../.idea/LambdaTAME.iml" />
+      <module fileurl="file://$PROJECT_DIR$/../../HOFASM.jl/src/.idea/src.iml" filepath="$PROJECT_DIR$/../../HOFASM.jl/src/.idea/src.iml" />
     </modules>
   </component>
 </project>
