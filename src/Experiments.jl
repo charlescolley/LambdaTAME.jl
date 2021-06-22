@@ -614,6 +614,24 @@ function SSHOPM_exp(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor, samples::Int
     return relative_λ_diff, extremal_idx, eig_vals, extremal_vecs
 end
 
+function test_SSHOPM_exp_file(filename)
+
+    relative_λ_diff, extremal_idx, eig_vals, extremal_vecs = open(filename,"r") do f 
+        JSON.parse(f)
+    end
+    
+    subspace_angle = dot(extremal_vecs[1]*extremal_vecs[2]',hcat(extremal_vecs[3]...))
+    λ_A  = eig_vals[1][extremal_idx[1]]
+    λ_B  = eig_vals[2][extremal_idx[2]]
+    λ_AB = eig_vals[3][extremal_idx[3]]
+
+    println("A.n = $(length(extremal_vecs[1]))  B.n=$(length(extremal_vecs[2]))")
+    println("λ_A: $λ_A  -- λ_B: $λ_B  -- λ_AB: $λ_AB")
+    println("λ_Aλ_B - λ_AB = $(λ_A*λ_B - λ_AB)")
+    println("<(v_A*v_B, v_AB) = $subspace_angle")
+end
+
+
 """-----------------------------------------------------------------------------
   Runs an instance of a graph alignment problem using a random graph model. Once 
   a graph is generated, we use the function 'ER_noise_model' to generate a 
