@@ -46,7 +46,15 @@ function align_tensors(A::Union{ThirdOrderSymTensor,SymTensorUnweighted,Array{Sy
 	if typeof(A) !== Array{SymTensorUnweighted,1} && B.n > A.n
 		results = align_tensors(B,A;method = method, no_matching=no_matching,kwargs...)
 		#flip the matchings if A and B were swapped
-		if typeof(method) === ΛTAME_M ||  typeof(method) === LowRankTAME_M
+		if typeof(method) === ΛTAME_M
+			if kwargs[:matchingMethod] === ΛTAME_rankOneMatching()
+				best_TAME_PP_tris, max_triangle_match, U_best, V_best, best_matching,profile = results
+				return best_TAME_PP_tris, max_triangle_match, U_best, V_best, Dict((j,i) for (i,j) in best_matching)
+			else 
+				best_matched_motifs, max_motif_match, best_matching = results
+				return best_matched_motifs, max_motif_match, Dict((j,i) for (i,j) in best_matching)
+			end
+		elseif typeof(method) === LowRankTAME_M
 			best_TAME_PP_tris, max_triangle_match, U_best, V_best, best_matching = results
 			return best_TAME_PP_tris, max_triangle_match, U_best, V_best, Dict((j,i) for (i,j) in best_matching)
 		elseif typeof(method) === TAME_M
@@ -114,7 +122,15 @@ function align_tensors_profiled(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor;
 	if B.n > A.n
 		results =  align_tensors_profiled(B,A;method = method, no_matching=no_matching,kwargs...)
 		#flip the matchings if A and B were swapped
-		if typof(method) === ΛTAME_M ||  typeof(method) == LowRankTAME_M
+		if typeof(method) === ΛTAME_M 
+			if kwargs[:matchingMethod] === ΛTAME_rankOneMatching()
+				best_TAME_PP_tris, max_triangle_match, U_best, V_best, best_matching,profile = results
+				return best_TAME_PP_tris, max_triangle_match, U_best, V_best, Dict((j,i) for (i,j) in best_matching), profile
+			else 
+				best_matched_motifs, max_motif_match, best_matching, profile= results
+				return best_matched_motifs, max_motif_match, Dict((j,i) for (i,j) in best_matching), profile
+			end
+		elseif typeof(method) == LowRankTAME_M
 			best_TAME_PP_tris, max_triangle_match, U_best, V_best, best_matching,profile = results
 			return best_TAME_PP_tris, max_triangle_match, U_best, V_best, Dict((j,i) for (i,j) in best_matching), profile
 		elseif typeof(method) === TAME_M
@@ -246,10 +262,15 @@ end
 function ΛTAME_param_search_profiled(A,B; 
 	                                 iter::Int = 15,tol::Float64=1e-6, alphas::Array{F,1}=[.5,1.0],
 									 betas::Array{F,1} =[1000.0,100.0,10.0,1.0,0.0,0.1,0.01,0.001],
-									 matching_method::MatchingMethod=ΛTAME_rankOneMatching()) where {F <: AbstractFloat}
+									 matchingMethod::MatchingMethod=ΛTAME_rankOneMatching()) where {F <: AbstractFloat}
 
-    max_triangle_match = min(size(A.indices,1),size(B.indices,1))
-    best_TAME_PP_tris = -1
+	if typeof(A) === ThirdOrderSymTensor 
+		max_motif_match = min(size(A.indices,1),size(B.indices,1))
+	else
+		max_motif_match = min(size(A.indices,2),size(B.indices,2))
+	end
+
+    best_matched_motifs = -1
     best_i  = -1
 	best_j = -1
 	best_matching = Dict{Int,Int}()
@@ -257,11 +278,9 @@ function ΛTAME_param_search_profiled(A,B;
 	m = A.n
 	n = B.n
 
-
-
 	results = Dict(
 		"TAME_timings" => Array{Float64,1}(undef,length(alphas)*length(betas)),
-		"Krylov Timings"=> Array{Float64,1}(undef,length(alphas)*length(betas))
+		"Matching Timings"=> Array{Float64,1}(undef,length(alphas)*length(betas))
 	)
 	exp_index = 1
 
@@ -275,26 +294,37 @@ function ΛTAME_param_search_profiled(A,B;
 			((U,V),runtime) = @timed ΛTAME(A,B,beta,iter,tol,α)
 			results["TAME_timings"][exp_index] = runtime
 
-			#search the Krylov Subspace
-			((search_tris, i, j, matching),runtime) = @timed search_Krylov_space(A,B,U,V)
-			results["Krylov Timings"][exp_index] = runtime
-			exp_index += 1
+			if typeof(matchingMethod) === ΛTAME_rankOneMatching
+				((matched_motifs, i, j, matching),runtime) = @timed search_Krylov_space(A,B,U,V)
+			elseif typeof(matchingMethod) === ΛTAME_GramMatching
+				(matched_motifs,gaped_motifs, matching),runtime = @timed TAME_score(A,B,U*V')
+				i = -1
+				j = -1
+			else 
+				throw(TypeError("typeof MatchingMethod must be either ΛTAME_rankOneMatching or ΛTAME_GramMatching"))
+			end
 
+			#TODO: rename "Krylov Timings"
+			results["Matching Timings"][exp_index] = runtime
+			exp_index +=1 
 
-			if search_tris > best_TAME_PP_tris
+			if matched_motifs > best_matched_motifs
+				best_matched_motifs = matched_motifs
+				best_i = i
+				best_j = j
 				best_matching = matching
-                best_TAME_PP_tris = search_tris
-                best_i = i
-                best_j = j
-            end
-
-			println("α:$(α) -- β:$(beta) finished -- tri_match:$search_tris -- max_tris $(max_triangle_match) -- best tri_match: $best_TAME_PP_tris")
+			end
+			
+			println("α:$(α) -- β:$(beta) finished -- motif_match:$matched_motifs -- max_motif $max_motif_match -- best motif_match: $best_matched_motifs")
         end
     end
 
 	println("best i:$best_i -- best j:$best_j")
-	return best_TAME_PP_tris, max_triangle_match, U[:,best_i], V[:,best_j], best_matching, results
-
+	if typeof(matchingMethod) === ΛTAME_rankOneMatching
+		return best_matched_motifs, max_motif_match, U[:,best_i], V[:,best_j], best_matching, results
+	else
+		return best_matched_motifs, max_motif_match, best_matching, results
+	end
 end
 
 #add in SparseSymmetricTensors.jl function definitions
@@ -546,7 +576,7 @@ function ΛTAME(A::SymTensorUnweighted, B::SymTensorUnweighted, β::Float64,
 	U[:,1] /=norm(U[:,1])
 
 	V[:,1] = ones(B.n)
-	V[:,1] /=norm(U[:,1])
+	V[:,1] /=norm(V[:,1])
 
 	sqrt_β = β^(.5)
 
@@ -558,8 +588,8 @@ function ΛTAME(A::SymTensorUnweighted, B::SymTensorUnweighted, β::Float64,
 
 	while true
 
-		contraction_divide_out!(A,U[:,i],A_buf)
-		contraction_divide_out!(B,V[:,i],B_buf)
+		DistributedTensorConstruction.contraction!(A,U[:,i],A_buf)
+		DistributedTensorConstruction.contraction!(B,V[:,i],B_buf)
 
 		U[:,i+1] .= A_buf
 		V[:,i+1] .= B_buf
@@ -617,7 +647,7 @@ function ΛTAME(A_tensors::Array{SymTensorUnweighted,1}, B_tensors::Array{SymTen
 	U[:,1] /=norm(U[:,1])
 
 	V[:,1] = ones(n)
-	V[:,1] /=norm(U[:,1])
+	V[:,1] /=norm(V[:,1])
 
 	sqrt_β = β^(.5)
 

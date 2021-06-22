@@ -311,7 +311,7 @@ function TAME_score(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor, X::SparseMat
 
 end
 
-function TAME_score(A::Union{ThirdOrderSymTensor,SymTensorUnweighted,Array{SymTensorUnweighted,1}},
+function TAME_score(A::Union{ThirdOrderSymTensor,Array{SymTensorUnweighted,1}},
                     B::Union{ThirdOrderSymTensor,SymTensorUnweighted,Array{SymTensorUnweighted,1}},X::Array{Float64,2};return_timings=false)
 
     if return_timings
@@ -323,6 +323,20 @@ function TAME_score(A::Union{ThirdOrderSymTensor,SymTensorUnweighted,Array{SymTe
         return TAME_score(A,B,Dict(j => i for (i,j) in enumerate(matching)))
     end
 end
+
+function TAME_score(A::SymTensorUnweighted,B::SymTensorUnweighted,X::Array{Float64,2};return_timings=false)
+
+    if return_timings
+        (_,_,matching,_) ,matching_time = @timed bipartite_matching_primal_dual(X)
+        (triangle_count, gaped_triangles,inverted_matching), scoring_time = @timed TAME_score(A,B,Dict(i => j for (i,j) in enumerate(matching)))
+        return triangle_count, gaped_triangles,inverted_matching, matching_time, scoring_time, matching
+    else
+        _,_,matching,_ = bipartite_matching_primal_dual(X)
+        println("test")
+        return TAME_score(A,B,Dict(i => j for (i,j) in enumerate(matching)))
+    end
+end
+
 
 function TAME_score(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor,x::Array{Float64,1};return_timings=false)
 
@@ -534,7 +548,7 @@ function TAME_score(A::SymTensorUnweighted,B::SymTensorUnweighted, mapping::Dict
 
 
     if size(B.indices,2) > size(A.indices,2)
-        inverted_mapping = Dict()
+        inverted_mapping = Dict{Int,Int}()
 
         for (v,u) in mapping
             if u != -1
@@ -543,7 +557,7 @@ function TAME_score(A::SymTensorUnweighted,B::SymTensorUnweighted, mapping::Dict
         end
 
         #return (-1,"ERROR:mapping needs to be inverted")
-        return motif_matching_count(B.indices, A.indices,inverted_mapping)
+        return TAME_score(B, A,inverted_mapping)
     end
 
     order =  size(A.indices,1)

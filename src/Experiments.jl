@@ -272,7 +272,7 @@ Output
 
 ------------------------------------------------------------------------------"""
 function distributed_pairwise_alignment(files::Array{String,1},dirpath::String;
-                                        method="LambdaTAME",profile=false,kwargs...)
+                                        method::AlignmentMethod=ΛTAME_M(),profile=false,kwargs...)
 
     @everywhere include_string(Main,$(read("LambdaTAME.jl",String)),"LambdaTAME.jl")
 
@@ -306,19 +306,25 @@ function distributed_pairwise_alignment(files::Array{String,1},dirpath::String;
 
     for ((i,j), future) in futures
 
-		if method == "LambdaTAME" ||  method == "LowRankTAME"
+        if method === ΛTAME_M() && kwargs[:matchingMethod] === ΛTAME_GramMatching()
+            if profile
+                matched_tris, max_tris, best_matching, results = fetch(future)
+			else 
+				matched_tris, max_tris, best_matching = fetch(future)
+			end
+        elseif method === LowRankTAME_M() || (method === ΛTAME_M() && kwargs[:matchingMethod] === ΛTAME_rankOneMatching())
 			if profile
 				matched_tris, max_tris, _, _, best_matching, results = fetch(future)
 			else
 				matched_tris, max_tris, _, _, best_matching = fetch(future)
 			end
-		elseif method == "TAME"
+		elseif method === TAME_M()
 			if profile
 				matched_tris, max_tris, _, best_matching, results = fetch(future)
 			else
 				matched_tris, max_tris, _, best_matching = fetch(future)
             end
-        elseif method == "EigenAlign" || method == "Degree" || method == "Random" || method == "LowRankEigenAlign"
+        elseif method == EigenAlign_M() || method == Degree_M() || method == Random_M() || method == LowRankEigenAlign_M()
             A_tens, B_tens, matched_tris, best_matching, results = fetch(future)
             max_tris = min(A_tens, B_tens)
             profile = true
