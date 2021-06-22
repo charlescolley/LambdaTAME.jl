@@ -53,6 +53,9 @@ function align_tensors(A::Union{ThirdOrderSymTensor,SymTensorUnweighted,Array{Sy
 			best_TAME_PP_tris, max_triangle_match, best_TAME_PP_x, best_matching = results
 			return best_TAME_PP_tris, max_triangle_match, best_TAME_PP_x, Dict((j,i) for (i,j) in best_matching)
 		end
+	elseif (typeof(A) === Array{SymTensorUnweighted,1}) && (B[1].n > A[1].n)
+		results = align_tensors(B,A;method = method, no_matching=no_matching,kwargs...)
+		return results[1:end-1]..., Dict((j,i) for (i,j) in results[end])
 	end
 
 	if typeof(method) === ΛTAME_M || typeof(method) === ΛTAME_MultiMotif_M
