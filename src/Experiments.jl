@@ -440,8 +440,12 @@ function distributed_random_trials(trial_count::Int,seed_exps::Bool=false
             accuracy = sum([1 for (i,j) in enumerate(perm) if get(best_matching,j,-1) == i])/n
             D_A = sum(d_A)
             D_B = sum(d_B)
-            degree_weighted_accuracy = sum([(get(best_matching,j,-1) == i) ? ((d_A[i] + d_B[j])/(D_A+D_B)) : 0.0 for (i,j) in enumerate(perm)])
-      
+            if typeof(kwargs[:noise_model]) === DuplicationNoise()
+                degree_weighted_accuracy = -1.0
+            else
+                degree_weighted_accuracy = sum([(get(best_matching,j,-1) == i) ? ((d_A[i] + d_B[j])/(D_A+D_B)) : 0.0 for (i,j) in enumerate(perm)])
+            end
+
             push!(results,(seed, p, n, accuracy, degree_weighted_accuracy, matched_tris, A_tris, B_tris, max_tris, exp_results))
         else
             if typeof(method) === ΛTAME_M ||  typeof(method) === LowRankTAME_M
@@ -461,8 +465,13 @@ function distributed_random_trials(trial_count::Int,seed_exps::Bool=false
             accuracy = max(accuracy_B_to_A,accuracy_A_to_B)
             D_A = sum(d_A)
             D_B = sum(d_B)
-            degree_weighted_accuracy = sum([(get(best_matching,j,-1) == i) ? ((d_A[i] + d_B[j])/(D_A+D_B)) : 0.0 for (i,j) in enumerate(perm)])
-      
+
+            if kwargs[:noise_model] === DuplicationNoise()
+                degree_weighted_accuracy = -1.0
+            else
+                degree_weighted_accuracy = sum([(get(best_matching,j,-1) == i) ? ((d_A[i] + d_B[j])/(D_A+D_B)) : 0.0 for (i,j) in enumerate(perm)])
+            end
+
             if typeof(method) === ΛTAME_MultiMotif_M
                 push!(results,( seed, p, n, accuracy, degree_weighted_accuracy, best_matching_score, max_motif_match, best_matched_motifs))
             else
@@ -737,8 +746,6 @@ function random_graph_exp(n::Int, perturbation_p::Float64,graph::RandomGraphType
     end
 
 
-    println(nnz(A))   
-    println(nnz(B))
     perm = shuffle(1:size(B,1))
     B = B[perm,perm]
 
