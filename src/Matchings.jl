@@ -332,7 +332,6 @@ function TAME_score(A::SymTensorUnweighted,B::SymTensorUnweighted,X::Array{Float
         return triangle_count, gaped_triangles,inverted_matching, matching_time, scoring_time, matching
     else
         _,_,matching,_ = bipartite_matching_primal_dual(X)
-        println("test")
         return TAME_score(A,B,Dict(i => j for (i,j) in enumerate(matching)))
     end
 end
