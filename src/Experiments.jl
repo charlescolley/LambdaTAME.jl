@@ -575,7 +575,74 @@ function replaced_duplications_with_originals(perm,n, dup_vertices)
 end
 
 """-----------------------------------------------------------------------------
-  
+                        ΛTAME Matching Experiments
+-----------------------------------------------------------------------------"""
+function ΛTAME_matching_exp(A_file::String, B_file::String, args...)
+
+    @assert A_file[end-5:end] == ".ssten"
+    @assert B_file[end-5:end] == ".ssten"
+
+    A = load_SymTensorUnweighted(A_file,'\t') #delimiter may need to be updated
+    B = load_SymTensorUnweighted(B_file,'\t')
+
+    return ΛTAME_matching_exp(A,B,args...)
+
+end
+
+function ΛTAME_matching_exp(A_file::String, B_file::String, output_file::String=nothing, args...)
+
+    @assert A_file[end-5:end] == ".ssten"
+    @assert B_file[end-5:end] == ".ssten"
+    @assert output_file[end-4:end] == ".json"
+
+    A = load_SymTensorUnweighted(A_file,'\t') #delimiter may need to be updated
+    B = load_SymTensorUnweighted(B_file,'\t')
+
+    open(output_file,"w") do f
+        JSON.print(f,ΛTAME_matching_exp(A,B,args...))
+    end
+
+end
+
+function ΛTAME_matching_exp(A::Union{ThirdOrderSymTensor,SymTensorUnweighted},
+                            B::Union{ThirdOrderSymTensor,SymTensorUnweighted},
+                            max_iter::Int,alphas::Array{Float64,1}=[.5,1.0],
+                            betas::Array{Float64,1}=[0.0,1.0,10.0,100.0])
+
+    tol = 1e-16 # we want to track how triangles change over iterations
+
+    if typeof(A) == ThirdOrderSymTensor
+        A_motifs = size(A.indices,1)
+        B_motifs = size(B.indices,1)
+    else
+        A_motifs= size(A.indices,2)
+        B_motifs= size(B.indices,2)
+    end
+
+    results = []
+    for α in alphas
+        for β in betas
+
+            matching_counts = []
+            U,V = ΛTAME(A, B, β,max_iter,tol,α)
+
+            d = size(U,2)
+
+            for i=1:d
+                motifs_matched,_,_ = TAME_score(A,B,U[:,1:i]*V[:,1:i]')
+                push!(matching_counts,motifs_matched)
+            end
+
+            push!(results,(α,β,matching_counts))
+        end
+    end
+    
+    A_motifs, B_motifs, results
+end
+
+
+"""-----------------------------------------------------------------------------
+                              SSHOPM Experiments
 -----------------------------------------------------------------------------"""
 function distributed_SSHOPM_exps(tensor_files::Array{String,1},output_path::String,seed::Bool;kwargs...)
 
