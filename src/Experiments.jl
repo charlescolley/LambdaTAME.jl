@@ -386,10 +386,10 @@ Output
     triangles possible to align. Anything additional returned by the functions 
     with the profile flag on, is appended at the end.     
 ------------------------------------------------------------------------------"""
-function distributed_random_trials(trial_count::Int,seed_exps::Bool=false
+function distributed_random_trials(trial_count::Int,noise_model::ErdosRenyiNoise,seed_exps::Bool=false
                                    ;method::AlignmentMethod=ΛTAME(),graph::RandomGraphType=ErdosRenyi(),
-								   n_sizes = [100, 500, 1000, 2000,5000], p_remove = [.01,.05],
-								   profile=false,kwargs...)
+                                   n_sizes = [100, 500, 1000, 2000,5000],p_remove = [.01,.05],
+                                   profile=false,kwargs...)
 
     #only handling even batch sizes
     #@assert trial_count % process_count == 0
@@ -422,9 +422,9 @@ function distributed_random_trials(trial_count::Int,seed_exps::Bool=false
                     seed = seeds[p_index,n_index,trial]
                 end
                 println(seed)
-                future = @spawn random_graph_exp(n,p,graph;
-                                                    profile=profile,seed=seed,method=method,
-                                                    kwargs...)
+                future = @spawn random_graph_exp(n,p,graph; profile=profile,seed=seed,
+                                                 method=method,noise_model=noise_model,
+                                                 kwargs...)
                 push!(futures,(seed,p,n,future))
 
             end
@@ -437,128 +437,186 @@ function distributed_random_trials(trial_count::Int,seed_exps::Bool=false
     #TODO: fix parsing of returned functions
     for (seed,p,n,future) in futures
         if profile 
-            if kwargs[:noise_model] === DuplicationNoise()
-
-                if method === ΛTAME_M() && kwargs[:matchingMethod] === ΛTAME_GramMatching()
-                    perm,dup_vertices, (A_tris, B_tris,(matched_tris, max_tris,best_matching, exp_results)) = fetch(future)
-                elseif (typeof(method) === ΛTAME_M && kwargs[:matchingMethod] === ΛTAME_rankOneMatching()) ||  typeof(method) === LowRankTAME_M()
-                    perm,dup_vertices, (A_tris, B_tris,(matched_tris, max_tris, _, _,best_matching, exp_results))= fetch(future)
-                elseif typeof(method) == TAME_M
-                    perm,dup_vertices, (A_tris, B_tris,(matched_tris, max_tris, _, best_matching, exp_results))= fetch(future)
-                end
- 
-                accuracy_B_to_A = sum([1 for (i,j) in enumerate(perm) if get(best_matching,j,-1) == i])/n
-                accuracy_A_to_B = sum([1 for (i,j) in enumerate(perm) if get(best_matching,i,-1) == j])/n
-                #TODO: use a more robust method of catching how matchings are oriented
-                accuracy = max(accuracy_B_to_A,accuracy_A_to_B) 
-
-                dup_tolerant_perm = replaced_duplications_with_originals(perm,n, dup_vertices)
-                DT_accuracy_B_to_A = sum([1 for (i,j) in enumerate(dup_tolerant_perm) if get(best_matching,j,-1) == i])/n
-                DT_accuracy_A_to_B = sum([1 for (i,j) in enumerate(dup_tolerant_perm) if get(best_matching,i,-1) == j])/n
-                dup_vertex_tolerant_accuracy = max(DT_accuracy_B_to_A,DT_accuracy_A_to_B) 
-                
-            
-                push!(results,(seed, p, n, accuracy,dup_vertex_tolerant_accuracy, matched_tris, A_tris, B_tris, max_tris, exp_results))
-            else
-                if method === ΛTAME_M() && kwargs[:matchingMethod] === ΛTAME_GramMatching()
-                    d_A, d_B, perm, (A_tris, B_tris,(matched_tris, max_tris,best_matching, exp_results)) = fetch(future)
-                elseif (typeof(method) === ΛTAME_M && kwargs[:matchingMethod] === ΛTAME_rankOneMatching()) ||  typeof(method) === LowRankTAME_M()
-                    d_A, d_B, perm, (A_tris, B_tris,(matched_tris, max_tris, _, _,best_matching, exp_results))= fetch(future)
-                elseif typeof(method) == TAME_M
-                    d_A, d_B, perm, (A_tris, B_tris,(matched_tris, max_tris, _, best_matching, exp_results))= fetch(future)
-                end
-
-                accuracy_B_to_A = sum([1 for (i,j) in enumerate(perm) if get(best_matching,j,-1) == i])/n
-                accuracy_A_to_B = sum([1 for (i,j) in enumerate(perm) if get(best_matching,i,-1) == j])/n
-                accuracy = max(accuracy_B_to_A,accuracy_A_to_B) 
-
-                D_A = sum(d_A)
-                D_B = sum(d_B)
-                degree_weighted_accuracy = sum([(get(best_matching,j,-1) == i) ? ((d_A[i] + d_B[j])/(D_A+D_B)) : 0.0 for (i,j) in enumerate(perm)])
-                
-                push!(results,(seed, p, n, accuracy, degree_weighted_accuracy, matched_tris, A_tris, B_tris, max_tris, exp_results))
-    
+         
+            if method === ΛTAME_M() && kwargs[:matchingMethod] === ΛTAME_GramMatching()
+                d_A, d_B, perm, (A_tris, B_tris,(matched_tris, max_tris,best_matching, exp_results)) = fetch(future)
+            elseif (method === ΛTAME_M && kwargs[:matchingMethod] === ΛTAME_rankOneMatching()) ||  method === LowRankTAME_M()
+                d_A, d_B, perm, (A_tris, B_tris,(matched_tris, max_tris, _, _,best_matching, exp_results))= fetch(future)
+            elseif method === TAME_M
+                d_A, d_B, perm, (A_tris, B_tris,(matched_tris, max_tris, _, best_matching, exp_results))= fetch(future)
             end
+
+            accuracy_B_to_A = sum([1 for (i,j) in enumerate(perm) if get(best_matching,j,-1) == i])/n
+            accuracy_A_to_B = sum([1 for (i,j) in enumerate(perm) if get(best_matching,i,-1) == j])/n
+            accuracy = max(accuracy_B_to_A,accuracy_A_to_B) 
+
+            D_A = sum(d_A)
+            D_B = sum(d_B)
+            degree_weighted_accuracy = sum([(get(best_matching,j,-1) == i) ? ((d_A[i] + d_B[j])/(D_A+D_B)) : 0.0 for (i,j) in enumerate(perm)])
+            
+            push!(results,(seed, p, n, accuracy, degree_weighted_accuracy, matched_tris, A_tris, B_tris, max_tris, exp_results))
+
         else
+            if method === ΛTAME_M() && kwargs[:matchingMethod] === ΛTAME_GramMatching()
+                d_A, d_B, perm, (A_tris, B_tris,(matched_tris, max_tris,best_matching)) = fetch(future)
+            elseif (method === ΛTAME_M && kwargs[:matchingMethod] === ΛTAME_rankOneMatching()) ||  method === LowRankTAME_M
+                d_A, d_B, perm, (A_tris, B_tris,(matched_tris, max_tris, _, _, best_matching)) = fetch(future)
+            elseif method === ΛTAME_MultiMotif_M
+                if kwargs[:matchingMethod] === ΛTAME_GramMatching()
+                    d_A, d_B, perm, (best_matching_score, max_motif_match, best_matched_motifs, best_matching) = fetch(future)
+                else
+                    d_A, d_B, perm, (best_matching_score, max_motif_match,best_matched_motifs, _, _, best_matching) = fetch(future)
+                end
+            elseif method === TAME_M
+                d_A, d_B, perm, (A_tris, B_tris, (matched_tris, max_tris, _, best_matching)) = fetch(future)
+            elseif method === EigenAlign_M || method == Degree_M || method === Random_M || method === LowRankEigenAlign_M
+                d_A, d_B, perm, (A_tris, B_tris, matched_tris, best_matching, _) = fetch(future)
+                max_tris = minimum((A_tris,B_tris))
+            end
+
+            accuracy_B_to_A = sum([1 for (i,j) in enumerate(perm) if get(best_matching,j,-1) == i])/n
+            accuracy_A_to_B = sum([1 for (i,j) in enumerate(perm) if get(best_matching,i,-1) == j])/n
+
+            accuracy = max(accuracy_B_to_A,accuracy_A_to_B)
+            D_A = sum(d_A)
+            D_B = sum(d_B)
+
             if kwargs[:noise_model] === DuplicationNoise()
-                if method === ΛTAME_M() && kwargs[:matchingMethod] === ΛTAME_GramMatching()
-                    perm, dup_vertices, (A_tris, B_tris,(matched_tris, max_tris,best_matching)) = fetch(future)
-                elseif (typeof(method) === ΛTAME_M && kwargs[:matchingMethod] === ΛTAME_rankOneMatching()) ||  typeof(method) === LowRankTAME_M()
-                    perm, dup_vertices, (A_tris, B_tris,(matched_tris, max_tris, _, _,best_matching))= fetch(future)
-                elseif typeof(method) == TAME_M
-                    perm, dup_vertices, (A_tris, B_tris,(matched_tris, max_tris, _, best_matching))= fetch(future)
-                elseif typeof(method) === ΛTAME_MultiMotif_M
-                    if kwargs[:matchingMethod] === ΛTAME_GramMatching()
-                        #TODO: fix naming conventions
-                        perm,dup_vertices, (best_matching_score, max_motif_match, best_matched_motifs, best_matching) = fetch(future)
-                    else
-                        perm,dup_vertices, (best_matching_score, max_motif_match, best_matched_motifs, _, _, best_matching) = fetch(future)
-                    end
-                    A_tris = -1
-                    B_tris = -1
-                elseif typeof(method) === EigenAlign_M || typeof(method) == Degree_M || typeof(method) === Random_M || typeof(method) === LowRankEigenAlign_M
-                    perm, dup_vertices, (A_tris, B_tris, matched_tris, best_matching, _) = fetch(future)
-                    max_tris = minimum((A_tris,B_tris))
-                end
- 
-                accuracy_B_to_A = sum([1 for (i,j) in enumerate(perm) if get(best_matching,j,-1) == i])/n
-                accuracy_A_to_B = sum([1 for (i,j) in enumerate(perm) if get(best_matching,i,-1) == j])/n
-                #TODO: use a more robust method of catching how matchings are oriented
-                accuracy = max(accuracy_B_to_A,accuracy_A_to_B) 
-
-                dup_tolerant_perm = replaced_duplications_with_originals(perm,n, dup_vertices)
-                DT_accuracy_B_to_A = sum([1 for (i,j) in enumerate(dup_tolerant_perm) if get(best_matching,j,-1) == i])/n
-                DT_accuracy_A_to_B = sum([1 for (i,j) in enumerate(dup_tolerant_perm) if get(best_matching,i,-1) == j])/n
-                dup_vertex_tolerant_accuracy = max(DT_accuracy_B_to_A,DT_accuracy_A_to_B) 
-                
-
-                if typeof(method) === ΛTAME_MultiMotif_M
-                    push!(results,( seed, p, n, accuracy, dup_vertex_tolerant_accuracy, best_matching_score, max_motif_match, best_matched_motifs))
-                else
-                    push!(results,( seed, p, n, accuracy, dup_vertex_tolerant_accuracy, matched_tris, A_tris, B_tris, max_tris))
-                end
+                degree_weighted_accuracy = -1.0
             else
-                if method === ΛTAME_M() && kwargs[:matchingMethod] === ΛTAME_GramMatching()
-                    d_A, d_B, perm, (A_tris, B_tris,(matched_tris, max_tris,best_matching)) = fetch(future)
-                elseif (typeof(method) === ΛTAME_M && kwargs[:matchingMethod] === ΛTAME_rankOneMatching()) ||  typeof(method) === LowRankTAME_M
-                    d_A, d_B, perm, (A_tris, B_tris,(matched_tris, max_tris, _, _, best_matching)) = fetch(future)
-                elseif typeof(method) === ΛTAME_MultiMotif_M
-                    if kwargs[:matchingMethod] === ΛTAME_GramMatching()
-                        d_A, d_B, perm, (best_matching_score, max_motif_match, best_matched_motifs, best_matching) = fetch(future)
-                    else
-                        d_A, d_B, perm, (best_matching_score, max_motif_match,best_matched_motifs, _, _, best_matching) = fetch(future)
-                    end
-                elseif typeof(method) === TAME_M
-                    d_A, d_B, perm, (A_tris, B_tris, (matched_tris, max_tris, _, best_matching)) = fetch(future)
-                elseif typeof(method) === EigenAlign_M || typeof(method) == Degree_M || typeof(method) === Random_M || typeof(method) === LowRankEigenAlign_M
-                    d_A, d_B, perm, (A_tris, B_tris, matched_tris, best_matching, _) = fetch(future)
-                    max_tris = minimum((A_tris,B_tris))
-                end
+                degree_weighted_accuracy = sum([(get(best_matching,j,-1) == i) ? ((d_A[i] + d_B[j])/(D_A+D_B)) : 0.0 for (i,j) in enumerate(perm)])
+            end
 
-                accuracy_B_to_A = sum([1 for (i,j) in enumerate(perm) if get(best_matching,j,-1) == i])/n
-                accuracy_A_to_B = sum([1 for (i,j) in enumerate(perm) if get(best_matching,i,-1) == j])/n
-
-                accuracy = max(accuracy_B_to_A,accuracy_A_to_B)
-                D_A = sum(d_A)
-                D_B = sum(d_B)
-
-                if kwargs[:noise_model] === DuplicationNoise()
-                    degree_weighted_accuracy = -1.0
-                else
-                    degree_weighted_accuracy = sum([(get(best_matching,j,-1) == i) ? ((d_A[i] + d_B[j])/(D_A+D_B)) : 0.0 for (i,j) in enumerate(perm)])
-                end
-
-                if typeof(method) === ΛTAME_MultiMotif_M
-                    push!(results,( seed, p, n, accuracy, degree_weighted_accuracy, best_matching_score, max_motif_match, best_matched_motifs))
-                else
-                    push!(results,( seed, p, n, accuracy, degree_weighted_accuracy, matched_tris, A_tris, B_tris, max_tris))
-                end
+            if typeof(method) === ΛTAME_MultiMotif_M
+                push!(results,( seed, p, n, accuracy, degree_weighted_accuracy, best_matching_score, max_motif_match, best_matched_motifs))
+            else
+                push!(results,( seed, p, n, accuracy, degree_weighted_accuracy, matched_tris, A_tris, B_tris, max_tris))
             end
         end                    
     end
 
     return results
 
+end
+
+function distributed_random_trials(trial_count::Int,noise_model::DuplicationNoise,seed_exps::Bool=false;
+        method::AlignmentMethod=ΛTAME(),graph::RandomGraphType=ErdosRenyi(),
+        n_sizes = [100, 500, 1000, 2000,5000],edge_inclusion_p = [.5,1.0],
+        step_percentage=[.1],profile=false,kwargs...)
+
+    #only handling even batch sizes
+    #@assert trial_count % process_count == 0
+
+    #ensure file is loaded on all processes
+    @everywhere include_string(Main,$(read("LambdaTAME.jl",String)),"LambdaTAME.jl")
+
+
+    if seed_exps
+        Random.seed!(0)
+        seeds = rand(UInt64, length(step_percentage),length(edge_inclusion_p),length(n_sizes), trial_count)
+    end
+
+    seed = nothing
+    results = []
+
+    step_index = 1
+    p_index = 1
+
+    futures = []
+
+    for sp in step_percentage
+
+        p_index = 1
+        for p in edge_inclusion_p
+
+            n_index = 1
+
+            for n in n_sizes
+
+                for trial = 1:trial_count
+
+                    if seed_exps
+                        seed = seeds[step_index,p_index,n_index,trial]
+                    end
+                    random_graph_exp(n,p,graph; profile=profile,noise_model=noise_model,step_percent=sp,
+                                                     seed=seed,method=method, kwargs...)
+                    future = @spawn random_graph_exp(n,p,graph; profile=profile,noise_model=noise_model,step_percent=sp,
+                                                     seed=seed,method=method, kwargs...)
+                    push!(futures,(seed,p,n,sp,future))
+                end
+                n_index += 1
+            end
+            p_index += 1
+        end
+        step_index += 1
+    end
+
+    #TODO: fix parsing of returned functions
+    for (seed,p,n,sp,future) in futures
+        if profile 
+
+            if method === ΛTAME_M() && kwargs[:matchingMethod] === ΛTAME_GramMatching()
+                perm,dup_vertices, (A_tris, B_tris,(matched_tris, max_tris,best_matching, exp_results)) = fetch(future)
+            elseif (method === ΛTAME_M && kwargs[:matchingMethod] === ΛTAME_rankOneMatching()) ||  method === LowRankTAME_M()
+                perm,dup_vertices, (A_tris, B_tris,(matched_tris, max_tris, _, _,best_matching, exp_results))= fetch(future)
+            elseif method === TAME_M
+                perm,dup_vertices, (A_tris, B_tris,(matched_tris, max_tris, _, best_matching, exp_results))= fetch(future)
+            end
+
+            accuracy_B_to_A = sum([1 for (i,j) in enumerate(perm) if get(best_matching,j,-1) == i])/n
+            accuracy_A_to_B = sum([1 for (i,j) in enumerate(perm) if get(best_matching,i,-1) == j])/n
+            #TODO: use a more robust method of catching how matchings are oriented
+            accuracy = max(accuracy_B_to_A,accuracy_A_to_B) 
+
+            dup_tolerant_perm = replaced_duplications_with_originals(perm,n, dup_vertices)
+            DT_accuracy_B_to_A = sum([1 for (i,j) in enumerate(dup_tolerant_perm) if get(best_matching,j,-1) == i])/n
+            DT_accuracy_A_to_B = sum([1 for (i,j) in enumerate(dup_tolerant_perm) if get(best_matching,i,-1) == j])/n
+            dup_vertex_tolerant_accuracy = max(DT_accuracy_B_to_A,DT_accuracy_A_to_B) 
+            
+            push!(results,(seed, p, n, sp, accuracy, dup_vertex_tolerant_accuracy, matched_tris, A_tris, B_tris, max_tris, exp_results))
+
+        else
+
+            if method === ΛTAME_M() && kwargs[:matchingMethod] === ΛTAME_GramMatching()
+                perm, dup_vertices, (A_tris, B_tris,(matched_tris, max_tris,best_matching)) = fetch(future)
+            elseif (method === ΛTAME_M && kwargs[:matchingMethod] === ΛTAME_rankOneMatching()) ||  method === LowRankTAME_M()
+                perm, dup_vertices, (A_tris, B_tris,(matched_tris, max_tris, _, _,best_matching))= fetch(future)
+            elseif method === TAME_M
+                perm, dup_vertices, (A_tris, B_tris,(matched_tris, max_tris, _, best_matching))= fetch(future)
+            elseif method === ΛTAME_MultiMotif_M
+                if kwargs[:matchingMethod] === ΛTAME_GramMatching()
+                    #TODO: fix naming conventions
+                    perm,dup_vertices, (best_matching_score, max_motif_match, best_matched_motifs, best_matching) = fetch(future)
+                else
+                    perm,dup_vertices, (best_matching_score, max_motif_match, best_matched_motifs, _, _, best_matching) = fetch(future)
+                end
+                A_tris = -1
+                B_tris = -1
+            elseif method === EigenAlign_M || method == Degree_M || method === Random_M || method === LowRankEigenAlign_M
+                perm, dup_vertices, (A_tris, B_tris, matched_tris, best_matching, _) = fetch(future)
+                max_tris = minimum((A_tris,B_tris))
+            end
+
+            accuracy_B_to_A = sum([1 for (i,j) in enumerate(perm) if get(best_matching,j,-1) == i])/n
+            accuracy_A_to_B = sum([1 for (i,j) in enumerate(perm) if get(best_matching,i,-1) == j])/n
+            #TODO: use a more robust method of catching how matchings are oriented
+            accuracy = max(accuracy_B_to_A,accuracy_A_to_B) 
+
+            dup_tolerant_perm = replaced_duplications_with_originals(perm,n, dup_vertices)
+            DT_accuracy_B_to_A = sum([1 for (i,j) in enumerate(dup_tolerant_perm) if get(best_matching,j,-1) == i])/n
+            DT_accuracy_A_to_B = sum([1 for (i,j) in enumerate(dup_tolerant_perm) if get(best_matching,i,-1) == j])/n
+            dup_vertex_tolerant_accuracy = max(DT_accuracy_B_to_A,DT_accuracy_A_to_B) 
+            
+
+            if typeof(method) === ΛTAME_MultiMotif_M
+                push!(results,( seed, p, n, sp, accuracy, dup_vertex_tolerant_accuracy, best_matching_score, max_motif_match, best_matched_motifs))
+            else
+                push!(results,( seed, p, n, sp, accuracy, dup_vertex_tolerant_accuracy, matched_tris, A_tris, B_tris, max_tris))
+            end
+
+        end                    
+    end    
+    return results
 end
 
 #used as a helper function for mapping duplicated vertices back to vertices in original graph 
@@ -715,7 +773,6 @@ function SSHOPM_exp(tensor_A_file::String, tensor_B_file::String,output_path::St
     #    - > : > + 
     exp_filename = output_path*"align:$(A_root)+$(B_root)-beta:$β-max_iter:$max_iter-samples:$samples-seed:$seed-tol:$tol-results.json"
 
-    println("test")
 
     relative_λ_diff, extremal_idx, eig_vals, extremal_vecs = SSHOPM_exp(A,B,samples,tol,max_iter,β,seed)
 
@@ -805,6 +862,8 @@ end
   randomly permuted. All additional kwargs are passed to the 'align_matrices' 
   function.
 
+  #TODO: update docs
+
   Inputs
   ------
   * n - (Int):
@@ -844,11 +903,11 @@ end
       the precision of the methods. 
     * All additional return variables are from 'align_matrices' function call. 
 -----------------------------------------------------------------------------"""
-function random_graph_exp(n::Int, perturbation_p::Float64,graph::RandomGraphType;noise_model::NoiseModelFlag,
-                          seed=nothing,use_metis=false,degreedist=nothing,p_edges=nothing,kwargs...)
+function random_graph_exp(n::Int, perturbation_p::Float64,graph::RandomGraphType;
+                          noise_model::NoiseModelFlag,seed=nothing,step_percent=.1,
+                          use_metis=false,degreedist=nothing,p_edges=nothing,kwargs...)
 
     if seed !== nothing
-        
 		Random.seed!(seed)
 	end
 
@@ -897,8 +956,7 @@ function random_graph_exp(n::Int, perturbation_p::Float64,graph::RandomGraphType
         #B = ER_noise_model(A,0.0,perturbation_p)#,p_add)
         B = ER_noise_model(A,perturbation_p,p_add)
     elseif  typeof(noise_model) === DuplicationNoise
-       
-        steps = Int(ceil(.1*size(A,1))) #adds in 10% new nodes
+        steps = Int(ceil(step_percent*size(A,1))) #adds in 10% new nodes by default
         B,dup_vertices = duplication_perturbation_noise_model(A,steps, perturbation_p)
     end
 
@@ -948,12 +1006,16 @@ function ER_noise_model(A,p_remove::F,p_add::F) where {F <: AbstractFloat}
     return B
 end
 
-function duplication_perturbation_noise_model(A::SparseMatrixCSC{T,Int},steps::Integer, new_edge_p::Float64) where T
+function duplication_perturbation_noise_model(A::SparseMatrixCSC{T,Int},steps::Integer, new_edge_p::Float64,seed::Union{UInt,Nothing}=nothing) where T
  
     is_undirected(A)                      || throw(ArgumentError("A must be undirected."))
     (new_edge_p >= 0 && new_edge_p <= 1)  || throw(ArgumentError("new_edge_p must be a probability."))
     steps >= 0                            || throw(ArgumentError("Must take a non-negative number of steps."))
     # let it steps equal 0 for testing purposes
+
+    if seed !== nothing 
+        Random.seed!(seed)
+    end
 
     duplicated_vertices = Array{Int,1}(undef, steps)
 
