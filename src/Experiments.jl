@@ -5,6 +5,7 @@ struct LowRankTAME_M <: AlignmentMethod end
 struct TAME_M <: AlignmentMethod end
 struct EigenAlign_M <: AlignmentMethod end
 struct LowRankEigenAlign_M <: AlignmentMethod end
+struct LowRankEigenAlignOnlyEdges_M <: AlignmentMethod end
 struct Degree_M <: AlignmentMethod end
 struct Random_M <: AlignmentMethod end
 
@@ -421,7 +422,6 @@ function distributed_random_trials(trial_count::Int,noise_model::ErdosRenyiNoise
                 if seed_exps
                     seed = seeds[p_index,n_index,trial]
                 end
-                println(seed)
                 future = @spawn random_graph_exp(n,p,graph; profile=profile,seed=seed,
                                                  method=method,noise_model=noise_model,
                                                  kwargs...)
@@ -440,9 +440,9 @@ function distributed_random_trials(trial_count::Int,noise_model::ErdosRenyiNoise
          
             if method === ΛTAME_M() && kwargs[:matchingMethod] === ΛTAME_GramMatching()
                 d_A, d_B, perm, (A_tris, B_tris,(matched_tris, max_tris,best_matching, exp_results)) = fetch(future)
-            elseif (method === ΛTAME_M && kwargs[:matchingMethod] === ΛTAME_rankOneMatching()) ||  method === LowRankTAME_M()
+            elseif (method === ΛTAME_M() && kwargs[:matchingMethod] === ΛTAME_rankOneMatching()) ||  method === LowRankTAME_M()
                 d_A, d_B, perm, (A_tris, B_tris,(matched_tris, max_tris, _, _,best_matching, exp_results))= fetch(future)
-            elseif method === TAME_M
+            elseif method === TAME_M()
                 d_A, d_B, perm, (A_tris, B_tris,(matched_tris, max_tris, _, best_matching, exp_results))= fetch(future)
             end
 
@@ -459,17 +459,17 @@ function distributed_random_trials(trial_count::Int,noise_model::ErdosRenyiNoise
         else
             if method === ΛTAME_M() && kwargs[:matchingMethod] === ΛTAME_GramMatching()
                 d_A, d_B, perm, (A_tris, B_tris,(matched_tris, max_tris,best_matching)) = fetch(future)
-            elseif (method === ΛTAME_M && kwargs[:matchingMethod] === ΛTAME_rankOneMatching()) ||  method === LowRankTAME_M
+            elseif (method === ΛTAME_M() && kwargs[:matchingMethod] === ΛTAME_rankOneMatching()) ||  method === LowRankTAME_M
                 d_A, d_B, perm, (A_tris, B_tris,(matched_tris, max_tris, _, _, best_matching)) = fetch(future)
-            elseif method === ΛTAME_MultiMotif_M
+            elseif method === ΛTAME_MultiMotif_M()
                 if kwargs[:matchingMethod] === ΛTAME_GramMatching()
                     d_A, d_B, perm, (best_matching_score, max_motif_match, best_matched_motifs, best_matching) = fetch(future)
                 else
                     d_A, d_B, perm, (best_matching_score, max_motif_match,best_matched_motifs, _, _, best_matching) = fetch(future)
                 end
-            elseif method === TAME_M
+            elseif method === TAME_M()
                 d_A, d_B, perm, (A_tris, B_tris, (matched_tris, max_tris, _, best_matching)) = fetch(future)
-            elseif method === EigenAlign_M || method == Degree_M || method === Random_M || method === LowRankEigenAlign_M
+            elseif method === EigenAlign_M() || method == Degree_M() || method === Random_M() || method === LowRankEigenAlign_M() || method === LowRankEigenAlignOnlyEdges_M()
                 d_A, d_B, perm, (A_tris, B_tris, matched_tris, best_matching, _) = fetch(future)
                 max_tris = minimum((A_tris,B_tris))
             end
@@ -481,12 +481,8 @@ function distributed_random_trials(trial_count::Int,noise_model::ErdosRenyiNoise
             D_A = sum(d_A)
             D_B = sum(d_B)
 
-            if kwargs[:noise_model] === DuplicationNoise()
-                degree_weighted_accuracy = -1.0
-            else
-                degree_weighted_accuracy = sum([(get(best_matching,j,-1) == i) ? ((d_A[i] + d_B[j])/(D_A+D_B)) : 0.0 for (i,j) in enumerate(perm)])
-            end
-
+            degree_weighted_accuracy = sum([(get(best_matching,j,-1) == i) ? ((d_A[i] + d_B[j])/(D_A+D_B)) : 0.0 for (i,j) in enumerate(perm)])
+  
             if typeof(method) === ΛTAME_MultiMotif_M
                 push!(results,( seed, p, n, accuracy, degree_weighted_accuracy, best_matching_score, max_motif_match, best_matched_motifs))
             else
@@ -538,8 +534,6 @@ function distributed_random_trials(trial_count::Int,noise_model::DuplicationNois
                     if seed_exps
                         seed = seeds[step_index,p_index,n_index,trial]
                     end
-                    random_graph_exp(n,p,graph; profile=profile,noise_model=noise_model,step_percent=sp,
-                                                     seed=seed,method=method, kwargs...)
                     future = @spawn random_graph_exp(n,p,graph; profile=profile,noise_model=noise_model,step_percent=sp,
                                                      seed=seed,method=method, kwargs...)
                     push!(futures,(seed,p,n,sp,future))
@@ -579,9 +573,9 @@ function distributed_random_trials(trial_count::Int,noise_model::DuplicationNois
 
             if method === ΛTAME_M() && kwargs[:matchingMethod] === ΛTAME_GramMatching()
                 perm, dup_vertices, (A_tris, B_tris,(matched_tris, max_tris,best_matching)) = fetch(future)
-            elseif (method === ΛTAME_M && kwargs[:matchingMethod] === ΛTAME_rankOneMatching()) ||  method === LowRankTAME_M()
+            elseif (method === ΛTAME_M() && kwargs[:matchingMethod] === ΛTAME_rankOneMatching()) ||  method === LowRankTAME_M()
                 perm, dup_vertices, (A_tris, B_tris,(matched_tris, max_tris, _, _,best_matching))= fetch(future)
-            elseif method === TAME_M
+            elseif method === TAME_M()
                 perm, dup_vertices, (A_tris, B_tris,(matched_tris, max_tris, _, best_matching))= fetch(future)
             elseif method === ΛTAME_MultiMotif_M
                 if kwargs[:matchingMethod] === ΛTAME_GramMatching()
@@ -592,7 +586,7 @@ function distributed_random_trials(trial_count::Int,noise_model::DuplicationNois
                 end
                 A_tris = -1
                 B_tris = -1
-            elseif method === EigenAlign_M || method == Degree_M || method === Random_M || method === LowRankEigenAlign_M
+            elseif method === EigenAlign_M() || method == Degree_M() || method === Random_M() || method === LowRankEigenAlign_M() || method === LowRankEigenAlignOnlyEdges_M()
                 perm, dup_vertices, (A_tris, B_tris, matched_tris, best_matching, _) = fetch(future)
                 max_tris = minimum((A_tris,B_tris))
             end
@@ -974,6 +968,7 @@ function random_graph_exp(n::Int, perturbation_p::Float64,graph::RandomGraphType
     d_A = A*ones(size(A,1))
     d_B = B*ones(size(B,1))
 
+
     if typeof(noise_model) === DuplicationNoise
         perm,dup_vertices,align_matrices(A,B;kwargs...)
     else
@@ -1117,12 +1112,14 @@ function align_matrices(A::SparseMatrixCSC{T,Int},B::SparseMatrixCSC{S,Int};prof
         subkwargs = Dict([(k,v) for (k,v) in kwargs if k != :orders && k != :samples])
         return align_tensors(A_tensors,B_tensors;subkwargs...)
 
-    elseif method === EigenAlign_M || method === Degree_M || method === Random_M || method === LowRankEigenAlign_M
+    elseif method === EigenAlign_M || method === Degree_M || method === Random_M || method === LowRankEigenAlign_M || method === LowRankEigenAlignOnlyEdges_M
         
         if method === LowRankEigenAlign_M
             iters = 10
             (ma,mb,_,_),t = @timed align_networks_eigenalign(A,B,iters,"lowrank_svd_union",3)
             matching = Dict{Int,Int}([i=>j for (i,j) in zip(ma,mb)]) 
+        elseif method === LowRankEigenAlignOnlyEdges_M
+            matching,t =@timed lowRankEigenAlignEdgesOnly(A,B) 
         elseif method === EigenAlign_M
             (ma,mb),t = @timed NetworkAlignment.EigenAlign(A,B)
             matching = Dict{Int,Int}(zip(ma,mb))
@@ -1139,7 +1136,7 @@ function align_matrices(A::SparseMatrixCSC{T,Int},B::SparseMatrixCSC{S,Int};prof
         triangle_count, gaped_triangles, _ = TAME_score(A_ten,B_ten,matching) 
         return size(A_ten.indices,1), size(B_ten.indices,1), triangle_count, matching, t 
     else
-        throw(ArgumentError("method must be of type LambdaTAME_M, LowRankTAME_M, TAME_M, EigenAlign_M, LowRankEigenAlign_M, Degree_M, or Random_M."))
+        throw(ArgumentError("method must be of type LambdaTAME_M, LowRankTAME_M, TAME_M, EigenAlign_M, LowRankEigenAlign_M, LowRankEigenAlignEdgesOnly_M, Degree_M, or Random_M."))
     end
 
     
