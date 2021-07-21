@@ -48,7 +48,7 @@ function align_tensors(A::Union{ThirdOrderSymTensor,SymTensorUnweighted,Array{Sy
 		#flip the matchings if A and B were swapped
 		if typeof(method) === ΛTAME_M
 			if kwargs[:matchingMethod] === ΛTAME_rankOneMatching()
-				best_TAME_PP_tris, max_triangle_match, U_best, V_best, best_matching,profile = results
+				best_TAME_PP_tris, max_triangle_match, U_best, V_best, best_matching = results
 				return best_TAME_PP_tris, max_triangle_match, U_best, V_best, Dict((j,i) for (i,j) in best_matching)
 			else 
 				best_matched_motifs, max_motif_match, best_matching = results
@@ -124,7 +124,7 @@ function align_tensors_profiled(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor;
 		#flip the matchings if A and B were swapped
 		if typeof(method) === ΛTAME_M 
 			if kwargs[:matchingMethod] === ΛTAME_rankOneMatching()
-				best_TAME_PP_tris, max_triangle_match, U_best, V_best, best_matching,profile = results
+				best_TAME_PP_tris, max_triangle_match, U_best, V_best, best_matching, profile = results
 				return best_TAME_PP_tris, max_triangle_match, U_best, V_best, Dict((j,i) for (i,j) in best_matching), profile
 			else 
 				best_matched_motifs, max_motif_match, best_matching, profile= results
@@ -522,7 +522,7 @@ function ΛTAME(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor, β::Float64,
     U[:,1] /=norm(U[:,1])
 
     V[:,1] = ones(B.n)
-    V[:,1] /=norm(U[:,1])
+    V[:,1] /=norm(V[:,1])
 
     sqrt_β = β^(.5)
 
@@ -565,6 +565,7 @@ function ΛTAME(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor, β::Float64,
     end
 
 end
+
 
 function ΛTAME(A::SymTensorUnweighted, B::SymTensorUnweighted, β::Float64,
 	max_iter::Int,tol::Float64,α::Float64;update_user=-1)
@@ -846,7 +847,9 @@ function LowRankTAME(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor,
 			if low_rank_matching
 				triangles, gaped_triangles,matching = TAME_score(A,B,U_k_1,V_k_1)
 			else
+
 				triangles, gaped_triangles,matching = TAME_score(A,B,U_k_1*V_k_1')
+				
 			end
 
 			if triangles > best_triangle_count
