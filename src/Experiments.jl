@@ -330,6 +330,7 @@ function distributed_pairwise_alignment(files::Array{String,1},dirpath::String;
             max_tris = min(A_tens, B_tens)
             profile = true
 		end
+        
 		if profile
 			push!(exp_results,(files[i],files[j],matched_tris, max_tris, best_matching, results))
 		else
@@ -506,6 +507,7 @@ function distributed_random_trials(trial_count::Int,noise_model::DuplicationNois
     #ensure file is loaded on all processes
     @everywhere include_string(Main,$(read("LambdaTAME.jl",String)),"LambdaTAME.jl")
 
+    
 
     if seed_exps
         Random.seed!(0)
@@ -548,7 +550,7 @@ function distributed_random_trials(trial_count::Int,noise_model::DuplicationNois
     #TODO: fix parsing of returned functions
     for (seed,p,n,sp,future) in futures
         if profile 
-
+            
             if method === ΛTAME_M() && kwargs[:matchingMethod] === ΛTAME_GramMatching()
                 perm,dup_vertices, (A_tris, B_tris,(matched_tris, max_tris,best_matching, exp_results)) = fetch(future)
             elseif (method === ΛTAME_M && kwargs[:matchingMethod] === ΛTAME_rankOneMatching()) ||  method === LowRankTAME_M()
@@ -571,16 +573,19 @@ function distributed_random_trials(trial_count::Int,noise_model::DuplicationNois
 
         else
 
+            println(method)
             if method === ΛTAME_M() && kwargs[:matchingMethod] === ΛTAME_GramMatching()
                 perm, dup_vertices, (A_tris, B_tris,(matched_tris, max_tris,best_matching)) = fetch(future)
             elseif (method === ΛTAME_M() && kwargs[:matchingMethod] === ΛTAME_rankOneMatching()) ||  method === LowRankTAME_M()
                 perm, dup_vertices, (A_tris, B_tris,(matched_tris, max_tris, _, _,best_matching))= fetch(future)
             elseif method === TAME_M()
                 perm, dup_vertices, (A_tris, B_tris,(matched_tris, max_tris, _, best_matching))= fetch(future)
-            elseif method === ΛTAME_MultiMotif_M
+            elseif method === ΛTAME_MultiMotif_M()
+ 
                 if kwargs[:matchingMethod] === ΛTAME_GramMatching()
                     #TODO: fix naming conventions
-                    perm,dup_vertices, (best_matching_score, max_motif_match, best_matched_motifs, best_matching) = fetch(future)
+                    println("made it")
+                    perm, dup_vertices, (best_matching_score, max_motif_match, best_matched_motifs, best_matching) = fetch(future)
                 else
                     perm,dup_vertices, (best_matching_score, max_motif_match, best_matched_motifs, _, _, best_matching) = fetch(future)
                 end
@@ -656,10 +661,10 @@ function ΛTAME_matching_exp(A_file::String, B_file::String, output_file::String
 
 end
 
-function ΛTAME_matching_exp(A::Union{ThirdOrderSymTensor,SymTensorUnweighted},
-                            B::Union{ThirdOrderSymTensor,SymTensorUnweighted},
+function ΛTAME_matching_exp(A::Union{ThirdOrderSymTensor,SymTensorUnweighted{S}},
+                            B::Union{ThirdOrderSymTensor,SymTensorUnweighted{S}},
                             max_iter::Int,alphas::Array{Float64,1}=[.5,1.0],
-                            betas::Array{Float64,1}=[0.0,1.0,10.0,100.0])
+                            betas::Array{Float64,1}=[0.0,1.0,10.0,100.0]) where {S <:Motif}
 
     tol = 1e-16 # we want to track how triangles change over iterations
 
@@ -1091,7 +1096,8 @@ end
   If a tensor method is used, the number of triangles in A and B are returned, in
   addition to whatever is returned by 'align_tensors(_profiled)'.
 ------------------------------------------------------------------------------"""
-function align_matrices(A::SparseMatrixCSC{T,Int},B::SparseMatrixCSC{S,Int};profile=false,kwargs...) where {T,S}
+function align_matrices(A::SparseMatrixCSC{T,Int},B::SparseMatrixCSC{S,Int};profile=false,
+                        motif=Clique(),kwargs...) where {T,S}
 
     A_ten = graph_to_ThirdOrderTensor(A)
     B_ten = graph_to_ThirdOrderTensor(B)
@@ -1106,8 +1112,8 @@ function align_matrices(A::SparseMatrixCSC{T,Int},B::SparseMatrixCSC{S,Int};prof
         end
     elseif method === ΛTAME_MultiMotif_M
 
-        A_tensors = tensors_from_graph(A,kwargs[:orders],kwargs[:samples])        
-        B_tensors = tensors_from_graph(B,kwargs[:orders],kwargs[:samples])
+        A_tensors = tensors_from_graph(A,kwargs[:orders],kwargs[:samples],motif)        
+        B_tensors = tensors_from_graph(B,kwargs[:orders],kwargs[:samples],motif)
 
         subkwargs = Dict([(k,v) for (k,v) in kwargs if k != :orders && k != :samples])
         return align_tensors(A_tensors,B_tensors;subkwargs...)

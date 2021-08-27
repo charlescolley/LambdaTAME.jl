@@ -37,13 +37,14 @@ struct ΛTAME_rankOneMatching <: MatchingMethod end
 	  and V components of the best iterate. 
 
 -----------------------------------------------------------------------------"""
-function align_tensors(A::Union{ThirdOrderSymTensor,SymTensorUnweighted,Array{SymTensorUnweighted,1}}, 
-	                   B::Union{ThirdOrderSymTensor,SymTensorUnweighted,Array{SymTensorUnweighted,1}};
-					   method::AlignmentMethod=ΛTAME_M(),no_matching=false,kwargs...)
+function align_tensors(A::Union{ThirdOrderSymTensor,SymTensorUnweighted{S}}, 
+	                   B::Union{ThirdOrderSymTensor,SymTensorUnweighted{S}}; 
+					   method::AlignmentMethod=ΛTAME_M(),no_matching=false,kwargs...) where {S <: Motif}
 
 	#TODO: test if ternary is a problem
 	#put larger tensor on the left
-	if typeof(A) !== Array{SymTensorUnweighted,1} && B.n > A.n
+	if B.n > A.n
+		#TODO: this typeof(A) may fail
 		results = align_tensors(B,A;method = method, no_matching=no_matching,kwargs...)
 		#flip the matchings if A and B were swapped
 		if typeof(method) === ΛTAME_M
@@ -61,7 +62,25 @@ function align_tensors(A::Union{ThirdOrderSymTensor,SymTensorUnweighted,Array{Sy
 			best_TAME_PP_tris, max_triangle_match, best_TAME_PP_x, best_matching = results
 			return best_TAME_PP_tris, max_triangle_match, best_TAME_PP_x, Dict((j,i) for (i,j) in best_matching)
 		end
-	elseif (typeof(A) === Array{SymTensorUnweighted,1}) && (B[1].n > A[1].n)
+	end
+
+	if typeof(method) === ΛTAME_M || typeof(method) === ΛTAME_MultiMotif_M
+		return ΛTAME_param_search(A,B;kwargs...)
+	elseif typeof(method) === LowRankTAME_M
+		return LowRankTAME_param_search(A,B;no_matching = no_matching,kwargs...)
+	elseif typeof(method) === TAME_M
+		return TAME_param_search(A,B;no_matching = no_matching,kwargs...)
+	else
+		throw(ArgumentError("method must be one of LambdaTAME_M,ΛTAME_MultiMotif_M, LowRankTAME_M, or TAME_M."))
+	end
+
+end
+
+function align_tensors(A::Array{SymTensorUnweighted{S},1}, B::Array{SymTensorUnweighted{S},1}; 
+			           method::AlignmentMethod=ΛTAME_M(),no_matching=false,kwargs...) where {S <: Motif}
+
+
+	if (B[1].n > A[1].n)
 		results = align_tensors(B,A;method = method, no_matching=no_matching,kwargs...)
 		return results[1:end-1]..., Dict((j,i) for (i,j) in results[end])
 	end
@@ -77,6 +96,9 @@ function align_tensors(A::Union{ThirdOrderSymTensor,SymTensorUnweighted,Array{Sy
 	end
 
 end
+
+
+
 
 """------------------------------------------------------------------------------
   This function aligns graphs using their tensor representations and returns the
@@ -201,11 +223,11 @@ function ΛTAME_param_search(A,B;#duck type tensor inputs
 
 end
 
-function ΛTAME_param_search(A_tensors::Array{SymTensorUnweighted,1},B_tensors::Array{SymTensorUnweighted,1};
+function ΛTAME_param_search(A_tensors::Array{SymTensorUnweighted{S},1},B_tensors::Array{SymTensorUnweighted{S},1};
 							iter::Int = 15,tol::Float64=1e-6,
 							alphas::Array{F,1}=[.5,1.0],
 							betas::Array{F,1} =[1000.0,100.0,10.0,1.0,0.0,0.1,0.01,0.001],
-							matchingMethod::MatchingMethod=ΛTAME_rankOneMatching()) where {F <: AbstractFloat}
+							matchingMethod::MatchingMethod=ΛTAME_rankOneMatching()) where {F <: AbstractFloat, S <: Motif}
 
 	max_motif_match = [min(size(A.indices,2),size(B.indices,2)) for (A,B) in zip(A_tensors,B_tensors)]
 	total_triangles = [size(A.indices,2) + size(B.indices,2) for (A,B) in zip(A_tensors,B_tensors)]
@@ -228,7 +250,6 @@ function ΛTAME_param_search(A_tensors::Array{SymTensorUnweighted,1},B_tensors::
 
 			U,V = ΛTAME(A_tensors,B_tensors,beta,iter,tol,α)
 
-			
 			if typeof(matchingMethod) === ΛTAME_rankOneMatching
 				matching_score, matched_motifs, i, j, matching = search_Krylov_space(A_tensors,B_tensors,U,V)
 			elseif typeof(matchingMethod) === ΛTAME_GramMatching
@@ -567,8 +588,8 @@ function ΛTAME(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor, β::Float64,
 end
 
 
-function ΛTAME(A::SymTensorUnweighted, B::SymTensorUnweighted, β::Float64,
-	max_iter::Int,tol::Float64,α::Float64;update_user=-1)
+function ΛTAME(A::SymTensorUnweighted{S}, B::SymTensorUnweighted{S}, β::Float64,
+	max_iter::Int,tol::Float64,α::Float64;update_user=-1) where {S <: Motif}
 
 	U = zeros(A.n,max_iter+1)
 	V = zeros(B.n,max_iter+1) #store initial in first column
@@ -630,8 +651,8 @@ function ΛTAME(A::SymTensorUnweighted, B::SymTensorUnweighted, β::Float64,
 
 end
 
-function ΛTAME(A_tensors::Array{SymTensorUnweighted,1}, B_tensors::Array{SymTensorUnweighted,1}, β::Float64,
-	max_iter::Int,tol::Float64,α::Float64;update_user=-1)
+function ΛTAME(A_tensors::Array{SymTensorUnweighted{S},1}, B_tensors::Array{SymTensorUnweighted{S},1}, β::Float64,
+	max_iter::Int,tol::Float64,α::Float64;update_user=-1) where {S <: Motif}
 
 	@assert length(A_tensors) == length(B_tensors)
 	for i =1:length(A_tensors)

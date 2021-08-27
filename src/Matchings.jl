@@ -113,7 +113,7 @@ function search_Krylov_space(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor,U::Ar
     return best_score, best_i, best_j, best_matching
 end
 
-function search_Krylov_space(A::SymTensorUnweighted,B::SymTensorUnweighted,U::Array{Float64,2},V::Array{Float64,2})
+function search_Krylov_space(A::SymTensorUnweighted{S},B::SymTensorUnweighted{S},U::Array{Float64,2},V::Array{Float64,2} )where {S <: Motif}
 
 
     A_order,A_unique_nnz = size(A.indices)
@@ -209,7 +209,7 @@ function search_Krylov_space(A::Array{SymTensorUnweighted,1},B::Array{SymTensorU
 end
 =#
 
-function search_Krylov_space(A::Array{SymTensorUnweighted,1},B::Array{SymTensorUnweighted,1},U::Array{Float64,2},V::Array{Float64,2})
+function search_Krylov_space(A::Array{SymTensorUnweighted{S},1},B::Array{SymTensorUnweighted{S},1},U::Array{Float64,2},V::Array{Float64,2}) where {S <: Motif}
 
     @assert length(A) == length(B)
     for i = 1:length(A) #ensure orders are the same at each i
@@ -311,8 +311,8 @@ function TAME_score(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor, X::SparseMat
 
 end
 
-function TAME_score(A::Union{ThirdOrderSymTensor,Array{SymTensorUnweighted,1}},
-                    B::Union{ThirdOrderSymTensor,SymTensorUnweighted,Array{SymTensorUnweighted,1}},X::Array{Float64,2};return_timings=false)
+function TAME_score(A::Union{ThirdOrderSymTensor,Array{SymTensorUnweighted{S},1}},
+                    B::Union{ThirdOrderSymTensor,SymTensorUnweighted{S},Array{SymTensorUnweighted{S},1}},X::Array{Float64,2};return_timings=false) where {S <: Motif}
 
     if return_timings
         (_,_,matching,_) ,matching_time = @timed bipartite_matching_primal_dual(X)
@@ -324,7 +324,7 @@ function TAME_score(A::Union{ThirdOrderSymTensor,Array{SymTensorUnweighted,1}},
     end
 end
 
-function TAME_score(A::SymTensorUnweighted,B::SymTensorUnweighted,X::Array{Float64,2};return_timings=false)
+function TAME_score(A::SymTensorUnweighted{S},B::SymTensorUnweighted{S},X::Array{Float64,2};return_timings=false) where {S <: Motif}
 
     if return_timings
         (_,_,matching,_) ,matching_time = @timed bipartite_matching_primal_dual(X)
@@ -333,6 +333,7 @@ function TAME_score(A::SymTensorUnweighted,B::SymTensorUnweighted,X::Array{Float
     else
         _,_,matching,_ = bipartite_matching_primal_dual(X)
         return TAME_score(A,B,Dict(i => j for (i,j) in enumerate(matching)))
+        #BUG?
     end
 end
 
@@ -437,7 +438,7 @@ function TAME_score(Triangle_Dict::Dict{Array{Int,1},Int},Input_tensor::ThirdOrd
 end
 
 #TODO: may remove the array mapping routines 
-function TAME_score(A::SymTensorUnweighted,B::SymTensorUnweighted, mapping::Array{Int,1})
+function TAME_score(A::SymTensorUnweighted{S},B::SymTensorUnweighted{S}, mapping::Array{Int,1}) where {S <: Motif}
 
     @assert size(A.indices,1) == size(B.indices,1)
 
@@ -474,7 +475,7 @@ function TAME_score(A::SymTensorUnweighted,B::SymTensorUnweighted, mapping::Arra
 
 end
 
-function TAME_score(A::Array{SymTensorUnweighted,1},B::Array{SymTensorUnweighted,1},A_to_B_mapping::Dict{Int,Int})
+function TAME_score(A::Array{SymTensorUnweighted{S},1},B::Array{SymTensorUnweighted{S},1},A_to_B_mapping::Dict{Int,Int}) where {S <: Motif}
 
     @assert length(A) == length(B)
     for i = 1:length(A) #ensure orders are the same at each i
@@ -519,7 +520,7 @@ function TAME_score(A::Array{SymTensorUnweighted,1},B::Array{SymTensorUnweighted
 end
 
 #TODO: may remove, see above
-function TAME_score(A_motifs::Dict{Array{Int,1},Int}, B::SymTensorUnweighted, mapping::Array{Int,1})
+function TAME_score(A_motifs::Dict{Array{Int,1},Int}, B::SymTensorUnweighted{S}, mapping::Array{Int,1}) where {S <:Motif}
 
   
     order =  size(B.indices,1)
@@ -541,10 +542,10 @@ function TAME_score(A_motifs::Dict{Array{Int,1},Int}, B::SymTensorUnweighted, ma
 
 end
 
-function TAME_score(A::SymTensorUnweighted,B::SymTensorUnweighted, mapping::Dict{Int,Int})
+function TAME_score(A::SymTensorUnweighted{Clique},B::SymTensorUnweighted{Clique}, mapping::Dict{Int,Int})
 
     @assert size(A.indices,1) == size(B.indices,1)
-
+    println("using clique code")
 
     if size(B.indices,2) > size(A.indices,2)
         inverted_mapping = Dict{Int,Int}()
@@ -577,11 +578,57 @@ function TAME_score(A::SymTensorUnweighted,B::SymTensorUnweighted, mapping::Dict
         end
 
     end
-    return matched_motifs,gaped_motifs,  mapping
+    return matched_motifs, gaped_motifs,  mapping
 
 end
 
-function TAME_score(A_motifs::Dict{Array{Int,1},Int}, B::SymTensorUnweighted, mapping::Dict{Int,Int})
+function TAME_score(A::SymTensorUnweighted{Cycle},B::SymTensorUnweighted{Cycle}, mapping::Dict{Int,Int})
+
+    @assert size(A.indices,1) == size(B.indices,1)
+
+    if size(B.indices,2) > size(A.indices,2)
+        inverted_mapping = Dict{Int,Int}()
+
+        for (v,u) in mapping
+            if u != -1
+                inverted_mapping[u] = v
+            end
+        end
+        return TAME_score(B, A,inverted_mapping)
+    end
+
+    order =  size(A.indices,1)
+    A_cycle_hashes = Set{Float64}()
+	for i= 1:size(A.indices,2)
+		#A.indices are assumed to have the smallest index a the start of the column
+		push!(A_cycle_hashes,DistributedTensorConstruction.cycle_hash(A.indices[:,i]))
+	end
+
+    matched_motifs = 0
+    gaped_motifs = 0
+
+	l = size(B.indices,1)
+    for idx =1:size(B.indices,2)
+        edge = B.indices[:,idx]
+        new_edge = [get(mapping,i,-1) for i in edge]
+
+        new_edge = [new_edge[(i+argmin(new_edge)+2)%l+1] for i in 1:l]
+			#cycles the edge so smallest index is first
+		hash = DistributedTensorConstruction.cycle_hash(new_edge)	
+	
+        if hash in A_cycle_hashes
+            matched_motifs += 1
+        else
+            gaped_motifs += 1
+        end
+
+    end
+
+    return matched_motifs, gaped_motifs, mapping
+
+end
+
+function TAME_score(A_motifs::Dict{Array{Int,1},Int}, B::SymTensorUnweighted{S}, mapping::Dict{Int,Int}) where {S <: Motif}
 
   
     order =  size(B.indices,1)
