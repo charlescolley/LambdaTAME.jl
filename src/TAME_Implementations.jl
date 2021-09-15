@@ -149,8 +149,9 @@ function align_tensors_profiled(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor;
 				best_TAME_PP_tris, max_triangle_match, U_best, V_best, best_matching, profile = results
 				return best_TAME_PP_tris, max_triangle_match, U_best, V_best, Dict((j,i) for (i,j) in best_matching), profile
 			else 
-				best_matched_motifs, max_motif_match, best_matching, profile= results
-				return best_matched_motifs, max_motif_match, Dict((j,i) for (i,j) in best_matching), profile
+				best_matched_motifs, max_motif_match, best_matching, profile = results
+				#BUG: best_matching is returning a vector and not a mapping, type stability is broken too
+				return best_matched_motifs::Int, max_motif_match, Dict((j,i) for (i,j) in enumerate(best_matching))::Dict{Int64,Int64}, profile
 			end
 		elseif typeof(method) == LowRankTAME_M
 			best_TAME_PP_tris, max_triangle_match, U_best, V_best, best_matching,profile = results
@@ -301,7 +302,8 @@ function ΛTAME_param_search_profiled(A,B;
 
 	results = Dict(
 		"TAME_timings" => Array{Float64,1}(undef,length(alphas)*length(betas)),
-		"Matching Timings"=> Array{Float64,1}(undef,length(alphas)*length(betas))
+		"Matching Timings"=> Array{Float64,1}(undef,length(alphas)*length(betas)),
+		"Scoring Timings"=> Array{Float64,1}(undef,length(alphas)*length(betas)),
 	)
 	exp_index = 1
 
@@ -316,17 +318,20 @@ function ΛTAME_param_search_profiled(A,B;
 			results["TAME_timings"][exp_index] = runtime
 
 			if typeof(matchingMethod) === ΛTAME_rankOneMatching
-				((matched_motifs, i, j, matching),runtime) = @timed search_Krylov_space(A,B,U,V)
+				((matched_motifs, i, j, matching,scoring_time),runtime) = @timed search_Krylov_space(A,B,U,V;returnScoringTimings=true)
+				results["Matching Timings"][exp_index] = runtime - scoring_time
+				results["Scoring Timings"][exp_index] = scoring_time
 			elseif typeof(matchingMethod) === ΛTAME_GramMatching
-				(matched_motifs,gaped_motifs, matching),runtime = @timed TAME_score(A,B,U*V')
+				(matched_motifs,gaped_motifs,_, matching_time, scoring_time, matching)= TAME_score(A,B,U*V',return_timings=true)	
 				i = -1
 				j = -1
+				results["Matching Timings"][exp_index] = matching_time
+				results["Scoring Timings"][exp_index] = scoring_time
 			else 
 				throw(TypeError("typeof MatchingMethod must be either ΛTAME_rankOneMatching or ΛTAME_GramMatching"))
 			end
 
-			#TODO: rename "Krylov Timings"
-			results["Matching Timings"][exp_index] = runtime
+			
 			exp_index +=1 
 
 			if matched_motifs > best_matched_motifs
