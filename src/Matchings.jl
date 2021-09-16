@@ -1,6 +1,7 @@
 #TODO: update return_timings=false to a TypeFlag()
-#abstract type MatchingFlag end
-#struct returnTimings <: MatchingFlag end
+abstract type MatchingFlag end
+struct returnTimings <: MatchingFlag end
+struct noTimings <: MatchingFlag end
 
 function degree_based_matching(A::SparseMatrixCSC{T,Int},B::SparseMatrixCSC{T,Int}) where T
 
@@ -19,12 +20,12 @@ function degree_based_matching(A::SparseMatrixCSC{T,Int},B::SparseMatrixCSC{T,In
 
 end
 
-function low_rank_matching(U::Array{Float64,2},V::Array{Float64,2})
+function low_rank_matching(U::Array{T,2},V::Array{T,2}) where T
     n,d1 = size(U)
     m,d2 = size(V)
     @assert d1 == d2
 
-    matching_weights = zeros(d1)
+    matching_weights = zeros(T,d1)
     matchings = Array{Dict{Int,Int},1}(undef,d1)
 
     for i = 1:d1
@@ -54,13 +55,13 @@ function low_rank_matching(U::Array{Float64,2},V::Array{Float64,2})
 end
 
 
-function rank_one_matching(u::Array{Float64,1},v::Array{Float64,1})
+function rank_one_matching(u::Array{T,1},v::Array{T,1}) where T
 
     #get maximum matching by rearrangement theorem
     u_perm = sortperm(u,rev=true)
     v_perm = sortperm(v,rev=true)
 
-    matching_weight = 0
+    matching_weight = zero(T )
     Match_mapping = Dict{Int,Int}()
     for (i,j) in zip(u_perm,v_perm)
 
@@ -74,7 +75,7 @@ function rank_one_matching(u::Array{Float64,1},v::Array{Float64,1})
 
 end
 
-function search_Krylov_space(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor,U::Array{Float64,2},V::Array{Float64,2};returnScoringTimings=false)
+function search_Krylov_space(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor,U::Array{Float64,2},V::Array{Float64,2};returnScoringTimings::T=noTimings()) where {T <:MatchingFlag}
 
     best_score = -1
     best_i = -1
@@ -101,14 +102,14 @@ function search_Krylov_space(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor,U::Ar
     for i in 1:size(U,2)
        for j in 1:size(V,2)
 
-            if returnScoringTimings
+            if typeof(returnScoringTimings) === returnTimings
                 if A_unique_nnz > B_unique_nnz
                     (matched_tris,gaped_tris,matching),t = @timed TAME_score(Triangle_check,Input_tensor,V[:,j],U[:,i])
                 else
                     (matched_tris,gaped_tris,matching),t = @timed TAME_score(Triangle_check,Input_tensor,U[:,i],V[:,j])
                 end
                 scoring_time += t
-            else
+            else # noTimings
                 if A_unique_nnz > B_unique_nnz
                     matched_tris,gaped_tris,matching = TAME_score(Triangle_check,Input_tensor,V[:,j],U[:,i])
                 else
@@ -124,14 +125,14 @@ function search_Krylov_space(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor,U::Ar
             end
         end
     end
-    if returnScoringTimings
+    if typeof(returnScoringTimings) === returnTimings
         return best_score, best_i, best_j, best_matching, scoring_time
     else
         return best_score, best_i, best_j, best_matching
     end
 end
 
-function search_Krylov_space(A::SymTensorUnweighted{S},B::SymTensorUnweighted{S},U::Array{Float64,2},V::Array{Float64,2};returnScoringTimings=false)where {S <: Motif}
+function search_Krylov_space(A::SymTensorUnweighted{S},B::SymTensorUnweighted{S},U::Array{Float64,2},V::Array{Float64,2};returnScoringTimings::T=noTimings())where {S <: Motif,T <:MatchingFlag}
 
 
     A_order,A_unique_nnz = size(A.indices)
@@ -161,7 +162,7 @@ function search_Krylov_space(A::SymTensorUnweighted{S},B::SymTensorUnweighted{S}
     scoring_time =0.0
     for i in 1:size(U,2)
        for j in 1:size(V,2)
-            if returnScoringTimings
+            if typeof(returnScoringTimings) === returnTimings
                 if A_unique_nnz > B_unique_nnz
                     (matched_motifs,gaped_motifs,matching),t = @timed TAME_score(motif_check,Input_tensor,V[:,j],U[:,i])
                 else
@@ -184,7 +185,7 @@ function search_Krylov_space(A::SymTensorUnweighted{S},B::SymTensorUnweighted{S}
             end
         end
     end
-    if returnScoringTimings
+    if typeof(returnScoringTimings) === returnTimings
         return best_score, best_i, best_j, best_matching, scoring_time
     else
         return best_score, best_i, best_j, best_matching   
@@ -240,7 +241,7 @@ function search_Krylov_space(A::Array{SymTensorUnweighted,1},B::Array{SymTensorU
 end
 =#
 
-function search_Krylov_space(A::Array{SymTensorUnweighted{S},1},B::Array{SymTensorUnweighted{S},1},U::Array{Float64,2},V::Array{Float64,2};returnScoringTimings::Bool=false) where {S <: Motif}
+function search_Krylov_space(A::Array{SymTensorUnweighted{S},1},B::Array{SymTensorUnweighted{S},1},U::Array{Float64,2},V::Array{Float64,2};returnScoringTimings::T=noTimings()) where {S <: Motif,T <:MatchingFlag}
 
     @assert length(A) == length(B)
     for i = 1:length(A) #ensure orders are the same at each i
@@ -278,7 +279,7 @@ function search_Krylov_space(A::Array{SymTensorUnweighted{S},1},B::Array{SymTens
 
             #matched_motifs, matching_score = motif_matching_counts(A,B,mapping)
             matched_motifs = zeros(Int,length(A))
-            if returnScoringTimings
+            if typeof(returnScoringTimings) === returnTimings
                 
                 for i =1:length(A)
                     if size(A[i].indices,2) > size(B[i].indices,2)
@@ -317,13 +318,14 @@ function search_Krylov_space(A::Array{SymTensorUnweighted{S},1},B::Array{SymTens
     end
 
     best_i, best_j = best_matching_idx
-    if returnScoringTimings
+    if typeof(returnScoringTimings) === returnTimings
         return best_matching_score, best_matched_motifs,  best_i, best_j, best_mapping, scoring_timing
     else
         return best_matching_score, best_matched_motifs,  best_i, best_j, best_mapping
     end
 end
 
+#TODO: TEST
 #used when we don't want to recreate the triangle matching dictionary multiple times
 function TAME_score(Triangle_Dict::Dict{Array{Int,1},Int},Input_tensor,
                     u::Array{Float64,1},v::Array{Float64,1})
@@ -334,9 +336,10 @@ function TAME_score(Triangle_Dict::Dict{Array{Int,1},Int},Input_tensor,
 end
 
 
-function TAME_score(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor,U::Array{Float64,2},V::Array{Float64,2};return_timings=false)
 
-    if return_timings
+function TAME_score(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor,U::Array{Float64,2},V::Array{Float64,2};return_timings::T=noTimings()) where {T <: MatchingFlag}
+
+    if typeof(return_timings) === returnTimings
         (Match_mapping, _), matching_time = @timed low_rank_matching(U,V)
         (triangle_count, gaped_triangles,_), scoring_time = @timed TAME_score(A,B,Match_mapping)
         return triangle_count, gaped_triangles,Match_mapping, matching_time, scoring_time 
@@ -347,9 +350,9 @@ function TAME_score(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor,U::Array{Float
 
 end
 
-function TAME_score(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor, X::SparseMatrixCSC{Float64,Int64};return_timings=false)
+function TAME_score(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor, X::SparseMatrixCSC{Float64,Int64};return_timings::T=noTimings()) where {T <: MatchingFlag}
 
-    if return_timings
+    if typeof(return_timings) === returnTimings
         x ,bipartite_matching_time = @timed bipartite_matching(X)
         (triangle_count, gaped_triangles,matching), scoring_time = @timed TAME_score(A,B,Dict(i => j for (i,j) in enumerate(x.match)))
         return triangle_count, gaped_triangles, matching, bipartite_matching_time, scoring_time
@@ -361,9 +364,9 @@ function TAME_score(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor, X::SparseMat
 end
 
 function TAME_score(A::Union{ThirdOrderSymTensor,Array{SymTensorUnweighted{S},1}},
-                    B::Union{ThirdOrderSymTensor,SymTensorUnweighted{S},Array{SymTensorUnweighted{S},1}},X::Array{Float64,2};return_timings=false) where {S <: Motif}
+                    B::Union{ThirdOrderSymTensor,SymTensorUnweighted{S},Array{SymTensorUnweighted{S},1}},X::Array{Float64,2};return_timings::T=noTimings()) where {T <: MatchingFlag,S <: Motif}
 
-    if return_timings
+    if typeof(return_timings) === returnTimings
         (_,_,matching,_) ,matching_time = @timed bipartite_matching_primal_dual(X)
         (triangle_count, gaped_triangles,inverted_matching), scoring_time = @timed TAME_score(A,B,Dict(j => i for (i,j) in enumerate(matching)))
         return triangle_count, gaped_triangles,inverted_matching, matching_time, scoring_time, matching
@@ -373,9 +376,9 @@ function TAME_score(A::Union{ThirdOrderSymTensor,Array{SymTensorUnweighted{S},1}
     end
 end
 
-function TAME_score(A::SymTensorUnweighted{S},B::SymTensorUnweighted{S},X::Array{Float64,2};return_timings=false) where {S <: Motif}
+function TAME_score(A::SymTensorUnweighted{S},B::SymTensorUnweighted{S},X::Array{Float64,2};return_timings::T=noTimings()) where {T <: MatchingFlag,S <: Motif}
 
-    if return_timings
+    if typeof(return_timings) === returnTimings
         (_,_,matching,_) ,matching_time = @timed bipartite_matching_primal_dual(X)
         (triangle_count, gaped_triangles,inverted_matching), scoring_time = @timed TAME_score(A,B,Dict(i => j for (i,j) in enumerate(matching)))
         return triangle_count, gaped_triangles, inverted_matching, matching_time, scoring_time, matching
@@ -387,10 +390,10 @@ function TAME_score(A::SymTensorUnweighted{S},B::SymTensorUnweighted{S},X::Array
 end
 
 
-function TAME_score(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor,x::Array{Float64,1};return_timings=false)
+function TAME_score(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor,x::Array{Float64,1};return_timings::T=noTimings()) where {T <: MatchingFlag}
 
     X = reshape(x,A.n,B.n)
-    if return_timings
+    if typeof(return_timings) === returnTimings
         (_,_,matching,_) ,matching_time = @timed bipartite_matching_primal_dual(X)
         (triangle_count, gaped_triangles,inverted_matching), scoring_time = @timed TAME_score(A,B,Dict(j => i for (i,j) in enumerate(matching)))
         return triangle_count, gaped_triangles, inverted_matching, matching_time, scoring_time

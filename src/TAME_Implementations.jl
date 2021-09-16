@@ -318,11 +318,11 @@ function ΛTAME_param_search_profiled(A,B;
 			results["TAME_timings"][exp_index] = runtime
 
 			if typeof(matchingMethod) === ΛTAME_rankOneMatching
-				((matched_motifs, i, j, matching,scoring_time),runtime) = @timed search_Krylov_space(A,B,U,V;returnScoringTimings=true)
+				((matched_motifs, i, j, matching,scoring_time),runtime) = @timed search_Krylov_space(A,B,U,V;returnScoringTimings=returnTimings())
 				results["Matching Timings"][exp_index] = runtime - scoring_time
 				results["Scoring Timings"][exp_index] = scoring_time
 			elseif typeof(matchingMethod) === ΛTAME_GramMatching
-				(matched_motifs,gaped_motifs,_, matching_time, scoring_time, matching)= TAME_score(A,B,U*V',return_timings=true)	
+				(matched_motifs,gaped_motifs,_, matching_time, scoring_time, matching)= TAME_score(A,B,U*V',return_timings=returnTimings())	
 				i = -1
 				j = -1
 				results["Matching Timings"][exp_index] = matching_time
@@ -1056,9 +1056,9 @@ function LowRankTAME_profiled(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor,
 		if !no_matching
 			#evaluate the matchings
 			if low_rank_matching
-				triangles, gaped_tris, matching, matching_time, scoring_time = TAME_score(A,B,U_k_1,V_k_1;return_timings=true)
+				triangles, gaped_tris, matching, matching_time, scoring_time = TAME_score(A,B,U_k_1,V_k_1;return_timings=returnTimings())
 			else
-				triangles, gaped_tris, matching, matching_time, scoring_time = TAME_score(A,B,U_k_1*V_k_1';return_timings=true)
+				triangles, gaped_tris, matching, matching_time, scoring_time = TAME_score(A,B,U_k_1*V_k_1';return_timings=returnTimings())
 			end
 
 			push!(experiment_profile["matched_tris"],float(triangles))
@@ -1079,7 +1079,7 @@ function LowRankTAME_profiled(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor,
 
 		if abs(lambda_k_1 - lambda) < tol || i >= max_iter
 			#=
-			triangles,_= TAME_score(A,B,sparse(best_U*best_V');return_timings=false)
+			triangles,_= TAME_score(A,B,sparse(best_U*best_V');return_timings=returnTimings())
 			if triangles > best_triangle_count 
 				best_triangle_count = triangles
 			end
@@ -1341,7 +1341,7 @@ function TAME_profiled(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor, β::F, ma
 
 		if !no_matching
 
-			triangles, gaped_triangles, matching, matching_time, scoring_time = TAME_score(A,B,reshape(x_k_1,A.n,B.n);return_timings=true)
+			triangles, gaped_triangles, matching, matching_time, scoring_time = TAME_score(A,B,reshape(x_k_1,A.n,B.n);return_timings=returnTimings())
 			
 			push!(experiment_profile["matching_timings"],matching_time)
 			push!(experiment_profile["scoring_timings"],scoring_time)

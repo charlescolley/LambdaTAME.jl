@@ -79,6 +79,7 @@ include("AdditionalAlignmentMethods.jl")
 
 
 
+
 #  --  From Experiments.jl --  #
 
 #all alignment method flag types
@@ -96,10 +97,13 @@ export align_tensors # this is the file based version
 export align_matrices
 export random_graph_exp
 
-export load_ThirdOrderSymTensor
+export load_ThirdOrderSymTensor, load_UnweightedThirdOrderSymTensor
 export graph_to_ThirdOrderTensor
 
 #  --  From Matchings.jl --  #
+#flag types
+export returnTimings,noTimings
+
 export bipartite_matching_primal_dual
 
 #  --  From TAME_Implementations.jl --  #
