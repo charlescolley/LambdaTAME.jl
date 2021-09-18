@@ -464,9 +464,9 @@ function distributed_random_trials(trial_count::Int,noise_model::ErdosRenyiNoise
                 d_A, d_B, perm, (A_tris, B_tris,(matched_tris, max_tris, _, _, best_matching)) = fetch(future)
             elseif method === ΛTAME_MultiMotif_M()
                 if kwargs[:matchingMethod] === ΛTAME_GramMatching()
-                    d_A, d_B, perm, (best_matching_score, max_motif_match, best_matched_motifs, best_matching) = fetch(future)
+                    d_A, d_B, perm, (A_motifCounts, B_motifCounts,best_matching_score, max_motif_match, best_matched_motifs, best_matching) = fetch(future)
                 else
-                    d_A, d_B, perm, (best_matching_score, max_motif_match,best_matched_motifs, _, _, best_matching) = fetch(future)
+                    d_A, d_B, perm, (A_motifCounts, B_motifCounts,best_matching_score, max_motif_match,best_matched_motifs, _, _, best_matching) = fetch(future)
                 end
             elseif method === TAME_M()
                 d_A, d_B, perm, (A_tris, B_tris, (matched_tris, max_tris, _, best_matching)) = fetch(future)
@@ -506,7 +506,6 @@ function distributed_random_trials(trial_count::Int,noise_model::DuplicationNois
 
     #ensure file is loaded on all processes
     @everywhere include_string(Main,$(read("LambdaTAME.jl",String)),"LambdaTAME.jl")
-
     
 
     if seed_exps
@@ -573,7 +572,6 @@ function distributed_random_trials(trial_count::Int,noise_model::DuplicationNois
 
         else
 
-            println(method)
             if method === ΛTAME_M() && kwargs[:matchingMethod] === ΛTAME_GramMatching()
                 perm, dup_vertices, (A_tris, B_tris,(matched_tris, max_tris,best_matching)) = fetch(future)
             elseif (method === ΛTAME_M() && kwargs[:matchingMethod] === ΛTAME_rankOneMatching()) ||  method === LowRankTAME_M()
@@ -584,10 +582,9 @@ function distributed_random_trials(trial_count::Int,noise_model::DuplicationNois
  
                 if kwargs[:matchingMethod] === ΛTAME_GramMatching()
                     #TODO: fix naming conventions
-                    println("made it")
-                    perm, dup_vertices, (best_matching_score, max_motif_match, best_matched_motifs, best_matching) = fetch(future)
+                    perm, dup_vertices, (A_motifCounts, B_motifCounts, best_matching_score, max_motif_match, best_matched_motifs, best_matching) = fetch(future)
                 else
-                    perm,dup_vertices, (best_matching_score, max_motif_match, best_matched_motifs, _, _, best_matching) = fetch(future)
+                    perm, dup_vertices, (A_motifCounts, B_motifCounts, best_matching_score, max_motif_match, best_matched_motifs, _, _, best_matching) = fetch(future)
                 end
                 A_tris = -1
                 B_tris = -1
@@ -608,7 +605,7 @@ function distributed_random_trials(trial_count::Int,noise_model::DuplicationNois
             
 
             if typeof(method) === ΛTAME_MultiMotif_M
-                push!(results,( seed, p, n, sp, accuracy, dup_vertex_tolerant_accuracy, best_matching_score, max_motif_match, best_matched_motifs))
+                push!(results,( seed, p, n, sp, accuracy, dup_vertex_tolerant_accuracy, best_matching_score,A_motifCounts, B_motifCounts, best_matched_motifs))
             else
                 push!(results,( seed, p, n, sp, accuracy, dup_vertex_tolerant_accuracy, matched_tris, A_tris, B_tris, max_tris))
             end
@@ -806,8 +803,8 @@ function SSHOPM_exp(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor, samples::Int
 
     println(relative_λ_diff)
 
-#    r = rank(AB_V[:,:,AB_i])
- #   U,S,Vt = svd(AB_V[:,:,AB_i])
+    #r = rank(AB_V[:,:,AB_i])
+   #U,S,Vt = svd(AB_V[:,:,AB_i])
 
 
 
@@ -1114,9 +1111,12 @@ function align_matrices(A::SparseMatrixCSC{T,Int},B::SparseMatrixCSC{S,Int};prof
 
         A_tensors = tensors_from_graph(A,kwargs[:orders],kwargs[:samples],motif)        
         B_tensors = tensors_from_graph(B,kwargs[:orders],kwargs[:samples],motif)
+        
+        A_motifCounts = [size(x.indices,2) for x in A_tensors]
+        B_motifCounts = [size(x.indices,2) for x in B_tensors]
 
         subkwargs = Dict([(k,v) for (k,v) in kwargs if k != :orders && k != :samples])
-        return align_tensors(A_tensors,B_tensors;subkwargs...)
+        return A_motifCounts, B_motifCounts, align_tensors(A_tensors,B_tensors;subkwargs...)...
 
     elseif method === EigenAlign_M || method === Degree_M || method === Random_M || method === LowRankEigenAlign_M || method === LowRankEigenAlignOnlyEdges_M
         
