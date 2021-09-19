@@ -485,7 +485,7 @@ function distributed_random_trials(trial_count::Int,noise_model::ErdosRenyiNoise
             degree_weighted_accuracy = sum([(get(best_matching,j,-1) == i) ? ((d_A[i] + d_B[j])/(D_A+D_B)) : 0.0 for (i,j) in enumerate(perm)])
   
             if typeof(method) === ΛTAME_MultiMotif_M
-                push!(results,( seed, p, n, accuracy, degree_weighted_accuracy, best_matching_score, max_motif_match, best_matched_motifs))
+                push!(results,( seed, p, n, accuracy, degree_weighted_accuracy, best_matching_score, A_motifCounts, B_motifCounts, best_matched_motifs))
             else
                 push!(results,( seed, p, n, accuracy, degree_weighted_accuracy, matched_tris, A_tris, B_tris, max_tris))
             end
@@ -605,7 +605,7 @@ function distributed_random_trials(trial_count::Int,noise_model::DuplicationNois
             
 
             if typeof(method) === ΛTAME_MultiMotif_M
-                push!(results,( seed, p, n, sp, accuracy, dup_vertex_tolerant_accuracy, best_matching_score,A_motifCounts, B_motifCounts, best_matched_motifs))
+                push!(results,( seed, p, n, sp, accuracy, dup_vertex_tolerant_accuracy, best_matching_score, A_motifCounts, B_motifCounts, best_matched_motifs))
             else
                 push!(results,( seed, p, n, sp, accuracy, dup_vertex_tolerant_accuracy, matched_tris, A_tris, B_tris, max_tris))
             end
