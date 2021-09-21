@@ -179,7 +179,7 @@ function ΛTAME_param_search(A,B;#duck type tensor inputs
                             iter::Int = 15,tol::Float64=1e-6,
 							alphas::Array{F,1}=[.5,1.0],
 							betas::Array{F,1} =[1000.0,100.0,10.0,1.0,0.0,0.1,0.01,0.001],
-							matchingMethod::MatchingMethod=ΛTAME_rankOneMatching()) where {F <: AbstractFloat}
+							matchingMethod::MatchingMethod=ΛTAME_rankOneMatching(),kwargs...) where {F <: AbstractFloat}
 
     max_triangle_match = min(size(A.indices,1),size(B.indices,1))
     total_triangles = size(A.indices,1) + size(B.indices,1)
@@ -200,7 +200,7 @@ function ΛTAME_param_search(A,B;#duck type tensor inputs
 				search_tris, i, j, matching = search_Krylov_space(A,B,U,V)
 			
 			elseif typeof(matchingMethod) === ΛTAME_GramMatching
-				search_tris, matching,matching = TAME_score(A,B,U*V')
+				search_tris, matching,matching = TAME_score(A,B,U*V';kwargs...)
 				i = -1
 				j = -1
 			else 
@@ -228,7 +228,7 @@ function ΛTAME_param_search(A_tensors::Array{SymTensorUnweighted{S},1},B_tensor
 							iter::Int = 15,tol::Float64=1e-6,
 							alphas::Array{F,1}=[.5,1.0],
 							betas::Array{F,1} =[1000.0,100.0,10.0,1.0,0.0,0.1,0.01,0.001],
-							matchingMethod::MatchingMethod=ΛTAME_rankOneMatching()) where {F <: AbstractFloat, S <: Motif}
+							matchingMethod::MatchingMethod=ΛTAME_rankOneMatching(),kwargs...) where {F <: AbstractFloat, S <: Motif}
 
 	max_motif_match = [min(size(A.indices,2),size(B.indices,2)) for (A,B) in zip(A_tensors,B_tensors)]
 	total_triangles = [size(A.indices,2) + size(B.indices,2) for (A,B) in zip(A_tensors,B_tensors)]
@@ -254,7 +254,7 @@ function ΛTAME_param_search(A_tensors::Array{SymTensorUnweighted{S},1},B_tensor
 			if typeof(matchingMethod) === ΛTAME_rankOneMatching
 				matching_score, matched_motifs, i, j, matching = search_Krylov_space(A_tensors,B_tensors,U,V)
 			elseif typeof(matchingMethod) === ΛTAME_GramMatching
-				matching_score, matched_motifs, matching= TAME_score(A_tensors,B_tensors,U*V')
+				matching_score, matched_motifs, matching= TAME_score(A_tensors,B_tensors,U*V';kwargs...)
 				i = -1
 				j = -1
 			else 
@@ -284,7 +284,7 @@ end
 function ΛTAME_param_search_profiled(A,B; 
 	                                 iter::Int = 15,tol::Float64=1e-6, alphas::Array{F,1}=[.5,1.0],
 									 betas::Array{F,1} =[1000.0,100.0,10.0,1.0,0.0,0.1,0.01,0.001],
-									 matchingMethod::MatchingMethod=ΛTAME_rankOneMatching()) where {F <: AbstractFloat}
+									 matchingMethod::MatchingMethod=ΛTAME_rankOneMatching(),kwargs...) where {F <: AbstractFloat}
 
 	if typeof(A) === ThirdOrderSymTensor 
 		max_motif_match = min(size(A.indices,1),size(B.indices,1))
@@ -318,11 +318,11 @@ function ΛTAME_param_search_profiled(A,B;
 			results["TAME_timings"][exp_index] = runtime
 
 			if typeof(matchingMethod) === ΛTAME_rankOneMatching
-				((matched_motifs, i, j, matching,scoring_time),runtime) = @timed search_Krylov_space(A,B,U,V;returnScoringTimings=returnTimings())
+				((matched_motifs, i, j, matching,scoring_time),runtime) = @timed search_Krylov_space(A,B,U,V;returnScoringTimings=returnTimings(),kwargs...)
 				results["Matching Timings"][exp_index] = runtime - scoring_time
 				results["Scoring Timings"][exp_index] = scoring_time
 			elseif typeof(matchingMethod) === ΛTAME_GramMatching
-				(matched_motifs,gaped_motifs,_, matching_time, scoring_time, matching)= TAME_score(A,B,U*V',return_timings=returnTimings())	
+				(matched_motifs,gaped_motifs,_, matching_time, scoring_time, matching)= TAME_score(A,B,U*V',return_timings=returnTimings(),kwargs...)	
 				i = -1
 				j = -1
 				results["Matching Timings"][exp_index] = matching_time
@@ -803,7 +803,7 @@ end
 function LowRankTAME(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor,
                           U_0::Array{F,2},V_0::Array{F,2}, β::F, max_iter::Int,tol::F,α::F;
 						  max_rank::Int = minimum((A.n,B.n)),update_user::Int=-1,
-						  no_matching=false,low_rank_matching=false) where {F <:AbstractFloat}
+						  no_matching=false,low_rank_matching=false,kwargs...) where {F <:AbstractFloat}
 
 	@assert size(U_0,2) == size(V_0,2)
 
@@ -871,10 +871,10 @@ function LowRankTAME(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor,
 		if !no_matching
 			#evaluate the matchings
 			if low_rank_matching
-				triangles, gaped_triangles,matching = TAME_score(A,B,U_k_1,V_k_1)
+				triangles, gaped_triangles,matching = TAME_score(A,B,U_k_1,V_k_1;kwargs...)
 			else
 
-				triangles, gaped_triangles,matching = TAME_score(A,B,U_k_1*V_k_1')
+				triangles, gaped_triangles,matching = TAME_score(A,B,U_k_1*V_k_1';kwargs...)
 				
 			end
 
@@ -970,7 +970,7 @@ end
 function LowRankTAME_profiled(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor,
                           U_0::Array{F,2},V_0::Array{F,2}, β::F, max_iter::Int,tol::F,α::F;
 						  max_rank::Int = minimum((A.n,B.n)),update_user::Int=-1,	
-						  no_matching::Bool=false,low_rank_matching::Bool=false) where {F <:AbstractFloat}
+						  no_matching::Bool=false,low_rank_matching::Bool=false,kwargs...) where {F <:AbstractFloat}
 
 	@assert size(U_0,2) == size(V_0,2)
 
@@ -1056,9 +1056,9 @@ function LowRankTAME_profiled(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor,
 		if !no_matching
 			#evaluate the matchings
 			if low_rank_matching
-				triangles, gaped_tris, matching, matching_time, scoring_time = TAME_score(A,B,U_k_1,V_k_1;return_timings=returnTimings())
+				triangles, gaped_tris, matching, matching_time, scoring_time = TAME_score(A,B,U_k_1,V_k_1;return_timings=returnTimings(),kwargs...)
 			else
-				triangles, gaped_tris, matching, matching_time, scoring_time = TAME_score(A,B,U_k_1*V_k_1';return_timings=returnTimings())
+				triangles, gaped_tris, matching, matching_time, scoring_time = TAME_score(A,B,U_k_1*V_k_1';return_timings=returnTimings(),kwargs...)
 			end
 
 			push!(experiment_profile["matched_tris"],float(triangles))
@@ -1132,7 +1132,7 @@ end
 	The mixing parameter for combining in the starting iterates. 
   * 'max_iter' - (Int):
 	The maximum number of iterations to run. 
-  * tol - (Float):
+  * tol - (Float): 
 	The tolerence to solve the algorithm to. Computes the tolerance by measuring
 	the absolute value of the difference between the computed eigenvalues. 
   * 'update_user' - (Int):
@@ -1156,7 +1156,7 @@ end
 ------------------------------------------------------------------------------"""
 function TAME(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor,β::F, max_iter::Int,
 			  tol::F,α::F;update_user::Int=-1,W::Array{F,2}=ones(A.n,B.n),
-			  no_matching=false,) where {F <:AbstractFloat}
+			  no_matching=false,kwargs...) where {F <:AbstractFloat}
 
     dimension = minimum((A.n,B.n))
 
@@ -1195,7 +1195,7 @@ function TAME(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor,β::F, max_iter::In
 		if !no_matching
 
 			X = reshape(x_k_1,A.n,B.n)
-			triangles, gaped_triangles, matching =  TAME_score(A,B,X)
+			triangles, gaped_triangles, matching =  TAME_score(A,B,X;kwargs...)
 
 			if update_user != -1 && i % update_user == 0
 				println("finished iterate $(i):tris:$triangles -- gaped_t:$gaped_triangles")
@@ -1275,12 +1275,12 @@ end
 	  +'sing_vals' - The singular values of each iterate X_k. 
 	  +'ranks' - The ranks of each iterate X_k. 
 	  +'matching_timings' - Time taken to solve the matchings. 
-	  +'soring_timings' - Time taken to score each matching. 
+	  +'scoring_timings' - Time taken to score each matching. 
 
 ------------------------------------------------------------------------------"""
 function TAME_profiled(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor, β::F, max_iter::Int,
 	                   tol::F,α::F;update_user::Int=-1,W::Array{F,2} = ones(m,n),
-					   no_matching::Bool=false) where {F <:AbstractFloat}
+					   no_matching::Bool=false,kwargs...) where {F <:AbstractFloat}
 
     dimension = minimum((A.n,B.n))
 
@@ -1341,7 +1341,7 @@ function TAME_profiled(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor, β::F, ma
 
 		if !no_matching
 
-			triangles, gaped_triangles, matching, matching_time, scoring_time = TAME_score(A,B,reshape(x_k_1,A.n,B.n);return_timings=returnTimings())
+			triangles, gaped_triangles, matching, matching_time, scoring_time = TAME_score(A,B,reshape(x_k_1,A.n,B.n);return_timings=returnTimings(),kwargs...)
 			
 			push!(experiment_profile["matching_timings"],matching_time)
 			push!(experiment_profile["scoring_timings"],scoring_time)

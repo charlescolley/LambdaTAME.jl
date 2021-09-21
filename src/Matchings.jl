@@ -364,41 +364,41 @@ function TAME_score(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor, X::SparseMat
 end
 
 function TAME_score(A::Union{ThirdOrderSymTensor,Array{SymTensorUnweighted{S},1}},
-                    B::Union{ThirdOrderSymTensor,SymTensorUnweighted{S},Array{SymTensorUnweighted{S},1}},X::Array{Float64,2};return_timings::T=noTimings()) where {T <: MatchingFlag,S <: Motif}
+                    B::Union{ThirdOrderSymTensor,SymTensorUnweighted{S},Array{SymTensorUnweighted{S},1}},X::Array{Float64,2};return_timings::T=noTimings(),kwargs...) where {T <: MatchingFlag,S <: Motif}
 
     if typeof(return_timings) === returnTimings
-        (_,_,matching,_) ,matching_time = @timed bipartite_matching_primal_dual(X)
+        (_,_,matching,_) ,matching_time = @timed bipartite_matching_primal_dual(X;kwargs...)
         (triangle_count, gaped_triangles,inverted_matching), scoring_time = @timed TAME_score(A,B,Dict(j => i for (i,j) in enumerate(matching)))
         return triangle_count, gaped_triangles,inverted_matching, matching_time, scoring_time, matching
     else
-        _,_,matching,_ = bipartite_matching_primal_dual(X)
+        _,_,matching,_ = bipartite_matching_primal_dual(X;kwargs...)
         return TAME_score(A,B,Dict(j => i for (i,j) in enumerate(matching)))
     end
 end
 
-function TAME_score(A::SymTensorUnweighted{S},B::SymTensorUnweighted{S},X::Array{Float64,2};return_timings::T=noTimings()) where {T <: MatchingFlag,S <: Motif}
+function TAME_score(A::SymTensorUnweighted{S},B::SymTensorUnweighted{S},X::Array{Float64,2};return_timings::T=noTimings(),kwargs...) where {T <: MatchingFlag,S <: Motif}
 
     if typeof(return_timings) === returnTimings
-        (_,_,matching,_) ,matching_time = @timed bipartite_matching_primal_dual(X)
+        (_,_,matching,_) ,matching_time = @timed bipartite_matching_primal_dual(X;kwargs...)
         (triangle_count, gaped_triangles,inverted_matching), scoring_time = @timed TAME_score(A,B,Dict(i => j for (i,j) in enumerate(matching)))
         return triangle_count, gaped_triangles, inverted_matching, matching_time, scoring_time, matching
     else
-        _,_,matching,_ = bipartite_matching_primal_dual(X)
+        _,_,matching,_ = bipartite_matching_primal_dual(X;kwargs...)
         return TAME_score(A,B,Dict(i => j for (i,j) in enumerate(matching)))
         #BUG?
     end
 end
 
 
-function TAME_score(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor,x::Array{Float64,1};return_timings::T=noTimings()) where {T <: MatchingFlag}
+function TAME_score(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor,x::Array{Float64,1};return_timings::T=noTimings(),kwargs...) where {T <: MatchingFlag}
 
     X = reshape(x,A.n,B.n)
     if typeof(return_timings) === returnTimings
-        (_,_,matching,_) ,matching_time = @timed bipartite_matching_primal_dual(X)
+        (_,_,matching,_) ,matching_time = @timed bipartite_matching_primal_dual(X;kwargs...)
         (triangle_count, gaped_triangles,inverted_matching), scoring_time = @timed TAME_score(A,B,Dict(j => i for (i,j) in enumerate(matching)))
         return triangle_count, gaped_triangles, inverted_matching, matching_time, scoring_time
     else
-        _,_,matching,_ = bipartite_matching_primal_dual(X)
+        _,_,matching,_ = bipartite_matching_primal_dual(X;kwargs...)
         return TAME_score(A,B,Dict(j => i for (i,j) in enumerate(matching)))
     end
 
@@ -738,7 +738,7 @@ end
     represent dummy nodes which are used to account non-matches which may arise 
     from negative weights. 
 ------------------------------------------------------------------------------"""
-function bipartite_matching_primal_dual(X::Matrix{Float64};tol::Float64=1e-8,
+function bipartite_matching_primal_dual(X::Matrix{Float64};primalDualTol::Float64=1e-8,
                                        normalize_weights::Bool=false)
     #to get the access pattern right, we must match the right hand side to the left hand side. 
 
@@ -797,10 +797,10 @@ function bipartite_matching_primal_dual(X::Matrix{Float64};tol::Float64=1e-8,
 					i = k+m
 				end
 				if i == k+m #dummy nodes don't have weight
-					if 0.0 < alpha[k] + bt[i] - tol
+					if 0.0 < alpha[k] + bt[i] - primalDualTol
 						continue
 					end
-                elseif X[i,k] < alpha[k] + bt[i] - tol
+                elseif X[i,k] < alpha[k] + bt[i] - primalDualTol
 					continue
                 end # skip if tight
 
