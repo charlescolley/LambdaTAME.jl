@@ -281,7 +281,7 @@ function distributed_pairwise_alignment(files::Array{String,1},dirpath::String;
     if all( [f[end-5:end] == ".ssten" for f in files]) #tensors 
         alignment_object = "Tensors" 
     elseif all( [f[end-4:end] == ".smat" for f in files]) #matrices
-        alignment_object = "Matrices" 
+        alignment_object = "Matrices"
     else 
         throw(ArgumentError("all files must be the same file type, either all '.ssten' or '.smat'."))
     end
@@ -289,7 +289,7 @@ function distributed_pairwise_alignment(files::Array{String,1},dirpath::String;
     futures = []
 	exp_results = []
 
-#    Best_alignment_ratio = Array{Float64}(undef,length(ssten_files),length(ssten_files))
+    #Best_alignment_ratio = Array{Float64}(undef,length(ssten_files),length(ssten_files))
 
     for i in 1:length(files)
         for j in i+1:length(files)
@@ -464,9 +464,9 @@ function distributed_random_trials(trial_count::Int,noise_model::ErdosRenyiNoise
                 d_A, d_B, perm, (A_tris, B_tris,(matched_tris, max_tris, _, _, best_matching)) = fetch(future)
             elseif method === ΛTAME_MultiMotif_M()
                 if kwargs[:matchingMethod] === ΛTAME_GramMatching()
-                    d_A, d_B, perm, (A_motifCounts, B_motifCounts,best_matching_score, max_motif_match, best_matched_motifs, best_matching) = fetch(future)
+                    d_A, d_B, perm, (A_motifCounts, B_motifCounts,A_motifDistribution,B_motifDistribution, best_matching_score, max_motif_match, best_matched_motifs, best_matching) = fetch(future)
                 else
-                    d_A, d_B, perm, (A_motifCounts, B_motifCounts,best_matching_score, max_motif_match,best_matched_motifs, _, _, best_matching) = fetch(future)
+                    d_A, d_B, perm, (A_motifCounts, B_motifCounts,A_motifDistribution,B_motifDistribution, best_matching_score, max_motif_match,best_matched_motifs, _, _, best_matching) = fetch(future)
                 end
             elseif method === TAME_M()
                 d_A, d_B, perm, (A_tris, B_tris, (matched_tris, max_tris, _, best_matching)) = fetch(future)
@@ -485,7 +485,7 @@ function distributed_random_trials(trial_count::Int,noise_model::ErdosRenyiNoise
             degree_weighted_accuracy = sum([(get(best_matching,j,-1) == i) ? ((d_A[i] + d_B[j])/(D_A+D_B)) : 0.0 for (i,j) in enumerate(perm)])
   
             if typeof(method) === ΛTAME_MultiMotif_M
-                push!(results,( seed, p, n, accuracy, degree_weighted_accuracy, best_matching_score, A_motifCounts, B_motifCounts, best_matched_motifs))
+                push!(results,( seed, p, n, accuracy, degree_weighted_accuracy, best_matching_score, A_motifCounts, B_motifCounts,A_motifDistribution,B_motifDistribution, best_matched_motifs))
             else
                 push!(results,( seed, p, n, accuracy, degree_weighted_accuracy, matched_tris, A_tris, B_tris, max_tris))
             end
@@ -582,9 +582,9 @@ function distributed_random_trials(trial_count::Int,noise_model::DuplicationNois
  
                 if kwargs[:matchingMethod] === ΛTAME_GramMatching()
                     #TODO: fix naming conventions
-                    perm, dup_vertices, (A_motifCounts, B_motifCounts, best_matching_score, max_motif_match, best_matched_motifs, best_matching) = fetch(future)
+                    perm, dup_vertices, (A_motifCounts, B_motifCounts, A_motifDistribution,B_motifDistribution, best_matching_score, max_motif_match, best_matched_motifs, best_matching) = fetch(future)
                 else
-                    perm, dup_vertices, (A_motifCounts, B_motifCounts, best_matching_score, max_motif_match, best_matched_motifs, _, _, best_matching) = fetch(future)
+                    perm, dup_vertices, (A_motifCounts, B_motifCounts, A_motifDistribution,B_motifDistribution, best_matching_score, max_motif_match, best_matched_motifs, _, _, best_matching) = fetch(future)
                 end
                 A_tris = -1
                 B_tris = -1
@@ -605,7 +605,7 @@ function distributed_random_trials(trial_count::Int,noise_model::DuplicationNois
             
 
             if typeof(method) === ΛTAME_MultiMotif_M
-                push!(results,( seed, p, n, sp, accuracy, dup_vertex_tolerant_accuracy, best_matching_score, A_motifCounts, B_motifCounts, best_matched_motifs))
+                push!(results,( seed, p, n, sp, accuracy, dup_vertex_tolerant_accuracy, best_matching_score, A_motifCounts, B_motifCounts, A_motifDistribution,B_motifDistribution, best_matched_motifs))
             else
                 push!(results,( seed, p, n, sp, accuracy, dup_vertex_tolerant_accuracy, matched_tris, A_tris, B_tris, max_tris))
             end
@@ -1115,8 +1115,12 @@ function align_matrices(A::SparseMatrixCSC{T,Int},B::SparseMatrixCSC{S,Int};prof
         A_motifCounts = [size(x.indices,2) for x in A_tensors]
         B_motifCounts = [size(x.indices,2) for x in B_tensors]
 
+        A_motifDistribution = [contraction(tensor,ones(tensor.n))./factorial(tensor.order-1) for tensor in A_tensors]
+        B_motifDistribution = [contraction(tensor,ones(tensor.n))./factorial(tensor.order-1) for tensor in B_tensors]
+
+        #TODO: standardize kwarg consumption
         subkwargs = Dict([(k,v) for (k,v) in kwargs if k != :orders && k != :samples])
-        return A_motifCounts, B_motifCounts, align_tensors(A_tensors,B_tensors;subkwargs...)...
+        return A_motifCounts, B_motifCounts,A_motifDistribution, B_motifDistribution, align_tensors(A_tensors,B_tensors;subkwargs...)...
 
     elseif method === EigenAlign_M || method === Degree_M || method === Random_M || method === LowRankEigenAlign_M || method === LowRankEigenAlignOnlyEdges_M
         
