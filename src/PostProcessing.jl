@@ -19,6 +19,8 @@ PostProcessing:
     the vector u to the vertices in v. unmatched vertices are set to -1.
 
 -----------------------------------------------------------------------------"""
+#TODO: This version is outdated, should be removed and replaced
+#      with 'rank_one_bmatching' below
 function b_matching(u::Array{Float64,1}, v::Array{Float64,1}, b::Int)
 
     @assert length(u) <= length(v) #make first vector shorter
@@ -65,6 +67,41 @@ function b_matching(u::Array{Float64,1}, v::Array{Float64,1}, b::Int)
     return Matchings[1:(match_idx-1)]
 
 end
+
+
+function rank_one_bmatching(u::Array{T,1},v::Array{T,1},b::Int) where T
+	#current implementation will end up rounding b to be odd
+
+
+    #get maximum matching by rearrangement theorem
+    u_perm = sortperm(u,rev=true)
+    v_perm = sortperm(v,rev=true)
+
+    #matching_weight = zero(T )
+    Match_candidates = Set()
+    #for (i,j) in zip(u_perm,v_perm)
+	for i = 1:length(u_perm)
+
+		u_i = u_perm[i]
+		#look at a size b window centered around 
+		for offset = ceil(-b/2):1:floor(b/2)
+			
+			j = i + Int(offset)
+			#println(j == i)
+			#println("i:$i  j:$j")
+			#print(offset)
+			if j >= 1 && j <= length(v_perm)
+				v_j = v_perm[j]
+				#only match positive to positive and negative to negative
+				if (u[u_i] > 0 && v[v_j] > 0 ) || (u[u_i] < 0 && v[v_j] < 0)
+					push!(Match_candidates,(u_i,v_j))
+				end
+			end
+		end
+    end
+    return Match_candidates
+end
+
 
 """-----------------------------------------------------------------------------
     Computes the cost of swapping the matching of (i,j) & (k,l) to (i,l) & (k,j)
@@ -147,4 +184,118 @@ function produce_triangle_incidence(triangles::Array{Int,2},n::Int)
     end
 
     return incidence
+end
+
+"""-----------------------------------------------------------------------------
+                    Klau's algorithm PostProcessing
+-----------------------------------------------------------------------------"""
+
+function netalignmr(A::SparseMatrixCSC{T,Int},B::SparseMatrixCSC{T,Int},
+                    U::Matrix{T},V::Matrix{T};kwargs...) where T
+    (_,_,matching,_)=  bipartite_matching_primal_dual(U*V';kwargs...)
+    inverted_mapping = [(j,i) for (i,j) in enumerate(matching)]
+    return netalignmr(A,B,knearest_sparsification(U,V,inverted_mapping,min(size(U,2),size(V,2))))
+end
+
+function netalignmr(A::SparseMatrixCSC{T,Int},B::SparseMatrixCSC{T,Int},
+                    U::Matrix{T},V::Matrix{T},k::Int;kwargs...) where T
+    (_,_,matching,_)=  bipartite_matching_primal_dual(U*V';kwargs...)
+    inverted_mapping = [(j,i) for (i,j) in enumerate(matching)]
+    return netalignmr(A,B,knearest_sparsification(U,V,inverted_mapping,k))
+end
+
+function netalignmr(A::SparseMatrixCSC{T,Int},B::SparseMatrixCSC{T,Int},
+                    U::Matrix{T},V::Matrix{T},
+                    matching::Union{Vector{NTuple{2,Int}},Dict{Int,Int}},k::Int) where T
+    return netalignmr(A,B,knearest_sparsification(U,V,matching,k))
+end
+
+function netalignmr(A::SparseMatrixCSC{T,Int},B::SparseMatrixCSC{T,Int},
+                    U::Matrix{T},V::Matrix{T},
+                    matching::Union{Vector{NTuple{2,Int}},Dict{Int,Int}}) where T
+    return netalignmr(A,B,knearest_sparsification(U,V,matching,min(size(U,2),size(V,2))))
+end
+
+
+function netalignmr(A::SparseMatrixCSC{T1,Int},B::SparseMatrixCSC{T1,Int},L::SparseMatrixCSC{T2,Int}) where {T1,T2}
+
+	#@assert size(L,1) == size(A,1) && size(L,2) == size(B,1)
+
+	#L = sparse(X)
+	S,w,li,lj = netalign_setup(A,B,L)
+
+	# align networks
+	a = 1;
+	b = 1;
+	stepm = 25;
+	rtype = 1;
+	maxiter = 10;
+	verbose = true;
+	gamma = 0.4;
+	(xbest,st,status,hist), t_netalignmr = @timed NetworkAlign.netalignmr(S,w,a,b,li,lj,gamma,stepm,rtype,maxiter,verbose)
+
+	#matching = spzeros(size(B,1),size(A,1))
+    matching = Dict{Int,Int}()
+	for (x,i,j) in zip(xbest,li,lj)
+		if x == 1.0
+			#matching[j,i] = 1.0
+            matching[i] = j
+		end
+	end
+
+	#println(matching)
+	return matching, t_netalignmr
+
+end
+
+function knearest_sparsification(U::Matrix{T},V::Matrix{T},matching::Union{Vector{NTuple{2,Int}},Dict{Int,Int}},k) where T
+
+	m = size(U,1)
+	n = size(V,1)
+
+	candidates = Set()
+	T_U = BallTree(U')
+	T_V = BallTree(V')
+
+	for (i,j) in matching 
+		U_idxs = knn(T_U, U[i,:], minimum((k,m)))[1]
+		V_idxs = knn(T_V, V[j,:], minimum((k,n)))[1]
+
+		for ip in U_idxs 
+			push!(candidates,(ip,j))
+		end
+
+		for jp in V_idxs 
+			push!(candidates,(i,jp))
+		end
+	end
+
+	
+	sparse_L = spzeros(m,n)
+
+	for (i,j) in candidates	
+		sparse_L[i,j] = U[i,:]'*V[j,:]
+	end
+
+	return sparse_L
+end
+
+
+function findEmbeddingLookalikes(X::Matrix{S},idx,k) where S
+	n = size(X,1)
+	#all_nodes = vcat(U,V)
+	T = BallTree(X')
+	idxs = knn(T, X[idx,:]', minimum((k,n)))[1]
+	# form the edges for sparse
+	ei = Int[]
+	ej = Int[]
+	for i=1:length(idx)
+	  for j=idxs[i]
+		if i != j
+		  push!(ei,i)
+		  push!(ej,j)
+		end
+	  end
+	end
+	return ei,ej
 end

@@ -17,6 +17,7 @@ using Metis
 using DistributedTensorConstruction
 # imports SymTensorUnweighted type, tensors_from_graph, contraction_divide_out! 
 
+using NetworkAlign
 
 #using Hungarian  #TODO: remove
 import Statistics: mean
