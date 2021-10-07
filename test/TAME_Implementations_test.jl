@@ -1,76 +1,26 @@
 
-@testset "Type Stability" begin
+@testset "align_tensors (unprofiled)" begin 
 
-    @suppress_out begin
-        # --  Third Order Symmetric Tensors  -- #
-        @inferred LambdaTAME.ΛTAME_param_search_profiled(A_TOST,B_TOST)
-        @inferred LambdaTAME.LowRankTAME_param_search_profiled(B_TOST,A_TOST)
-        @inferred LambdaTAME.TAME_param_search_profiled(B_TOST,A_TOST)
 
-        @inferred LambdaTAME.ΛTAME_param_search(A_TOST,B_TOST)
-        @inferred LambdaTAME.LowRankTAME_param_search(B_TOST,A_TOST)
-        @inferred LambdaTAME.TAME_param_search(B_TOST,A_TOST)
-
-        # --  Unweighted Symmetric Tensors  -- #
-
-        @inferred LambdaTAME.ΛTAME_param_search(A_UST,B_UST)
-        @inferred LambdaTAME.ΛTAME_param_search_profiled(A_UST,B_UST)
-
-        # --  Unweighted Symmetric Tensors Multi Motif -- #
-        @inferred LambdaTAME.ΛTAME_param_search(A_UST_MM,B_UST_MM)
-    end
+    @inferred align_tensors(A_TOST, B_TOST;method=ΛTAME_M(),matchingMethod = ΛTAME_GramMatching())
+    @inferred align_tensors(A_TOST, B_TOST;method=ΛTAME_M(),matchingMethod = ΛTAME_rankOneMatching())
+    @inferred align_tensors(A_TOST, B_TOST;method=LowRankTAME_M())
+    @inferred align_tensors(A_TOST, B_TOST;method=TAME_M())
+    @inferred align_tensors(A_TOST, B_TOST;method=ΛTAME_MultiMotif_M())
+    
 
 end
 
-@testset "Embedding Comparisons" begin
+@testset "align_tensors_profiled" begin 
 
-    # shared 
-    tol = 1e-15
-    β = 0.0
-    α = 1.0 
-    tol = 1e-6
-    max_iter = 15
     
-    # LowRankTAME + TAME only
-    d = 5
-    U = rand(A_TOST.n,d)
-    V = rand(B_TOST.n,d)
-    X = U*V'
+    #for () in [(A_TOST, B_TOST), (A_UTOST,B_UTOST),(A_UST, B_UST)]
+    @inferred align_tensors_profiled(A_TOST, B_TOST;method=ΛTAME_M(),matchingMethod = ΛTAME_GramMatching())
+    @inferred align_tensors_profiled(A_TOST, B_TOST;method=ΛTAME_M(),matchingMethod = ΛTAME_rankOneMatching())
+    @inferred align_tensors_profiled(A_TOST, B_TOST;method=LowRankTAME_M())
+    @inferred align_tensors_profiled(A_TOST, B_TOST;method=TAME_M())
+    #@inferred align_tensors_profiled(A_TOST, B_TOST;method=ΛTAME_MultiMotif_M())
+        #not-implemnted right now
+    #end
 
-    @testset "ΛTAME" begin
-        @suppress_out begin
-            #no shifts
-            U_TOST,  V_TOST   = LambdaTAME.ΛTAME(A_TOST,  B_TOST,β,max_iter,tol,α)
-            U_UST,   V_UST    = LambdaTAME.ΛTAME(A_UST,   B_UST ,β,max_iter,tol,α)
-            U_UST_MM,V_UST_MM = LambdaTAME.ΛTAME([A_UST],[B_UST],β,max_iter,tol,α) #multimotif routines
-
-            @test norm(U_TOST - U_UST)/norm(U_UST) < tol
-            @test norm(U_UST_MM - U_UST)/norm(U_UST_MM) < tol
-            
-            @test norm(V_TOST - V_UST)/norm(V_UST) < tol
-            @test norm(V_UST_MM - V_UST)/norm(V_UST_MM)< tol
-            
-            #shifts
-            β = 1.0
-            α = .5 
-            U_TOST,  V_TOST   = LambdaTAME.ΛTAME(A_TOST,  B_TOST,β,max_iter,tol,α)
-            U_UST,   V_UST    = LambdaTAME.ΛTAME(A_UST,   B_UST ,β,max_iter,tol,α)
-            U_UST_MM,V_UST_MM = LambdaTAME.ΛTAME([A_UST],[B_UST],β,max_iter,tol,α) #multimotif routines
-
-            @test norm(U_TOST - U_UST)/norm(U_UST) < tol
-            @test norm(U_UST_MM - U_UST)/norm(U_UST_MM) < tol
-            
-            @test norm(V_TOST - V_UST)/norm(V_UST) < tol
-            @test norm(V_UST_MM - V_UST)/norm(V_UST_MM)< tol
-
-        end
-    end
-
-    @testset "LowRankTAME" begin
-        @suppress_out begin
-
-            U_TOST, V_TOST, triangle_count_TOST, mapping_TOST = LowRankTAME(A_TOST, B_TOST,U,V, β, max_iter,tol,α)
-
-        end
-    end
 end

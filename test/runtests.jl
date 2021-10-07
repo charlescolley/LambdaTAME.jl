@@ -48,9 +48,13 @@ A_UST_MM = [A_UST]#, A_UST]
 B_UST_MM = [B_UST]#,] B_UST]
 
 #include()
+include("Experiments_test.jl")
 #include("Contraction_test.jl")
-include("Matchings_test.jl")
+#include("Matchings_test.jl")
 #include("TAME_Implementations_test.jl")
+include("TAME_implementation_test.jl")
+include("LowRankTAME_implementation_test.jl")
+include("LambdaTAME_implementation_test.jl")
 
 
 
