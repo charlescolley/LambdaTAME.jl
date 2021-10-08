@@ -262,7 +262,7 @@ end
 
 ------------------------------------------------------------------------------"""
 function TAME_profiled(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor, β::F, max_iter::Int,
-	                   tol::F,α::F;update_user::Int=-1,W::Array{F,2} = ones(m,n),
+	                   tol::F,α::F;update_user::Int=-1,W::Array{F,2} = ones(A.n,B.n),
 					   no_matching::Bool=false,kwargs...) where {F <:AbstractFloat}
 
     dimension = minimum((A.n,B.n))

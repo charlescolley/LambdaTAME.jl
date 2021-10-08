@@ -25,6 +25,8 @@ include("../src/LambdaTAME.jl")
 #seed 
 seed!(54321)
 
+NORM_CHECK_TOL = 1e-15
+
 tensor_A_file="test_tensors/test_tensorB.ssten"
 tensor_B_file="test_tensors/test_tensorA.ssten"
     #NOTE Flipped to address m >= n assertion error in bipartite_matching_primal_dual
@@ -48,7 +50,7 @@ A_UST_MM = [A_UST]#, A_UST]
 B_UST_MM = [B_UST]#,] B_UST]
 
 #include()
-include("Experiments_test.jl")
+#include("Experiments_test.jl")
 #include("Contraction_test.jl")
 #include("Matchings_test.jl")
 #include("TAME_Implementations_test.jl")
