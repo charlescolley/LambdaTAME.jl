@@ -756,7 +756,7 @@ function bipartite_matching_primal_dual(X::Matrix{Float64};primalDualTol::Float6
     bt=zeros(Float64,m+n)#beta
     match1 = zeros(Int64,n)
     match2 = zeros(Int64,n+m)
-    queue=zeros(Int64,n)
+    queue=zeros(Int64,m)
     t=zeros(Int64,m+n)
     tmod = zeros(Int64,m+n)
     ntmod=0

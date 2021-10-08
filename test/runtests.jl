@@ -9,8 +9,6 @@ using DistributedTensorConstruction
 
 import LinearAlgebra: norm
 import Random: seed!
-#assuming being run from test/ folder
-include("../src/LambdaTAME.jl")
 
 
 #= Potential Kwargs:
@@ -49,8 +47,17 @@ B_UST = load_SymTensorUnweighted(tensor_B_file,Clique(),'\t')
 A_UST_MM = [A_UST]#, A_UST]
 B_UST_MM = [B_UST]#,] B_UST]
 
+
+# -- test_noerror solution -- #
+# src: https://github.com/JuliaLang/julia/issues/18780#issuecomment-863505347
+struct NoException <: Exception end
+macro test_nothrow(ex)
+    esc(:(@test_throws NoException ($(ex); throw(NoException()))))
+end
+
+
 #include()
-#include("Experiments_test.jl")
+include("Experiments_test.jl")
 #include("Contraction_test.jl")
 #include("Matchings_test.jl")
 #include("TAME_Implementations_test.jl")
