@@ -26,16 +26,28 @@ using LambdaTAME: search_Krylov_space, TAME_score
         #@test UTOST_gaped_triangles == UST_gaped_triangles
 
     end
+    =#
 
     @testset "low level matching" begin 
 
         # TODO: degree_based_matching()
-        _ = @inferred low_rank_matching(U,V)
-        _ = @inferred rank_one_matching(u,v)
-        _ = @inferred bipartite_matching_primal_dual(X)
+        @inferred low_rank_matching(U,V)
+        @test_nothrow low_rank_matching(U,V)
+        @inferred rank_one_matching(u,v)
+        @test_nothrow rank_one_matching(u,v)
 
+        @testset "bipartite_matching_primal_dual tests" begin 
+            @test_nothrow bipartite_matching_primal_dual(X;primalDualTol=1e-5)
+
+            val,noute,match1,match2 = @inferred bipartite_matching_primal_dual(X;primalDualTol=1e-5)
+            val_adj,noute_adj,match1_adj,match2_adj = bipartite_matching_primal_dual(X';primalDualTol=1e-5)
+
+            @test (val == val_adj) && (noute == noute_adj)  #check symmetry
+            @test all([i == -1 || match1[i] == j  for (j,i) in enumerate(match1_adj)])
+        end
     end
-
+    
+    #=
     @testset "ΛTAME" begin 
         d = 5
         U = rand(A_TOST.n,d)

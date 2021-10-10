@@ -354,6 +354,7 @@ function TAME_score(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor, X::SparseMat
 
     if typeof(return_timings) === returnTimings
         x ,bipartite_matching_time = @timed bipartite_matching(X)
+
         (triangle_count, gaped_triangles,matching), scoring_time = @timed TAME_score(A,B,Dict(i => j for (i,j) in enumerate(x.match)))
         return triangle_count, gaped_triangles, matching, bipartite_matching_time, scoring_time
     else
@@ -368,11 +369,11 @@ function TAME_score(A::Union{ThirdOrderSymTensor,Array{SymTensorUnweighted{S},1}
 
     if typeof(return_timings) === returnTimings
         (_,_,matching,_) ,matching_time = @timed bipartite_matching_primal_dual(X;kwargs...)
-        (triangle_count, gaped_triangles,inverted_matching), scoring_time = @timed TAME_score(A,B,Dict(j => i for (i,j) in enumerate(matching)))
+        (triangle_count, gaped_triangles,inverted_matching), scoring_time = @timed TAME_score(A,B,Dict(i => j for (i,j) in enumerate(matching)))
         return triangle_count, gaped_triangles,inverted_matching, matching_time, scoring_time, matching
     else
         _,_,matching,_ = bipartite_matching_primal_dual(X;kwargs...)
-        return TAME_score(A,B,Dict(j => i for (i,j) in enumerate(matching)))
+        return TAME_score(A,B,Dict(i => j for (i,j) in enumerate(matching)))
     end
 end
 
@@ -395,11 +396,11 @@ function TAME_score(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor,x::Array{Float
     X = reshape(x,A.n,B.n)
     if typeof(return_timings) === returnTimings
         (_,_,matching,_) ,matching_time = @timed bipartite_matching_primal_dual(X;kwargs...)
-        (triangle_count, gaped_triangles,inverted_matching), scoring_time = @timed TAME_score(A,B,Dict(j => i for (i,j) in enumerate(matching)))
+        (triangle_count, gaped_triangles,inverted_matching), scoring_time = @timed TAME_score(A,B,Dict(i => j for (i,j) in enumerate(matching)))
         return triangle_count, gaped_triangles, inverted_matching, matching_time, scoring_time
     else
         _,_,matching,_ = bipartite_matching_primal_dual(X;kwargs...)
-        return TAME_score(A,B,Dict(j => i for (i,j) in enumerate(matching)))
+        return TAME_score(A,B,Dict(i => j for (i,j) in enumerate(matching)))
     end
 
 end
@@ -738,12 +739,22 @@ end
     represent dummy nodes which are used to account non-matches which may arise 
     from negative weights. 
 ------------------------------------------------------------------------------"""
-function bipartite_matching_primal_dual(X::Matrix{Float64};primalDualTol::Float64=1e-8,
-                                       normalize_weights::Bool=false)
+function bipartite_matching_primal_dual(X::Union{Matrix{T},Adjoint{T,Matrix{T}}};primalDualTol::Float64=1e-8,
+                                       normalize_weights::Bool=false) where T
     #to get the access pattern right, we must match the right hand side to the left hand side. 
 
 	m,n = size(X)
-	@assert m >= n  #error occurs when m < n 
+	#@assert m >= n  #error occurs when m < n 
+    if m < n 
+        val, noute, matchA, _ = bipartite_matching_primal_dual(X';primalDualTol,normalize_weights)
+        matchB = -ones(Int,n) # negative 1 to make no mistake that node is unmatched
+        for (i,j) in enumerate(matchA)
+            matchB[j] = i
+        end
+
+        return val, noute, matchB, matchA
+    end
+
 
     # variables used for the primal-dual algorithm
     # normalize ai values # updated on 2-19-2019
