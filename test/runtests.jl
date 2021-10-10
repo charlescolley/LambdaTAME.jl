@@ -43,9 +43,16 @@ B_UTOST = load_UnweightedThirdOrderSymTensor(tensor_B_file)
 A_UST = load_SymTensorUnweighted(tensor_A_file,Clique(),'\t')
 B_UST = load_SymTensorUnweighted(tensor_B_file,Clique(),'\t')
 
+A_UST_Cycle = load_SymTensorUnweighted(tensor_A_file,Cycle(),'\t')
+B_UST_Cycle = load_SymTensorUnweighted(tensor_B_file,Cycle(),'\t')
+
+
 #for multi-motif routines
 A_UST_MM = [A_UST]#, A_UST]
 B_UST_MM = [B_UST]#,] B_UST]
+
+A_UST_Cycle_MM = [A_UST_Cycle]#, A_UST]
+B_UST_Cycle_MM = [B_UST_Cycle]#,] B_UST]
 
 
 # -- test_noerror solution -- #
@@ -59,7 +66,7 @@ end
 #include()
 include("Experiments_test.jl")
 #include("Contraction_test.jl")
-#include("Matchings_test.jl")
+include("Matchings_test.jl")
 #include("TAME_Implementations_test.jl")
 include("TAME_implementation_test.jl")
 include("LowRankTAME_implementation_test.jl")

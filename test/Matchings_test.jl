@@ -12,7 +12,7 @@ using LambdaTAME: search_Krylov_space, TAME_score
     v = rand(B_TOST.n)
 
     mapping = Dict([(i,i) for i in 1:A_TOST.n])
-    
+    #=
     @testset "Shared" begin 
 
         TOST_triangle_count, TOST_gaped_triangles, _ =  TAME_score(A_TOST,A_TOST,mapping)
@@ -88,6 +88,7 @@ using LambdaTAME: search_Krylov_space, TAME_score
         @test UST_best_matching == UST_best_matching
         #end
     end
+    =#
     """
     @testset "LowRankTAME" begin 
     end
@@ -98,16 +99,77 @@ using LambdaTAME: search_Krylov_space, TAME_score
     
     @testset "TAME_score" begin 
 
+        #TODO: update
+        @testset "Embedding Based" begin
 
-        #BUG: B_TOST is bigger than A_TOST, should flip this around 
-        _ = @inferred TAME_score(A_TOST,B_TOST,U,V)
-        _ = @inferred TAME_score(A_TOST,B_TOST,X)
-        _ = @inferred TAME_score(A_TOST,B_TOST,x)
-        #_ = @inferred TAME_score(A_UTOST,B_UTOST,X)
-        _ = @inferred TAME_score(A_UST,B_UST,X)
-        _ = @inferred TAME_score(A_UST_MM,B_UST_MM,X)
-        
+            _ = @inferred TAME_score(A_TOST,B_TOST,U,V)
+            _ = @inferred TAME_score(A_TOST,B_TOST,X)
+            _ = @inferred TAME_score(A_TOST,B_TOST,x)
+            #_ = @inferred TAME_score(A_UTOST,B_UTOST,X)
+            _ = @inferred TAME_score(A_UST,B_UST,X)
+            _ = @inferred TAME_score(A_UST_MM,B_UST_MM,X)
+        end
         #TODO make mapping 
+
+        @testset "Mapping Based" begin 
+
+            @testset "Higher Level" begin
+
+                for (A,B) in [(A_TOST,B_TOST),(A_UST,B_UST),(A_UST_Cycle,B_UST_Cycle),(A_UST_MM,B_UST_MM),(A_UST_Cycle_MM,B_UST_Cycle_MM)]
+                    if typeof(A) <: Vector #multimotif must have array accessed
+                        m = A[1].n
+                        n = B[1].n
+                    else
+                        m = A.n
+                        n = B.n
+                    end
+                    A_to_B_array = collect(1:m)
+                    B_to_A_array = -ones(n)
+
+                    A_to_B_dict = Dict([(i,i) for i in A_to_B_array]) #using an identity map
+
+                    
+                    idx = 1
+                    while idx <= n && idx <= m
+                        B_to_A_array[idx] = idx
+                        idx += 1
+                    end
+                    B_to_A_dict = Dict([(j,i) for (i,j) in A_to_B_dict]) 
+                        #matchings may be incomplete
+
+                    #check 
+                    for (A_to_B, B_to_A) in [(A_to_B_dict,B_to_A_dict)]#(A_to_B_array,B_to_A_array)]
+                        _,gapedMotifs,_ = TAME_score(A,A,A_to_B)
+                        if typeof(A) <: Vector
+                            _,A_to_B_matchedMotifs,_ = TAME_score(A,A,A_to_B)
+                            @test all([matchedMotif == size(ten.indices,2) for (matchedMotif,ten) in zip(A_to_B_matchedMotifs,A)])
+                        else
+                            _,gapedMotifs,_ = TAME_score(A,A,A_to_B)
+                            @test gapedMotifs == 0
+                        end 
+
+                        if typeof(A) <: Vector
+                            A_to_B_score,A_to_B_matchedMotifs,_ = TAME_score(A,B,A_to_B)
+                            B_to_A_score,B_to_A_matchedMotifs,_ = TAME_score(B,A,B_to_A)
+                            check_motifMatch = all([A_to_B_m == B_to_A_m for (A_to_B_m,B_to_A_m) in zip(A_to_B_matchedMotifs,B_to_A_matchedMotifs)])
+                            #check_motifMiss = all([A_to_B_g == B_to_A_g for (A_to_B_g,B_to_A_g) in zip(B_to_A_gapedMotifs,B_to_A_gapedMotifs)])
+                            @test A_to_B_score == B_to_A_score
+                            @test check_motifMatch
+                        else
+                            A_to_B_matchedMotifs,A_to_B_gapedMotifs,_ = TAME_score(A,B,A_to_B)
+                            B_to_A_matchedMotifs,B_to_A_gapedMotifs,_ = TAME_score(B,A,B_to_A)
+                            @test (A_to_B_matchedMotifs == B_to_A_matchedMotifs)&&(A_to_B_gapedMotifs == B_to_A_gapedMotifs)
+                        end
+                    end
+                end
+            end
+            @testset "Low Level" begin
+
+
+
+
+            end
+        end
 
     end 
 

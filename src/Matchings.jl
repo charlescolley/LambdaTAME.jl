@@ -467,29 +467,6 @@ function TAME_score(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor,Match_mapping:
 
 end
 
-
-function TAME_score(Triangle_Dict::Dict{Array{Int,1},Int},Input_tensor::ThirdOrderSymTensor,
-                    Match_mapping::Dict{Int,Int})
-
-    triangle_count = 0
-    gaped_triangles = 0
-
-    for i in 1:length(Input_tensor.values)
-        v_i,v_j,v_k = Input_tensor.indices[i,:]
-
-        matched_triangle =
-          sort([get(Match_mapping,v_i,-1),get(Match_mapping,v_j,-1),get(Match_mapping,v_k,-1)])
-
-        match = get(Triangle_Dict,matched_triangle,0)
-        if match == 1
-            triangle_count += 1
-        else
-            gaped_triangles += 1
-        end
-    end
-    return triangle_count, gaped_triangles, Match_mapping
-end
-
 #TODO: may remove the array mapping routines 
 function TAME_score(A::SymTensorUnweighted{S},B::SymTensorUnweighted{S}, mapping::Array{Int,1}) where {S <: Motif}
 
@@ -570,29 +547,6 @@ function TAME_score(A::Array{SymTensorUnweighted{S},1},B::Array{SymTensorUnweigh
     end
 
     return matching_score, matched_motifs, A_to_B_mapping
-end
-
-#TODO: may remove, see above
-function TAME_score(A_motifs::Dict{Array{Int,1},Int}, B::SymTensorUnweighted{S}, mapping::Array{Int,1}) where {S <:Motif}
-
-  
-    order =  size(B.indices,1)
-    #A_motifs = Set(eachcol(Indices_A))
-
-    matched_motifs = 0
-
-    for idx =1:size(B.indices,2)
-        edge = B.indices[:,idx]
-        new_edge = [mapping[i] for i in edge]
-        sort!(new_edge)
-
-        if new_edge in A_motifs
-            matched_motifs += 1
-        end
-
-    end
-    return matched_motifs
-
 end
 
 function TAME_score(A::SymTensorUnweighted{Clique},B::SymTensorUnweighted{Clique}, mapping::Dict{Int,Int})
@@ -681,6 +635,56 @@ function TAME_score(A::SymTensorUnweighted{Cycle},B::SymTensorUnweighted{Cycle},
 
 end
 
+
+
+function TAME_score(Triangle_Dict::Dict{Array{Int,1},Int},Input_tensor::ThirdOrderSymTensor,
+                    Match_mapping::Union{Dict{Int,Int},Vector{Int}})
+
+    triangle_count = 0
+    gaped_triangles = 0
+
+    for i in 1:length(Input_tensor.values)
+        v_i,v_j,v_k = Input_tensor.indices[i,:]
+
+        matched_triangle =
+          sort([get(Match_mapping,v_i,-1),get(Match_mapping,v_j,-1),get(Match_mapping,v_k,-1)])
+
+        match = get(Triangle_Dict,matched_triangle,0)
+        if match == 1
+            triangle_count += 1
+        else
+            gaped_triangles += 1
+        end
+    end
+    return triangle_count, gaped_triangles, Match_mapping
+end
+
+
+#TODO: may remove, see above
+
+function TAME_score(A_motifs::Dict{Array{Int,1},Int}, B::SymTensorUnweighted{S}, mapping::Array{Int,1}) where {S <:Motif}
+
+  
+    order =  size(B.indices,1)
+    #A_motifs = Set(eachcol(Indices_A))
+
+    matched_motifs = 0
+
+    for idx =1:size(B.indices,2)
+        edge = B.indices[:,idx]
+        new_edge = [mapping[i] for i in edge]
+        sort!(new_edge)
+
+        if new_edge in A_motifs
+            matched_motifs += 1
+        end
+
+    end
+    return matched_motifs
+
+end
+
+
 function TAME_score(A_motifs::Dict{Array{Int,1},Int}, B::SymTensorUnweighted{S}, mapping::Dict{Int,Int}) where {S <: Motif}
 
   
@@ -705,6 +709,7 @@ function TAME_score(A_motifs::Dict{Array{Int,1},Int}, B::SymTensorUnweighted{S},
     return matched_motifs, gaped_motifs, mapping
 
 end
+
 
 
 
