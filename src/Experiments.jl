@@ -134,25 +134,15 @@ function distributed_pairwise_alignment(files::Array{String,1},dirpath::String;
 
     for ((i,j), future) in futures
 
-        if method === ΛTAME_M() && kwargs[:matchingMethod] === ΛTAME_GramMatching()
+        if method === ΛTAME_M() || method === LowRankTAME_M() || method === TAME_M()
+            output = fetch(future)
+            matched_tris = output.matchScore
+            max_tris = min(output.motifCounts...)
+            best_matching = output.matching
             if profile
-                matched_tris, max_tris, best_matching, results = fetch(future)
-			else 
-				matched_tris, max_tris, best_matching = fetch(future)
+                results = output.profile
 			end
-        elseif method === LowRankTAME_M() || (method === ΛTAME_M() && kwargs[:matchingMethod] === ΛTAME_rankOneMatching())
-			if profile
-				matched_tris, max_tris, _, _, best_matching, results = fetch(future)
-			else
-				matched_tris, max_tris, _, _, best_matching = fetch(future)
-			end
-		elseif method === TAME_M()
-			if profile
-				matched_tris, max_tris, _, best_matching, results = fetch(future)
-			else
-				matched_tris, max_tris, _, best_matching = fetch(future)
-            end
-        elseif method == EigenAlign_M() || method == Degree_M() || method == Random_M() || method == LowRankEigenAlign_M()
+        elseif method === EigenAlign_M() || method === Degree_M() || method === Random_M() || method === LowRankEigenAlign_M()
             A_tens, B_tens, matched_tris, best_matching, results = fetch(future)
             max_tris = min(A_tens, B_tens)
             profile = true
@@ -265,14 +255,11 @@ function distributed_random_trials(trial_count::Int,noise_model::ErdosRenyiNoise
     #TODO: fix parsing of returned functions
     for (seed,p,n,future) in futures
         if profile 
-         
-            if method === ΛTAME_M() && kwargs[:matchingMethod] === ΛTAME_GramMatching()
-                d_A, d_B, perm, (A_tris, B_tris,(matched_tris, max_tris,best_matching, exp_results)) = fetch(future)
-            elseif (method === ΛTAME_M() && kwargs[:matchingMethod] === ΛTAME_rankOneMatching()) ||  method === LowRankTAME_M()
-                d_A, d_B, perm, (A_tris, B_tris,(matched_tris, max_tris, _, _,best_matching, exp_results))= fetch(future)
-            elseif method === TAME_M()
-                d_A, d_B, perm, (A_tris, B_tris,(matched_tris, max_tris, _, best_matching, exp_results))= fetch(future)
-            end
+            d_A, d_B, perm, (A_tris, B_tris, output) = fetch(future)
+            matched_tris = output.matchScore
+            max_tris = min(output.motifCounts...)
+            best_matching = output.matching
+            exp_results = output.profile
 
             accuracy_B_to_A = sum([1 for (i,j) in enumerate(perm) if get(best_matching,j,-1) == i])/n
             accuracy_A_to_B = sum([1 for (i,j) in enumerate(perm) if get(best_matching,i,-1) == j])/n
@@ -285,18 +272,17 @@ function distributed_random_trials(trial_count::Int,noise_model::ErdosRenyiNoise
             push!(results,(seed, p, n, accuracy, degree_weighted_accuracy, matched_tris, A_tris, B_tris, max_tris, exp_results))
 
         else
-            if method === ΛTAME_M() && kwargs[:matchingMethod] === ΛTAME_GramMatching()
-                d_A, d_B, perm, (A_tris, B_tris,(matched_tris, max_tris,best_matching)) = fetch(future)
-            elseif (method === ΛTAME_M() && kwargs[:matchingMethod] === ΛTAME_rankOneMatching()) ||  method === LowRankTAME_M
-                d_A, d_B, perm, (A_tris, B_tris,(matched_tris, max_tris, _, _, best_matching)) = fetch(future)
+            if method === ΛTAME_M() || method === LowRankTAME_M() || method === TAME_M()
+                d_A, d_B, perm, (A_tris, B_tris, output) = fetch(future)
+                matched_tris = output.matchScore
+                max_tris = min(output.motifCounts...)
+                best_matching = output.matching
             elseif method === ΛTAME_MultiMotif_M()
                 if kwargs[:matchingMethod] === ΛTAME_GramMatching()
                     d_A, d_B, perm, (A_motifCounts, B_motifCounts,A_motifDistribution,B_motifDistribution, best_matching_score, max_motif_match, best_matched_motifs, best_matching) = fetch(future)
                 else
                     d_A, d_B, perm, (A_motifCounts, B_motifCounts,A_motifDistribution,B_motifDistribution, best_matching_score, max_motif_match,best_matched_motifs, _, _, best_matching) = fetch(future)
                 end
-            elseif method === TAME_M()
-                d_A, d_B, perm, (A_tris, B_tris, (matched_tris, max_tris, _, best_matching)) = fetch(future)
             elseif method === EigenAlign_M() || method == Degree_M() || method === Random_M() || method === LowRankEigenAlign_M() || method === LowRankEigenAlignOnlyEdges_M()
                 d_A, d_B, perm, (A_tris, B_tris, matched_tris, best_matching, _) = fetch(future)
                 max_tris = minimum((A_tris,B_tris))
@@ -376,14 +362,24 @@ function distributed_random_trials(trial_count::Int,noise_model::DuplicationNois
     #TODO: fix parsing of returned functions
     for (seed,p,n,sp,future) in futures
         if profile 
-            
-            if method === ΛTAME_M() && kwargs[:matchingMethod] === ΛTAME_GramMatching()
-                perm,dup_vertices, (A_tris, B_tris,(matched_tris, max_tris,best_matching, exp_results)) = fetch(future)
-            elseif (method === ΛTAME_M && kwargs[:matchingMethod] === ΛTAME_rankOneMatching()) ||  method === LowRankTAME_M()
-                perm,dup_vertices, (A_tris, B_tris,(matched_tris, max_tris, _, _,best_matching, exp_results))= fetch(future)
-            elseif method === TAME_M
-                perm,dup_vertices, (A_tris, B_tris,(matched_tris, max_tris, _, best_matching, exp_results))= fetch(future)
+
+            perm, dup_vertices, (A_tris, B_tris, output) = fetch(future)
+            matched_tris = output.matchScore
+            max_tris = min(output.motifCounts...)
+            best_matching = output.matching
+            exp_results = output.profile
+            #=
+            #local perm, dup_vertices
+            if (method === ΛTAME_M() && kwargs[:matchingMethod] === ΛTAME_GramMatching()) ||  method === LowRankTAME_M()
+                #throw(fetch(future))
+                #best_matched_motifs, max_motif_match, best_matching, U_best, V_best, profile = results
+                perm,dup_vertices, (A_tris, B_tris,(matched_tris, max_tris, _, _, best_matching, exp_results)) = fetch(future)
+            elseif (method === ΛTAME_M() && kwargs[:matchingMethod] === ΛTAME_rankOneMatching()) 
+                perm, dup_vertices, (A_tris, B_tris,(matched_tris, max_tris, _, _, _, _, best_matching, exp_results))= fetch(future)
+            elseif method === TAME_M()
+                perm, dup_vertices, (A_tris, B_tris,(matched_tris, max_tris, _, best_matching, exp_results))= fetch(future)
             end
+            =#
 
             accuracy_B_to_A = sum([1 for (i,j) in enumerate(perm) if get(best_matching,j,-1) == i])/n
             accuracy_A_to_B = sum([1 for (i,j) in enumerate(perm) if get(best_matching,i,-1) == j])/n
@@ -399,20 +395,16 @@ function distributed_random_trials(trial_count::Int,noise_model::DuplicationNois
 
         else
 
-            if method === ΛTAME_M() && kwargs[:matchingMethod] === ΛTAME_GramMatching()
-                perm, dup_vertices, (A_tris, B_tris,(matched_tris, max_tris,best_matching)) = fetch(future)
-            elseif (method === ΛTAME_M() && kwargs[:matchingMethod] === ΛTAME_rankOneMatching()) ||  method === LowRankTAME_M()
-                perm, dup_vertices, (A_tris, B_tris,(matched_tris, max_tris, _, _,best_matching))= fetch(future)
-            elseif method === TAME_M()
-                perm, dup_vertices, (A_tris, B_tris,(matched_tris, max_tris, _, best_matching))= fetch(future)
+            if method === ΛTAME_M() || method === LowRankTAME_M() || method === TAME_M()
+                perm, dup_vertices, (A_tris, B_tris, output) = fetch(future)
+                matched_tris = output.matchScore
+                max_tris = min(output.motifCounts...)
+                best_matching = output.matching
             elseif method === ΛTAME_MultiMotif_M()
  
-                if kwargs[:matchingMethod] === ΛTAME_GramMatching()
-                    #TODO: fix naming conventions
-                    perm, dup_vertices, (A_motifCounts, B_motifCounts, A_motifDistribution,B_motifDistribution, best_matching_score, max_motif_match, best_matched_motifs, best_matching) = fetch(future)
-                else
-                    perm, dup_vertices, (A_motifCounts, B_motifCounts, A_motifDistribution,B_motifDistribution, best_matching_score, max_motif_match, best_matched_motifs, _, _, best_matching) = fetch(future)
-                end
+                perm, dup_vertices, (A_motifCounts, B_motifCounts, A_motifDistribution, B_motifDistribution,output) = fetch(future)
+                best_matching_score = output.matchScore
+                best_matching = output.matching
                 A_tris = -1
                 B_tris = -1
             elseif method === EigenAlign_M() || method == Degree_M() || method === Random_M() || method === LowRankEigenAlign_M() || method === LowRankEigenAlignOnlyEdges_M()
@@ -432,7 +424,7 @@ function distributed_random_trials(trial_count::Int,noise_model::DuplicationNois
             
 
             if typeof(method) === ΛTAME_MultiMotif_M
-                push!(results,( seed, p, n, sp, accuracy, dup_vertex_tolerant_accuracy, best_matching_score, A_motifCounts, B_motifCounts, A_motifDistribution,B_motifDistribution, best_matched_motifs))
+                push!(results,( seed, p, n, sp, accuracy, dup_vertex_tolerant_accuracy, best_matching_score, A_motifCounts, B_motifCounts, A_motifDistribution,B_motifDistribution))
             else
                 push!(results,( seed, p, n, sp, accuracy, dup_vertex_tolerant_accuracy, matched_tris, A_tris, B_tris, max_tris))
             end

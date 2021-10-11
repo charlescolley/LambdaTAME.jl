@@ -1,6 +1,13 @@
 
 #TODO: convert two function calls into Union{COOTen,ThirdOrderSymTensor}
 #TODO: update new DistributedTensorConstructio types in docs
+struct TAME_Return{T}
+	matchScore::Int
+	motifCounts::Tuple{Int,Int}
+	matching::Union{Dict{Int,Int},Vector{Int}}
+	embedding::Matrix{T}
+	profile::Union{Nothing,Vector{Tuple{String,Dict{String,Union{Array{Float64,1},Array{Array{Float64,1},1}}}}}}
+end
 
 #=------------------------------------------------------------------------------
               Routines for searching over alpha/beta parameters
@@ -11,8 +18,9 @@ function TAME_param_search(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor;
                            iter::Int = 15,tol::Float64=1e-6, alphas::Array{F,1}=[.5,1.0],
 						   betas::Array{F,1} =[1000.0,100.0,10.0,1.0,0.0,0.1,0.01,0.001],
 						   kwargs...) where {F <: AbstractFloat}
-
-    max_triangle_match = min(size(A.indices,1),size(B.indices,1))
+	A_motifs = size(A.indices,1)
+	B_motifs = size(B.indices,1)
+	max_triangle_match = min(A_motifs,B_motifs)
     total_triangles = size(A.indices,1) + size(B.indices,1)
 	best_TAME_PP_tris::Int = -1
 	best_matching = Dict{Int,Int}()
@@ -39,7 +47,7 @@ function TAME_param_search(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor;
     end
 
 
-	return best_TAME_PP_tris, max_triangle_match, best_TAME_PP_x, best_matching
+	return TAME_Return(best_TAME_PP_tris,(A_motifs,B_motifs),best_matching,best_TAME_PP_x,nothing)
 end
 
 function TAME_param_search_profiled(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor;
@@ -47,7 +55,9 @@ function TAME_param_search_profiled(A::ThirdOrderSymTensor,B::ThirdOrderSymTenso
 						            betas::Array{F,1} =[1000.0,100.0,10.0,1.0,0.0,0.1,0.01,0.001],
 						            profile::Bool=false,profile_aggregation="all",
 						            kwargs...) where {F <: AbstractFloat}
-    max_triangle_match = min(size(A.indices,1),size(B.indices,1))
+	A_motifs = size(A.indices,1)
+	B_motifs = size(B.indices,1)
+	max_triangle_match = min(A_motifs,B_motifs)
     total_triangles = size(A.indices,1) + size(B.indices,1)
 	best_TAME_PP_tris = -1
 	best_matching = Dict{Int,Int}()
@@ -74,7 +84,8 @@ function TAME_param_search_profiled(A::ThirdOrderSymTensor,B::ThirdOrderSymTenso
 
     end
 
-	return best_TAME_PP_tris, max_triangle_match, best_TAME_PP_x, best_matching, experiment_profiles
+
+	return TAME_Return(best_TAME_PP_tris,(A_motifs,B_motifs),best_matching,best_TAME_PP_x,experiment_profiles)
 
 end
 

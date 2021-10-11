@@ -1,7 +1,15 @@
+
+
+struct LowRankTAME_Return{T}
+	matchScore::Union{Int,Vector{Int}}
+	motifCounts::NTuple{2,Union{Int,Vector{Int}}}
+	matching::Union{Dict{Int,Int},Vector{Int}}
+	embedding::Tuple{Matrix{T},Matrix{T}}
+	profile::Union{Nothing,Vector{Tuple{String,Dict{String,Union{Array{Float64,1},Array{Array{Float64,1},1}}}}}}
+end
 #=------------------------------------------------------------------------------
               Routines for searching over alpha/beta parameters
 ------------------------------------------------------------------------------=#
-
 function LowRankTAME_param_search(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor;
 						          iter::Int = 15,tol::Float64=1e-6,
 						          U_0::Array{Float64,2} = ones(A.n,1),
@@ -9,7 +17,10 @@ function LowRankTAME_param_search(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor;
 						          alphas::Array{F,1}=[.5,1.0],
 						          betas::Array{F,1} =[1000.0,100.0,10.0,1.0,0.0,0.1,0.01,0.001],
 						          kwargs...) where {F <: AbstractFloat}
-    max_triangle_match = min(size(A.indices,1),size(B.indices,1))
+	A_motifs = size(A.indices,1)
+	B_motifs = size(B.indices,1)
+    max_triangle_match = min(A_motifs,B_motifs)
+
     total_triangles = size(A.indices,1) + size(B.indices,1)
     best_TAME_PP_tris = -1
 	best_matching = Dict{Int,Int}()
@@ -39,7 +50,8 @@ function LowRankTAME_param_search(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor;
 
     end
 
-	return best_TAME_PP_tris, max_triangle_match, best_TAME_PP_U, best_TAME_PP_V, best_matching
+	return LowRankTAME_Return(best_TAME_PP_tris,(A_motifs,B_motifs),best_matching,
+	                          (best_TAME_PP_U, best_TAME_PP_V), nothing)
 
 end
 
@@ -48,7 +60,10 @@ function LowRankTAME_param_search_profiled(A::ThirdOrderSymTensor,B::ThirdOrderS
 						   alphas::Array{F,1}=[.5,1.0],
 						   betas::Array{F,1} =[1000.0,100.0,10.0,1.0,0.0,0.1,0.01,0.001],
 						   kwargs...) where {F <: AbstractFloat}
-    max_triangle_match = min(size(A.indices,1),size(B.indices,1))
+	A_motifs = size(A.indices,1)
+	B_motifs = size(B.indices,1)
+    max_triangle_match = min(A_motifs,B_motifs)
+
     total_triangles = size(A.indices,1) + size(B.indices,1)
 	best_TAME_PP_tris = -1
 	best_matching = Dict{Int,Int}()
@@ -56,7 +71,7 @@ function LowRankTAME_param_search_profiled(A::ThirdOrderSymTensor,B::ThirdOrderS
 	best_TAME_PP_U = ones(A.n,1)
 	best_TAME_PP_V = ones(B.n,1)
 
-	experiment_profiles = []
+	experiment_profiles = Array{Tuple{String,Dict{String,Union{Array{Float64,1},Array{Array{Float64,1},1}}}},1}(undef,0)
 
 
     for α in alphas
@@ -79,7 +94,9 @@ function LowRankTAME_param_search_profiled(A::ThirdOrderSymTensor,B::ThirdOrderS
 
     end
 
-	return best_TAME_PP_tris, max_triangle_match, best_TAME_PP_U, best_TAME_PP_V,best_matching, experiment_profiles
+	return LowRankTAME_Return(best_TAME_PP_tris,(A_motifs,B_motifs),best_matching,
+							 (best_TAME_PP_U, best_TAME_PP_V), experiment_profiles)
+
 
 end
 
@@ -444,8 +461,6 @@ function LowRankTAME_profiled(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor,
 
 		lambda = lambda_k_1
 	end
-
-
 
 	return best_U, best_V, best_triangle_count,best_matching, experiment_profile
 end

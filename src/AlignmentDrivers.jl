@@ -36,20 +36,23 @@ struct Random_M <: AlignmentMethod end
   If a tensor method is used, the number of triangles in A and B are returned, in
   addition to whatever is returned by 'align_tensors(_profiled)'.
 ------------------------------------------------------------------------------"""
-function align_matrices(A::SparseMatrixCSC{T,Int},B::SparseMatrixCSC{S,Int};profile=false,
-                        motif=Clique(),kwargs...) where {T,S}
+function align_matrices(A::SparseMatrixCSC{T,Int},B::SparseMatrixCSC{S,Int};
+                        profile=false,motif=Clique(),kwargs...) where {T,S}
+
+    method = typeof(kwargs[:method])
 
     A_ten = graph_to_ThirdOrderTensor(A)
     B_ten = graph_to_ThirdOrderTensor(B)
     
-    method = typeof(kwargs[:method])
-
     if method === ΛTAME_M || method === LowRankTAME_M  || method === TAME_M
         if profile
-            return size(A_ten.indices,1), size(B_ten.indices,1), align_tensors_profiled(A_ten,B_ten;kwargs...)
+            results = align_tensors_profiled(A_ten,B_ten;kwargs...)
         else
-            return size(A_ten.indices,1), size(B_ten.indices,1), align_tensors(A_ten,B_ten;kwargs...)
+            results = align_tensors(A_ten,B_ten;kwargs...)
         end
+
+        return size(A_ten.indices,1), size(B_ten.indices,1), results
+
     elseif method === ΛTAME_MultiMotif_M
 
         A_tensors = tensors_from_graph(A,kwargs[:orders],kwargs[:samples],motif)        
@@ -63,7 +66,7 @@ function align_matrices(A::SparseMatrixCSC{T,Int},B::SparseMatrixCSC{S,Int};prof
 
         #TODO: standardize kwarg consumption
         subkwargs = Dict([(k,v) for (k,v) in kwargs if k != :orders && k != :samples])
-        return A_motifCounts, B_motifCounts,A_motifDistribution, B_motifDistribution, align_tensors(A_tensors,B_tensors;subkwargs...)...
+        return A_motifCounts, B_motifCounts,A_motifDistribution, B_motifDistribution, align_tensors(A_tensors,B_tensors;subkwargs...)
 
     elseif method === EigenAlign_M || method === Degree_M || method === Random_M || method === LowRankEigenAlign_M || method === LowRankEigenAlignOnlyEdges_M
         
@@ -110,7 +113,7 @@ function graph_to_ThirdOrderTensor(A;use_lcc=false)
     end
 
     if !issymmetric(A)
-        println("Symmetrizing matrix")
+        println("Symmetrising matrix")
 		A = max.(A,A')  #symmetrize for Triangles routine
 	end
 
@@ -173,27 +176,31 @@ function align_tensors_profiled(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor;
 					            method::AlignmentMethod=ΛTAME_M(),no_matching=false,kwargs...)
 
 	#put larger tensor on the left
+    #=
 	if B.n > A.n
+        println("swapping tensors in 'align_tensors_profiled'. ")
 		results =  align_tensors_profiled(B,A;method = method, no_matching=no_matching,kwargs...)
 		#flip the matchings if A and B were swapped
 		if typeof(method) === ΛTAME_M 
 			if kwargs[:matchingMethod] === ΛTAME_rankOneMatching()
-				best_TAME_PP_tris, max_triangle_match, U_best, V_best, best_matching, profile = results
-				return best_TAME_PP_tris, max_triangle_match, U_best, V_best, Dict((j,i) for (i,j) in best_matching), profile
+				best_TAME_PP_tris, max_triangle_match, U_best, V_best, best_i, best_j, best_matching, profile = results
+				return best_TAME_PP_tris, max_triangle_match, V_best, U_best, best_j, best_i, Dict((j,i) for (i,j) in best_matching), profile
 			else 
-				best_matched_motifs, max_motif_match, best_matching, profile = results
+				best_matched_motifs, max_motif_match, U_best, V_best,best_matching, profile = results
 				#BUG: best_matching is returning a vector and not a mapping, type stability is broken too
-				return best_matched_motifs::Int, max_motif_match, Dict((j,i) for (i,j) in enumerate(best_matching))::Dict{Int64,Int64}, profile
+				return best_matched_motifs, max_motif_match, V_best, U_best, Dict((j,i) for (i,j) in enumerate(best_matching))::Dict{Int64,Int64}, profile
 			end
 		elseif typeof(method) == LowRankTAME_M
 			best_TAME_PP_tris, max_triangle_match, U_best, V_best, best_matching,profile = results
-			return best_TAME_PP_tris, max_triangle_match, U_best, V_best, Dict((j,i) for (i,j) in best_matching), profile
+			return best_TAME_PP_tris, max_triangle_match, V_best, U_best, Dict((j,i) for (i,j) in best_matching), profile
 		elseif typeof(method) === TAME_M
 			best_TAME_PP_tris, max_triangle_match, best_TAME_PP_x, best_matching,profile = results
+            # TODO: must reshape returned best_TAME_PP_x
 			return best_TAME_PP_tris, max_triangle_match, best_TAME_PP_x, Dict((j,i) for (i,j) in best_matching), profile
 		end
 
 	end
+    =#
 
 	if typeof(method) == ΛTAME_M
 		return ΛTAME_param_search_profiled(A,B;kwargs...)
@@ -240,26 +247,29 @@ function align_tensors(A::Union{ThirdOrderSymTensor,SymTensorUnweighted{S}},
 
 	#TODO: test if ternary is a problem
 	#put larger tensor on the left
+    #=
 	if B.n > A.n
 		#TODO: this typeof(A) may fail
 		results = align_tensors(B,A;method = method, no_matching=no_matching,kwargs...)
 		#flip the matchings if A and B were swapped
 		if typeof(method) === ΛTAME_M
 			if kwargs[:matchingMethod] === ΛTAME_rankOneMatching()
-				best_TAME_PP_tris, max_triangle_match, U_best, V_best, best_matching = results
-				return best_TAME_PP_tris, max_triangle_match, U_best, V_best, Dict((j,i) for (i,j) in best_matching)
+
+				best_TAME_PP_tris, max_triangle_match, U_best, V_best,best_i, best_j, best_matching = results
+				return best_TAME_PP_tris, max_triangle_match, V_best, U_best, best_j, best_i, Dict((j,i) for (i,j) in best_matching)
 			else 
-				best_matched_motifs, max_motif_match, best_matching = results
-				return best_matched_motifs, max_motif_match, Dict((j,i) for (i,j) in best_matching)
+				best_matched_motifs, max_motif_match, U_best, V_best, best_matching = results
+				return best_matched_motifs, max_motif_match, V_best, U_best, Dict((j,i) for (i,j) in best_matching)
 			end
 		elseif typeof(method) === LowRankTAME_M
 			best_TAME_PP_tris, max_triangle_match, U_best, V_best, best_matching = results
-			return best_TAME_PP_tris, max_triangle_match, U_best, V_best, Dict((j,i) for (i,j) in best_matching)
+			return best_TAME_PP_tris, max_triangle_match, V_best, U_best, Dict((j,i) for (i,j) in best_matching)
 		elseif typeof(method) === TAME_M
 			best_TAME_PP_tris, max_triangle_match, best_TAME_PP_x, best_matching = results
 			return best_TAME_PP_tris, max_triangle_match, best_TAME_PP_x, Dict((j,i) for (i,j) in best_matching)
 		end
 	end
+    =#
 
 	if typeof(method) === ΛTAME_M || typeof(method) === ΛTAME_MultiMotif_M
 		return ΛTAME_param_search(A,B;kwargs...)
@@ -276,11 +286,12 @@ end
 function align_tensors(A::Array{SymTensorUnweighted{S},1}, B::Array{SymTensorUnweighted{S},1}; 
 			           method::AlignmentMethod=ΛTAME_M(),no_matching=false,kwargs...) where {S <: Motif}
 
-
+    #=
 	if (B[1].n > A[1].n)
 		results = align_tensors(B,A;method = method, no_matching=no_matching,kwargs...)
 		return results[1:end-1]..., Dict((j,i) for (i,j) in results[end])
 	end
+    =#
 
 	if typeof(method) === ΛTAME_M || typeof(method) === ΛTAME_MultiMotif_M
 		return ΛTAME_param_search(A,B;kwargs...)
