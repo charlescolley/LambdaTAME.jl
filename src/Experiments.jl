@@ -102,7 +102,7 @@ Output
 function distributed_pairwise_alignment(files::Array{String,1},dirpath::String;
                                         method::AlignmentMethod=ΛTAME_M(),profile=false,kwargs...)
 
-    @everywhere include_string(Main,$(read("LambdaTAME.jl",String)),"LambdaTAME.jl")
+    #@everywhere include_string(Main,$(read("LambdaTAME.jl",String)),"LambdaTAME.jl")
 
     alignment_object = ""
     if all( [f[end-5:end] == ".ssten" for f in files]) #tensors 
@@ -214,7 +214,7 @@ function distributed_random_trials(trial_count::Int,noise_model::ErdosRenyiNoise
     #@assert trial_count % process_count == 0
 
     #ensure file is loaded on all processes
-    @everywhere include_string(Main,$(read("LambdaTAME.jl",String)),"LambdaTAME.jl")
+    #@everywhere include_string(Main,$(read("LambdaTAME.jl",String)),"LambdaTAME.jl")
 
    
 	if seed_exps
@@ -318,7 +318,7 @@ function distributed_random_trials(trial_count::Int,noise_model::DuplicationNois
     #@assert trial_count % process_count == 0
 
     #ensure file is loaded on all processes
-    @everywhere include_string(Main,$(read("LambdaTAME.jl",String)),"LambdaTAME.jl")
+    #@everywhere include_string(Main,$(read("LambdaTAME.jl",String)),"LambdaTAME.jl")
     
 
     if seed_exps
