@@ -37,13 +37,15 @@ using LambdaTAME: search_Krylov_space, TAME_score
         @test_nothrow rank_one_matching(u,v)
 
         @testset "bipartite_matching_primal_dual tests" begin 
-            @test_nothrow bipartite_matching_primal_dual(X;primalDualTol=1e-5)
+            @test_nothrow bipartite_matching_primal_dual(X;primalDualTol=1e-5) #solve to a less strict degree
 
             val,noute,match1,match2 = @inferred bipartite_matching_primal_dual(X;primalDualTol=1e-5)
             val_adj,noute_adj,match1_adj,match2_adj = bipartite_matching_primal_dual(X';primalDualTol=1e-5)
 
+            @test length(match1) == size(X,1) && length(match2) == size(X,2) 
+            @test length(match1_adj) == size(X,2) && length(match2_adj) == size(X,1) #ensure match1 is A_to_B
             @test (val == val_adj) && (noute == noute_adj)  #check symmetry
-            @test all([i == -1 || match1[i] == j  for (j,i) in enumerate(match1_adj)])
+            @test match1 == match2_adj && match2 == match1_adj
         end
     end
     

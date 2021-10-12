@@ -5,7 +5,6 @@ PostProcessing:
 - Date: 2020-05-22
 =#
 
-#Notes: change b-matching search order to k=1:n, i = 1:n , j = k+1 - i (verify)
 
 """-----------------------------------------------------------------------------
    Greedily creates a b matching from a rank 1 bipartite matching problem. Only
@@ -193,15 +192,13 @@ end
 function netalignmr(A::SparseMatrixCSC{T,Int},B::SparseMatrixCSC{T,Int},
                     U::Matrix{T},V::Matrix{T};kwargs...) where T
     (_,_,matching,_)=  bipartite_matching_primal_dual(U*V';kwargs...)
-    inverted_mapping = [(j,i) for (i,j) in enumerate(matching)]
-    return netalignmr(A,B,knearest_sparsification(U,V,inverted_mapping,min(size(U,2),size(V,2))))
+    return netalignmr(A,B,knearest_sparsification(U,V,Dict(enumerate(matching)),2*min(size(U,2),size(V,2))))
 end
 
 function netalignmr(A::SparseMatrixCSC{T,Int},B::SparseMatrixCSC{T,Int},
                     U::Matrix{T},V::Matrix{T},k::Int;kwargs...) where T
     (_,_,matching,_)=  bipartite_matching_primal_dual(U*V';kwargs...)
-    inverted_mapping = [(j,i) for (i,j) in enumerate(matching)]
-    return netalignmr(A,B,knearest_sparsification(U,V,inverted_mapping,k))
+    return netalignmr(A,B,knearest_sparsification(U,V,Dict(enumerate(matching)),k))
 end
 
 function netalignmr(A::SparseMatrixCSC{T,Int},B::SparseMatrixCSC{T,Int},
@@ -213,13 +210,13 @@ end
 function netalignmr(A::SparseMatrixCSC{T,Int},B::SparseMatrixCSC{T,Int},
                     U::Matrix{T},V::Matrix{T},
                     matching::Union{Vector{NTuple{2,Int}},Dict{Int,Int}}) where T
-    return netalignmr(A,B,knearest_sparsification(U,V,matching,min(size(U,2),size(V,2))))
+    return netalignmr(A,B,knearest_sparsification(U,V,matching,2*min(size(U,2),size(V,2))))
 end
 
 
 function netalignmr(A::SparseMatrixCSC{T1,Int},B::SparseMatrixCSC{T1,Int},L::SparseMatrixCSC{T2,Int}) where {T1,T2}
 
-	#@assert size(L,1) == size(A,1) && size(L,2) == size(B,1)
+	@assert size(L,1) == size(A,1) && size(L,2) == size(B,1)
 
 	#L = sparse(X)
 	S,w,li,lj = netalign_setup(A,B,L)
@@ -234,21 +231,21 @@ function netalignmr(A::SparseMatrixCSC{T1,Int},B::SparseMatrixCSC{T1,Int},L::Spa
 	gamma = 0.4;
 	(xbest,st,status,hist), t_netalignmr = @timed NetworkAlign.netalignmr(S,w,a,b,li,lj,gamma,stepm,rtype,maxiter,verbose)
 
-	#matching = spzeros(size(B,1),size(A,1))
     matching = Dict{Int,Int}()
 	for (x,i,j) in zip(xbest,li,lj)
 		if x == 1.0
-			#matching[j,i] = 1.0
-            matching[i] = j
+            matching[j] = i
 		end
 	end
 
-	#println(matching)
-	return matching, t_netalignmr
+	return matching, t_netalignmr, L
 
 end
 
 function knearest_sparsification(U::Matrix{T},V::Matrix{T},matching::Union{Vector{NTuple{2,Int}},Dict{Int,Int}},k) where T
+
+    @assert maximum([i for (i,j) in matching]) <= size(U,1)
+    @assert maximum([j for (i,j) in matching]) <= size(V,1)
 
 	m = size(U,1)
 	n = size(V,1)

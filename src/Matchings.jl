@@ -355,11 +355,11 @@ function TAME_score(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor, X::SparseMat
     if typeof(return_timings) === returnTimings
         x ,bipartite_matching_time = @timed bipartite_matching(X)
 
-        (triangle_count, gaped_triangles,matching), scoring_time = @timed TAME_score(A,B,Dict(i => j for (i,j) in enumerate(x.match)))
+        (triangle_count, gaped_triangles,matching), scoring_time = @timed TAME_score(A,B,Dict(enumerate(x.match)))
         return triangle_count, gaped_triangles, matching, bipartite_matching_time, scoring_time
     else
         x = bipartite_matching(X)
-        return TAME_score(A,B,Dict(i => j for (i,j) in enumerate(x.match)))
+        return TAME_score(A,B,Dict(enumerate(x.match)))
     end
 
 end
@@ -369,11 +369,11 @@ function TAME_score(A::Union{ThirdOrderSymTensor,Array{SymTensorUnweighted{S},1}
 
     if typeof(return_timings) === returnTimings
         (_,_,matching,_) ,matching_time = @timed bipartite_matching_primal_dual(X;kwargs...)
-        (triangle_count, gaped_triangles,inverted_matching), scoring_time = @timed TAME_score(A,B,Dict(i => j for (i,j) in enumerate(matching)))
-        return triangle_count, gaped_triangles,inverted_matching, matching_time, scoring_time, matching
+        (triangle_count, gaped_triangles,matching), scoring_time = @timed TAME_score(A,B,Dict(enumerate(matching)))
+        return triangle_count, gaped_triangles, matching, matching_time, scoring_time
     else
         _,_,matching,_ = bipartite_matching_primal_dual(X;kwargs...)
-        return TAME_score(A,B,Dict(i => j for (i,j) in enumerate(matching)))
+        return TAME_score(A,B,Dict(enumerate(matching)))
     end
 end
 
@@ -381,11 +381,11 @@ function TAME_score(A::SymTensorUnweighted{S},B::SymTensorUnweighted{S},X::Array
 
     if typeof(return_timings) === returnTimings
         (_,_,matching,_) ,matching_time = @timed bipartite_matching_primal_dual(X;kwargs...)
-        (triangle_count, gaped_triangles,inverted_matching), scoring_time = @timed TAME_score(A,B,Dict(i => j for (i,j) in enumerate(matching)))
-        return triangle_count, gaped_triangles, inverted_matching, matching_time, scoring_time, matching
+        (triangle_count, gaped_triangles,matching), scoring_time = @timed TAME_score(A,B,Dict(enumerate(matching)))
+        return triangle_count, gaped_triangles, matching, matching_time, scoring_time
     else
         _,_,matching,_ = bipartite_matching_primal_dual(X;kwargs...)
-        return TAME_score(A,B,Dict(i => j for (i,j) in enumerate(matching)))
+        return TAME_score(A,B,Dict(enumerate(matching)))
         #BUG?
     end
 end
@@ -396,11 +396,11 @@ function TAME_score(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor,x::Array{Float
     X = reshape(x,A.n,B.n)
     if typeof(return_timings) === returnTimings
         (_,_,matching,_) ,matching_time = @timed bipartite_matching_primal_dual(X;kwargs...)
-        (triangle_count, gaped_triangles,inverted_matching), scoring_time = @timed TAME_score(A,B,Dict(i => j for (i,j) in enumerate(matching)))
-        return triangle_count, gaped_triangles, inverted_matching, matching_time, scoring_time
+        (triangle_count, gaped_triangles,matching), scoring_time = @timed TAME_score(A,B,Dict(enumerate(matching)))
+        return triangle_count, gaped_triangles, matching, matching_time, scoring_time
     else
         _,_,matching,_ = bipartite_matching_primal_dual(X;kwargs...)
-        return TAME_score(A,B,Dict(i => j for (i,j) in enumerate(matching)))
+        return TAME_score(A,B,Dict(enumerate(matching)))
     end
 
 end
@@ -433,7 +433,6 @@ function TAME_score(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor,Match_mapping:
 
             matched_triangle =
               sort([get(Match_mapping,v_i,-1),get(Match_mapping,v_j,-1),get(Match_mapping,v_k,-1)])
-    #        println(B.indices[i,:]," -> ",matched_triangle)
             match = get(Triangle_check,matched_triangle,0)
             if match == 1
                 triangle_count += 1
@@ -552,7 +551,7 @@ end
 function TAME_score(A::SymTensorUnweighted{Clique},B::SymTensorUnweighted{Clique}, mapping::Dict{Int,Int})
 
     @assert size(A.indices,1) == size(B.indices,1)
-    println("using clique code")
+    #println("using clique code")
 
     if size(B.indices,2) > size(A.indices,2)
         inverted_mapping = Dict{Int,Int}()
@@ -662,7 +661,7 @@ end
 
 #TODO: may remove, see above
 
-function TAME_score(A_motifs::Dict{Array{Int,1},Int}, B::SymTensorUnweighted{S}, mapping::Array{Int,1}) where {S <:Motif}
+function TAME_score(A_motifs::Dict{Array{Int,1},Int}, B::SymTensorUnweighted{S}, mapping::Array{Int,1}) where {S <: Motif}
 
   
     order =  size(B.indices,1)
@@ -751,13 +750,14 @@ function bipartite_matching_primal_dual(X::Union{Matrix{T},Adjoint{T,Matrix{T}}}
 	m,n = size(X)
 	#@assert m >= n  #error occurs when m < n 
     if m < n 
-        val, noute, matchA, _ = bipartite_matching_primal_dual(X';primalDualTol,normalize_weights)
-        matchB = -ones(Int,n) # negative 1 to make no mistake that node is unmatched
-        for (i,j) in enumerate(matchA)
-            matchB[j] = i
+        val, noute, B_to_A, _ = bipartite_matching_primal_dual(X';primalDualTol,normalize_weights)
+        A_to_B = -ones(Int,m) # negative 1 to make no mistake that node is unmatched
+        for (j,i) in enumerate(B_to_A)
+            if i != -1
+                A_to_B[i] = j
+            end
         end
-
-        return val, noute, matchB, matchA
+        return val, noute, A_to_B, B_to_A
     end
 
 
@@ -891,5 +891,11 @@ function bipartite_matching_primal_dual(X::Union{Matrix{T},Adjoint{T,Matrix{T}}}
         end
 	end
 	
-    return val,noute,match1, match2
+    A_to_B = -ones(Int,m)
+    B_to_A = match1
+    for (j,i) in enumerate(B_to_A)
+        A_to_B[i] = j
+    end
+
+    return val, noute, A_to_B, B_to_A
 end
