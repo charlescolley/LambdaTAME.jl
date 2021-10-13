@@ -141,25 +141,25 @@ using LambdaTAME: search_Krylov_space, TAME_score
 
                     #check 
                     for (A_to_B, B_to_A) in [(A_to_B_dict,B_to_A_dict)]#(A_to_B_array,B_to_A_array)]
-                        _,gapedMotifs,_ = TAME_score(A,A,A_to_B)
+                        _,gapedMotifs = TAME_score(A,A,A_to_B)
                         if typeof(A) <: Vector
-                            _,A_to_B_matchedMotifs,_ = TAME_score(A,A,A_to_B)
+                            _,A_to_B_matchedMotifs  = TAME_score(A,A,A_to_B)
                             @test all([matchedMotif == size(ten.indices,2) for (matchedMotif,ten) in zip(A_to_B_matchedMotifs,A)])
                         else
-                            _,gapedMotifs,_ = TAME_score(A,A,A_to_B)
+                            _,gapedMotifs = TAME_score(A,A,A_to_B)
                             @test gapedMotifs == 0
                         end 
 
                         if typeof(A) <: Vector
-                            A_to_B_score,A_to_B_matchedMotifs,_ = TAME_score(A,B,A_to_B)
-                            B_to_A_score,B_to_A_matchedMotifs,_ = TAME_score(B,A,B_to_A)
+                            A_to_B_score,A_to_B_matchedMotifs = TAME_score(A,B,A_to_B)
+                            B_to_A_score,B_to_A_matchedMotifs = TAME_score(B,A,B_to_A)
                             check_motifMatch = all([A_to_B_m == B_to_A_m for (A_to_B_m,B_to_A_m) in zip(A_to_B_matchedMotifs,B_to_A_matchedMotifs)])
                             #check_motifMiss = all([A_to_B_g == B_to_A_g for (A_to_B_g,B_to_A_g) in zip(B_to_A_gapedMotifs,B_to_A_gapedMotifs)])
                             @test A_to_B_score == B_to_A_score
                             @test check_motifMatch
                         else
-                            A_to_B_matchedMotifs,A_to_B_gapedMotifs,_ = TAME_score(A,B,A_to_B)
-                            B_to_A_matchedMotifs,B_to_A_gapedMotifs,_ = TAME_score(B,A,B_to_A)
+                            A_to_B_matchedMotifs,A_to_B_gapedMotifs = TAME_score(A,B,A_to_B)
+                            B_to_A_matchedMotifs,B_to_A_gapedMotifs = TAME_score(B,A,B_to_A)
                             @test (A_to_B_matchedMotifs == B_to_A_matchedMotifs)&&(A_to_B_gapedMotifs == B_to_A_gapedMotifs)
                         end
                     end

@@ -55,7 +55,7 @@ function ΛTAME_param_search(A,B;#duck type tensor inputs
 				search_tris, i, j, matching = search_Krylov_space(A,B,U,V)
 			
 			elseif typeof(matchingMethod) === ΛTAME_GramMatching
-				search_tris, matching,matching = TAME_score(A,B,U*V';kwargs...)
+				search_tris, _,matching = TAME_score(A,B,U*V';kwargs...)
 				i = -1
 				j = -1
 			else 
@@ -199,7 +199,7 @@ function ΛTAME_param_search_profiled(A,B;
 				results["Matching Timings"][exp_index] = runtime - scoring_time
 				results["Scoring Timings"][exp_index] = scoring_time
 			elseif typeof(matchingMethod) === ΛTAME_GramMatching
-				(matched_motifs,gaped_motifs,_, matching_time, scoring_time, matching)= TAME_score(A,B,U*V';return_timings=returnTimings(),kwargs...)	
+				(matched_motifs, gaped_motifs, matching, matching_time, scoring_time)= TAME_score(A,B,U*V';return_timings=returnTimings(),kwargs...)	
 				i = -1
 				j = -1
 				best_U = copy(U)

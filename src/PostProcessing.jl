@@ -34,7 +34,7 @@ function b_matching(u::Array{Float64,1}, v::Array{Float64,1}, b::Int)
 
     Matchings = Array{Tuple{Int,Int,Float64},1}(undef,b*n)  #-1 indicates unset matching
     match_idx = 1
-    starting_index = 0b1
+    starting_index = 1
     ending_index = b
 
     for i in 1:n
@@ -192,13 +192,13 @@ end
 function netalignmr(A::SparseMatrixCSC{T,Int},B::SparseMatrixCSC{T,Int},
                     U::Matrix{T},V::Matrix{T};kwargs...) where T
     (_,_,matching,_)=  bipartite_matching_primal_dual(U*V';kwargs...)
-    return netalignmr(A,B,knearest_sparsification(U,V,Dict(enumerate(matching)),2*min(size(U,2),size(V,2))))
+    return netalignmr(A,B,knearest_sparsification(U,V,matching_array_to_dict(matching),2*min(size(U,2),size(V,2))))
 end
 
 function netalignmr(A::SparseMatrixCSC{T,Int},B::SparseMatrixCSC{T,Int},
                     U::Matrix{T},V::Matrix{T},k::Int;kwargs...) where T
     (_,_,matching,_)=  bipartite_matching_primal_dual(U*V';kwargs...)
-    return netalignmr(A,B,knearest_sparsification(U,V,Dict(enumerate(matching)),k))
+    return netalignmr(A,B,knearest_sparsification(U,V,matching_array_to_dict(matching),k))
 end
 
 function netalignmr(A::SparseMatrixCSC{T,Int},B::SparseMatrixCSC{T,Int},
@@ -231,12 +231,15 @@ function netalignmr(A::SparseMatrixCSC{T1,Int},B::SparseMatrixCSC{T1,Int},L::Spa
 	gamma = 0.4;
 	(xbest,st,status,hist), t_netalignmr = @timed NetworkAlign.netalignmr(S,w,a,b,li,lj,gamma,stepm,rtype,maxiter,verbose)
 
+    #=
     matching = Dict{Int,Int}()
 	for (x,i,j) in zip(xbest,li,lj)
 		if x == 1.0
             matching[j] = i
 		end
 	end
+    =#
+    matching = matching_array_to_dict(bipartite_matching(sparse(li,lj,xbest)).match)
 
 	return matching, t_netalignmr, L
 

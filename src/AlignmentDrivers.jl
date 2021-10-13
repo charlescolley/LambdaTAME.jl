@@ -89,7 +89,7 @@ function align_matrices(A::SparseMatrixCSC{T,Int},B::SparseMatrixCSC{S,Int};
         else
             error("Invalid input, must be ")
         end
-        triangle_count, gaped_triangles, _ = TAME_score(A_ten,B_ten,matching) 
+        triangle_count, gaped_triangles  = TAME_score(A_ten,B_ten,matching) 
         return size(A_ten.indices,1), size(B_ten.indices,1), triangle_count, matching, t 
     else
         throw(ArgumentError("method must be of type LambdaTAME_M, LowRankTAME_M, TAME_M, EigenAlign_M, LowRankEigenAlign_M, LowRankEigenAlignEdgesOnly_M, Degree_M, or Random_M."))

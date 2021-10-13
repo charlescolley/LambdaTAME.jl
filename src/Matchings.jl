@@ -101,24 +101,25 @@ function search_Krylov_space(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor,U::Ar
     scoring_time =0.0
     for i in 1:size(U,2)
        for j in 1:size(V,2)
-
+            A_to_B_mapping, _ = rank_one_matching(U[:,i],V[:,j])
+            B_to_A_mapping, _ = rank_one_matching(V[:,j],U[:,i])
             if typeof(returnScoringTimings) === returnTimings
                 if A_unique_nnz > B_unique_nnz
-                    (matched_tris,gaped_tris,matching),t = @timed TAME_score(Triangle_check,Input_tensor,V[:,j],U[:,i])
+                    (matched_tris,gaped_tris),t = @timed TAME_score(Triangle_check,Input_tensor,B_to_A_mapping)
                 else
-                    (matched_tris,gaped_tris,matching),t = @timed TAME_score(Triangle_check,Input_tensor,U[:,i],V[:,j])
+                    (matched_tris,gaped_tris),t = @timed TAME_score(Triangle_check,Input_tensor,A_to_B_mapping)
                 end
                 scoring_time += t
             else # noTimings
                 if A_unique_nnz > B_unique_nnz
-                    matched_tris,gaped_tris,matching = TAME_score(Triangle_check,Input_tensor,V[:,j],U[:,i])
+                    matched_tris,gaped_tris = TAME_score(Triangle_check,Input_tensor,B_to_A_mapping)
                 else
-                    matched_tris,gaped_tris,matching = TAME_score(Triangle_check,Input_tensor,U[:,i],V[:,j])
+                    matched_tris,gaped_tris = TAME_score(Triangle_check,Input_tensor,A_to_B_mapping)
                 end
             end
 
             if matched_tris > best_score
-                best_matching = matching
+                best_matching = A_to_B_mapping
                 best_score = matched_tris
                 best_i = i
                 best_j = j
@@ -162,23 +163,25 @@ function search_Krylov_space(A::SymTensorUnweighted{S},B::SymTensorUnweighted{S}
     scoring_time =0.0
     for i in 1:size(U,2)
        for j in 1:size(V,2)
+            A_to_B_mapping, _ = rank_one_matching(U[:,i],V[:,j])
+            B_to_A_mapping, _ = rank_one_matching(V[:,j],U[:,i])
             if typeof(returnScoringTimings) === returnTimings
                 if A_unique_nnz > B_unique_nnz
-                    (matched_motifs,gaped_motifs,matching),t = @timed TAME_score(motif_check,Input_tensor,V[:,j],U[:,i])
+                    (matched_motifs,gaped_motifs),t = @timed TAME_score(motif_check,Input_tensor,B_to_A_mapping)
                 else
-                    (matched_motifs,gaped_motifs,matching),t = @timed TAME_score(motif_check,Input_tensor,U[:,i],V[:,j])
+                    (matched_motifs,gaped_motifs),t = @timed TAME_score(motif_check,Input_tensor,A_to_B_mapping)
                 end
                 scoring_time += t
             else
                 if A_unique_nnz > B_unique_nnz
-                    matched_motifs,gaped_motifs,matching = TAME_score(motif_check,Input_tensor,V[:,j],U[:,i])
+                    matched_motifs,gaped_motifs = TAME_score(motif_check,Input_tensor,B_to_A_mapping)
                 else
-                    matched_motifs,gaped_motifs,matching = TAME_score(motif_check,Input_tensor,U[:,i],V[:,j])
+                    matched_motifs,gaped_motifs = TAME_score(motif_check,Input_tensor,A_to_B_mapping)
                 end
             end
 
             if matched_motifs > best_score
-                best_matching = matching
+                best_matching = A_to_B_mapping
                 best_score = matched_motifs
                 best_i = i
                 best_j = j
@@ -283,18 +286,18 @@ function search_Krylov_space(A::Array{SymTensorUnweighted{S},1},B::Array{SymTens
                 
                 for i =1:length(A)
                     if size(A[i].indices,2) > size(B[i].indices,2)
-                        (matched_motifs[i],_,_),t = @timed TAME_score(larger_edge_sets[i], B[i], B_to_A_mapping)
+                        (matched_motifs[i],_),t = @timed TAME_score(larger_edge_sets[i], B[i], B_to_A_mapping)
                     else
-                        (matched_motifs[i],_,_),t = @timed TAME_score(larger_edge_sets[i], A[i], A_to_B_mapping)
+                        (matched_motifs[i],_),t = @timed TAME_score(larger_edge_sets[i], A[i], A_to_B_mapping)
                     end
                     scoring_timing += t
                 end
             else
                 for i =1:length(A)
                     if size(A[i].indices,2) > size(B[i].indices,2)
-                        matched_motifs[i],_,_ = TAME_score(larger_edge_sets[i], B[i], B_to_A_mapping)
+                        matched_motifs[i],_ = TAME_score(larger_edge_sets[i], B[i], B_to_A_mapping)
                     else
-                        matched_motifs[i],_,_ = TAME_score(larger_edge_sets[i], A[i], A_to_B_mapping)
+                        matched_motifs[i],_ = TAME_score(larger_edge_sets[i], A[i], A_to_B_mapping)
                     end
                 end
             end
@@ -331,7 +334,7 @@ function TAME_score(Triangle_Dict::Dict{Array{Int,1},Int},Input_tensor,
                     u::Array{Float64,1},v::Array{Float64,1})
 
     Match_mapping, _ = rank_one_matching(u,v)
-    TAME_score(Triangle_Dict,Input_tensor,Match_mapping)
+    return TAME_score(Triangle_Dict,Input_tensor,Match_mapping)...,Match_mapping
 
 end
 
@@ -341,11 +344,11 @@ function TAME_score(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor,U::Array{Float
 
     if typeof(return_timings) === returnTimings
         (Match_mapping, _), matching_time = @timed low_rank_matching(U,V)
-        (triangle_count, gaped_triangles,_), scoring_time = @timed TAME_score(A,B,Match_mapping)
+        (triangle_count, gaped_triangles), scoring_time = @timed TAME_score(A,B,Match_mapping)
         return triangle_count, gaped_triangles,Match_mapping, matching_time, scoring_time 
     else
         Match_mapping,weight = low_rank_matching(U,V)
-        TAME_score(A,B,Match_mapping)
+        return TAME_score(A,B,Match_mapping)...,Match_mapping
     end
 
 end
@@ -354,12 +357,13 @@ function TAME_score(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor, X::SparseMat
 
     if typeof(return_timings) === returnTimings
         x ,bipartite_matching_time = @timed bipartite_matching(X)
-
-        (triangle_count, gaped_triangles,matching), scoring_time = @timed TAME_score(A,B,Dict(enumerate(x.match)))
-        return triangle_count, gaped_triangles, matching, bipartite_matching_time, scoring_time
+        matching_dict = Dict(enumerate(x.match))
+        (triangle_count, gaped_triangles), scoring_time = @timed TAME_score(A,B,matching_dict)
+        return triangle_count, gaped_triangles, matching_dict, bipartite_matching_time, scoring_time
     else
         x = bipartite_matching(X)
-        return TAME_score(A,B,Dict(enumerate(x.match)))
+        matching_dict = Dict(enumerate(x.match))
+        return TAME_score(A,B,matching_dict)..., matching_dict
     end
 
 end
@@ -369,11 +373,13 @@ function TAME_score(A::Union{ThirdOrderSymTensor,Array{SymTensorUnweighted{S},1}
 
     if typeof(return_timings) === returnTimings
         (_,_,matching,_) ,matching_time = @timed bipartite_matching_primal_dual(X;kwargs...)
-        (triangle_count, gaped_triangles,matching), scoring_time = @timed TAME_score(A,B,Dict(enumerate(matching)))
-        return triangle_count, gaped_triangles, matching, matching_time, scoring_time
+        matching_dict = matching_array_to_dict(matching)
+        (triangle_count, gaped_triangles), scoring_time = @timed TAME_score(A,B,matching_dict)
+        return triangle_count, gaped_triangles, matching_dict, matching_time, scoring_time
     else
         _,_,matching,_ = bipartite_matching_primal_dual(X;kwargs...)
-        return TAME_score(A,B,Dict(enumerate(matching)))
+        matching_dict = matching_array_to_dict(matching)
+        return TAME_score(A,B,matching_dict)...,matching_dict
     end
 end
 
@@ -381,11 +387,14 @@ function TAME_score(A::SymTensorUnweighted{S},B::SymTensorUnweighted{S},X::Array
 
     if typeof(return_timings) === returnTimings
         (_,_,matching,_) ,matching_time = @timed bipartite_matching_primal_dual(X;kwargs...)
-        (triangle_count, gaped_triangles,matching), scoring_time = @timed TAME_score(A,B,Dict(enumerate(matching)))
-        return triangle_count, gaped_triangles, matching, matching_time, scoring_time
+        matching_dict = matching_array_to_dict(matching)
+        (triangle_count, gaped_triangles,matching), scoring_time = @timed TAME_score(A,B,matching_dict)
+        return triangle_count, gaped_triangles, matching_dict, matching_time, scoring_time
     else
         _,_,matching,_ = bipartite_matching_primal_dual(X;kwargs...)
-        return TAME_score(A,B,Dict(enumerate(matching)))
+        matching_dict = matching_array_to_dict(matching)
+        #return TAME_score(A,B,matching_array_to_dict(matching))
+        return TAME_score(A,B,matching_dict)...,matching_dict
         #BUG?
     end
 end
@@ -396,11 +405,13 @@ function TAME_score(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor,x::Array{Float
     X = reshape(x,A.n,B.n)
     if typeof(return_timings) === returnTimings
         (_,_,matching,_) ,matching_time = @timed bipartite_matching_primal_dual(X;kwargs...)
-        (triangle_count, gaped_triangles,matching), scoring_time = @timed TAME_score(A,B,Dict(enumerate(matching)))
-        return triangle_count, gaped_triangles, matching, matching_time, scoring_time
+        matching_dict = matching_array_to_dict(matching)
+        (triangle_count, gaped_triangles), scoring_time = @timed TAME_score(A,B,matching_dict)
+        return triangle_count, gaped_triangles, matching_dict, matching_time, scoring_time
     else
         _,_,matching,_ = bipartite_matching_primal_dual(X;kwargs...)
-        return TAME_score(A,B,Dict(enumerate(matching)))
+        matching_dict = matching_array_to_dict(matching)
+        return TAME_score(A,B,matching_dict)...,matching_dict
     end
 
 end
@@ -462,7 +473,7 @@ function TAME_score(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor,Match_mapping:
 
    # triangles, triangle_weight = count_triangles(sub_A,sub_B)
 
-    return triangle_count, gaped_triangles, Match_mapping #sub_A, sub_B
+    return triangle_count, gaped_triangles
 
 end
 
@@ -489,6 +500,7 @@ function TAME_score(A::SymTensorUnweighted{S},B::SymTensorUnweighted{S}, mapping
     A_motifs = Set(eachcol(A.indices))
 
     matched_motifs = 0
+    missed_motifs = 0
 
     for idx =1:size(B.indices,2)
         edge = B.indices[:,idx]
@@ -497,10 +509,12 @@ function TAME_score(A::SymTensorUnweighted{S},B::SymTensorUnweighted{S}, mapping
 
         if new_edge in A_motifs
             matched_motifs += 1
+        else 
+            missed_motifs += 1
         end
 
     end
-    return matched_motifs
+    return matched_motifs, matched_motifs
 
 end
 
@@ -531,9 +545,9 @@ function TAME_score(A::Array{SymTensorUnweighted{S},1},B::Array{SymTensorUnweigh
     matched_motifs = zeros(Int,length(A))
     for i =1:length(A)
         if size(A[i].indices,2) > size(B[i].indices,2)
-            matched_motifs[i],_,_ = TAME_score(larger_edge_sets[i], B[i], B_to_A_mapping)
+            matched_motifs[i],_ = TAME_score(larger_edge_sets[i], B[i], B_to_A_mapping)
         else
-            matched_motifs[i],_,_ = TAME_score(larger_edge_sets[i], A[i], A_to_B_mapping)
+            matched_motifs[i],_ = TAME_score(larger_edge_sets[i], A[i], A_to_B_mapping)
         end
     end
     #matching_score = motif_matching_count(B[end], A[end], mapping)
@@ -545,7 +559,7 @@ function TAME_score(A::Array{SymTensorUnweighted{S},1},B::Array{SymTensorUnweigh
         matching_score += binomial(size(A[i].indices,1),2)*matched_motifs[i]
     end
 
-    return matching_score, matched_motifs, A_to_B_mapping
+    return matching_score, matched_motifs
 end
 
 function TAME_score(A::SymTensorUnweighted{Clique},B::SymTensorUnweighted{Clique}, mapping::Dict{Int,Int})
@@ -584,7 +598,7 @@ function TAME_score(A::SymTensorUnweighted{Clique},B::SymTensorUnweighted{Clique
         end
 
     end
-    return matched_motifs, gaped_motifs,  mapping
+    return matched_motifs, gaped_motifs
 
 end
 
@@ -611,7 +625,7 @@ function TAME_score(A::SymTensorUnweighted{Cycle},B::SymTensorUnweighted{Cycle},
 	end
 
     matched_motifs = 0
-    gaped_motifs = 0
+    missed_motifs = 0
 
 	l = size(B.indices,1)
     for idx =1:size(B.indices,2)
@@ -625,13 +639,12 @@ function TAME_score(A::SymTensorUnweighted{Cycle},B::SymTensorUnweighted{Cycle},
         if hash in A_cycle_hashes
             matched_motifs += 1
         else
-            gaped_motifs += 1
+            missed_motifs += 1
         end
 
     end
 
-    return matched_motifs, gaped_motifs, mapping
-
+    return matched_motifs, missed_motifs
 end
 
 
@@ -655,7 +668,7 @@ function TAME_score(Triangle_Dict::Dict{Array{Int,1},Int},Input_tensor::ThirdOrd
             gaped_triangles += 1
         end
     end
-    return triangle_count, gaped_triangles, Match_mapping
+    return triangle_count, gaped_triangles
 end
 
 
@@ -668,6 +681,7 @@ function TAME_score(A_motifs::Dict{Array{Int,1},Int}, B::SymTensorUnweighted{S},
     #A_motifs = Set(eachcol(Indices_A))
 
     matched_motifs = 0
+    missed_motifs = 0
 
     for idx =1:size(B.indices,2)
         edge = B.indices[:,idx]
@@ -676,10 +690,12 @@ function TAME_score(A_motifs::Dict{Array{Int,1},Int}, B::SymTensorUnweighted{S},
 
         if new_edge in A_motifs
             matched_motifs += 1
+        else
+            missed_motifs += 1
         end
 
     end
-    return matched_motifs
+    return matched_motifs, missed_motifs
 
 end
 
@@ -705,11 +721,24 @@ function TAME_score(A_motifs::Dict{Array{Int,1},Int}, B::SymTensorUnweighted{S},
         end
 
     end
-    return matched_motifs, gaped_motifs, mapping
+    return matched_motifs, gaped_motifs
 
 end
 
 
+    return edges_matched, edges_missed
+end
+
+function matching_array_to_dict(matching::Vector{Int})
+
+    matching_dict = Dict{Int,Int}()
+    for (i,j) in enumerate(matching)
+        if i != -1 && j != -1 #-1 indicates unmatched
+            matching_dict[i] = j
+        end
+    end
+    return matching_dict
+end
 
 
 
