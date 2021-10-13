@@ -1,21 +1,20 @@
 using LambdaTAME: TAME_param_search_profiled,  TAME_param_search, TAME, TAME_profiled
+@testset "TAME" begin 
+    @testset "Type Stability" begin
 
-@testset "Type Stability" begin
+        @suppress_out begin
 
-    @suppress_out begin
+            @inferred TAME_param_search_profiled(A_TOST,B_TOST)
+            @inferred TAME_param_search(A_TOST,B_TOST)
 
-        @inferred TAME_param_search_profiled(A_TOST,B_TOST)
-        @inferred TAME_param_search(A_TOST,B_TOST)
+            β = 0.0
+            α = 1.0 
+            tol = 1e-6
+            max_iter = 15
+            @inferred TAME(A_TOST, B_TOST, β, max_iter,tol,α)
+            @inferred TAME_profiled(A_TOST, B_TOST, β, max_iter,tol,α)
 
-
-        tol = 1e-15
-        β = 0.0
-        α = 1.0 
-        tol = 1e-6
-        max_iter = 15
-        @inferred TAME(A_TOST, B_TOST, β, max_iter,tol,α)
-        @inferred TAME_profiled(A_TOST, B_TOST, β, max_iter,tol,α)
+        end
 
     end
-
 end
