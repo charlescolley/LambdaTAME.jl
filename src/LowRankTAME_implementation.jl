@@ -1,6 +1,6 @@
 
 
-struct LowRankTAME_Return{T}
+struct LowRankTAME_Return{T} <: returnType
 	matchScore::Union{Int,Vector{Int}}
 	motifCounts::NTuple{2,Union{Int,Vector{Int}}}
 	matching::Union{Dict{Int,Int},Vector{Int}}

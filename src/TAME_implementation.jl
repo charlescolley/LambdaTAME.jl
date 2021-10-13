@@ -1,7 +1,7 @@
 
 #TODO: convert two function calls into Union{COOTen,ThirdOrderSymTensor}
 #TODO: update new DistributedTensorConstructio types in docs
-struct TAME_Return{T}
+struct TAME_Return{T} <: returnType
 	matchScore::Int
 	motifCounts::Tuple{Int,Int}
 	matching::Union{Dict{Int,Int},Vector{Int}}

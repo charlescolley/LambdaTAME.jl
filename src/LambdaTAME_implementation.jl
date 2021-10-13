@@ -5,7 +5,18 @@ struct ΛTAME_GramMatching <: MatchingMethod end
 struct ΛTAME_rankOneMatching <: MatchingMethod end
 
 
-struct ΛTAME_Return{T}
+struct ΛTAME_Return{T} <: returnType
+	matchScore::Union{Int,Vector{Int}}
+	motifCounts::NTuple{2,Union{Int,Vector{Int}}}
+	matching::Union{Dict{Int,Int},Vector{Int}}
+	rank1Matchingindices::Union{Nothing,Tuple{Int,Int}}
+	embedding::Tuple{Matrix{T},Matrix{T}}
+	profile::Union{Nothing,Dict{String,Array{Float64,1}}}
+end
+
+struct ΛTAME_MultiMotif_Return{T} <: returnType
+#    motifDistributions::NTuple(2,Vector{T}) # ttv({A,B},1,modes=k-1)
+	aggregateMotifScore::Int
 	matchScore::Union{Int,Vector{Int}}
 	motifCounts::NTuple{2,Union{Int,Vector{Int}}}
 	matching::Union{Dict{Int,Int},Vector{Int}}
@@ -24,7 +35,6 @@ function ΛTAME_param_search(A,B;#duck type tensor inputs
 							alphas::Array{F,1}=[.5,1.0],
 							betas::Array{F,1} =[1000.0,100.0,10.0,1.0,0.0,0.1,0.01,0.001],
 							matchingMethod::MatchingMethod=ΛTAME_rankOneMatching(),kwargs...) where {F <: AbstractFloat}
-
 	if typeof(A) === ThirdOrderSymTensor 
 		motifA = size(A.indices,1)
 		motifB = size(B.indices,1)
@@ -144,10 +154,10 @@ function ΛTAME_param_search(A_tensors::Array{SymTensorUnweighted{S},1},B_tensor
 	
 	println("best i:$best_i -- best j:$best_j")
 	if typeof(matchingMethod) === ΛTAME_rankOneMatching
-		return ΛTAME_Return(best_matched_motifs, (motifCountA,motifCountB),
+		return ΛTAME_MultiMotif_Return(best_matching_score,best_matched_motifs, (motifCountA,motifCountB),
 					best_matching,(best_i, best_j),(best_U, best_V),nothing)
 	else
-		return ΛTAME_Return(best_matched_motifs, (motifCountA,motifCountB),
+		return ΛTAME_MultiMotif_Return(best_matching_score,best_matched_motifs, (motifCountA,motifCountB),
 					best_matching,nothing,(best_U, best_V),nothing)
 	end
 

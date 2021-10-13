@@ -1,10 +1,10 @@
-#=
-PostProcessing:
-- Julia version: 
-- Author: dgleich
-- Date: 2020-05-22
-=#
+abstract type PostProcessingMethod end
 
+struct KlauAlgo <: PostProcessingMethod 
+    k::Int
+end
+KlauAlgo() = KlauAlgo(-1)
+struct noPostProcessing <: PostProcessingMethod end
 
 """-----------------------------------------------------------------------------
    Greedily creates a b matching from a rank 1 bipartite matching problem. Only

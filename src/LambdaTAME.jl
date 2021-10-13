@@ -28,6 +28,8 @@ import StatsBase: sample
 #store path to project repo here
 PROJECT_PATH = "."
 
+abstract type returnType end 
+
 
 # https://github.com/eikmeier/TGPA.git
 #TGPA_PATH = "Users/ccolley/Code/TGPA"
@@ -36,12 +38,12 @@ PROJECT_PATH = "."
 
 #
 # https://github.com/nassarhuda/NetworkAlignment.jl.git
-#NETWORK_ALIGNMENT_PATH = "/Users/ccolley/Code/NetworkAlignment.jl/src/"
+#NETWORK_ALIGNMENT_PATH = "/Users/charlie/Documents/Code/NetworkAlignment.jl/src/"
 #NETWORK_ALIGNMENT_PATH = "/homes/ccolley/Documents/Software/NetworkAlignment.jl/src/" #nilpotent
 #include(NETWORK_ALIGNMENT_PATH*"NetworkAlignment.jl")
 
 
-#LOWRANK_EIGENALIGN_PATH = "/Users/ccolley/Code/lowrank_spectral_v1_julia/all_code/include_all.jl" #local
+#LOWRANK_EIGENALIGN_PATH = "/Users/charlie/Documents/Code/lowrank_spectral_v1_julia/all_code/include_all.jl" #local
 #LOWRANK_EIGENALIGN_PATH = "/homes/ccolley/Documents/Software/lowrank_spectral_v1_julia/all_code/include_all.jl"#nilpotent
 #include(LOWRANK_EIGENALIGN_PATH)
 #TODO: fix 'WARNING: Method definition' messages
@@ -106,6 +108,8 @@ export random_graph_exp
 
 export load_ThirdOrderSymTensor, load_UnweightedThirdOrderSymTensor
 export graph_to_ThirdOrderTensor
+
+export KlauAlgo,noPostProcessing
 
 #  --  From Matchings.jl --  #
 #flag types
