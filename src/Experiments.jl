@@ -254,55 +254,89 @@ function distributed_random_trials(trial_count::Int,noise_model::ErdosRenyiNoise
 
     #TODO: fix parsing of returned functions
     for (seed,p,n,future) in futures
-        if profile 
-            d_A, d_B, perm, (A_tris, B_tris, output) = fetch(future)
-            matched_tris = output.matchScore
-            max_tris = min(output.motifCounts...)
-            best_matching = output.matching
-            exp_results = output.profile
 
-            accuracy_B_to_A = sum([1 for (i,j) in enumerate(perm) if get(best_matching,j,-1) == i])/n
-            accuracy_A_to_B = sum([1 for (i,j) in enumerate(perm) if get(best_matching,i,-1) == j])/n
-            accuracy = max(accuracy_B_to_A,accuracy_A_to_B) 
+        if method === ΛTAME_M() || method === LowRankTAME_M()
 
-            D_A = sum(d_A)
-            D_B = sum(d_B)
-            degree_weighted_accuracy = sum([(get(best_matching,j,-1) == i) ? ((d_A[i] + d_B[j])/(D_A+D_B)) : 0.0 for (i,j) in enumerate(perm)])
-            
-            push!(results,(seed, p, n, accuracy, degree_weighted_accuracy, matched_tris, A_tris, B_tris, max_tris, exp_results))
+            if kwargs[:postProcessing] === noPostProcessing()
 
-        else
-            if method === ΛTAME_M() || method === LowRankTAME_M() || method === TAME_M()
-                d_A, d_B, perm, (A_tris, B_tris, output) = fetch(future)
-                matched_tris = output.matchScore
-                max_tris = min(output.motifCounts...)
-                best_matching = output.matching
-            elseif method === ΛTAME_MultiMotif_M()
-                if kwargs[:matchingMethod] === ΛTAME_GramMatching()
-                    d_A, d_B, perm, (A_motifCounts, B_motifCounts,A_motifDistribution,B_motifDistribution, best_matching_score, max_motif_match, best_matched_motifs, best_matching) = fetch(future)
-                else
-                    d_A, d_B, perm, (A_motifCounts, B_motifCounts,A_motifDistribution,B_motifDistribution, best_matching_score, max_motif_match,best_matched_motifs, _, _, best_matching) = fetch(future)
-                end
-            elseif method === EigenAlign_M() || method == Degree_M() || method === Random_M() || method === LowRankEigenAlign_M() || method === LowRankEigenAlignOnlyEdges_M()
-                d_A, d_B, perm, (A_tris, B_tris, matched_tris, best_matching, _) = fetch(future)
-                max_tris = minimum((A_tris,B_tris))
-            end
-
-            accuracy_B_to_A = sum([1 for (i,j) in enumerate(perm) if get(best_matching,j,-1) == i])/n
-            accuracy_A_to_B = sum([1 for (i,j) in enumerate(perm) if get(best_matching,i,-1) == j])/n
-
-            accuracy = max(accuracy_B_to_A,accuracy_A_to_B)
-            D_A = sum(d_A)
-            D_B = sum(d_B)
-
-            degree_weighted_accuracy = sum([(get(best_matching,j,-1) == i) ? ((d_A[i] + d_B[j])/(D_A+D_B)) : 0.0 for (i,j) in enumerate(perm)])
-  
-            if typeof(method) === ΛTAME_MultiMotif_M
-                push!(results,( seed, p, n, accuracy, degree_weighted_accuracy, best_matching_score, A_motifCounts, B_motifCounts,A_motifDistribution,B_motifDistribution, best_matched_motifs))
+                d_A, d_B, perm, (A_tris, B_tris, alignmentOutput) = fetch(future)
             else
-                push!(results,( seed, p, n, accuracy, degree_weighted_accuracy, matched_tris, A_tris, B_tris, max_tris))
+                d_A, d_B, perm, (A_tris, B_tris, alignmentOutput, postProcessingOutput) = fetch(future)
             end
-        end                    
+
+            matched_tris = alignmentOutput.matchScore
+            max_tris = min(alignmentOutput.motifCounts...)
+            best_matching = alignmentOutput.matching
+            if profile 
+                exp_results = alignmentOutput.profile
+            end
+        elseif method === TAME_M()
+            d_A, d_B, perm, (A_tris, B_tris, alignmentOutput) = fetch(future)
+            matched_tris = alignmentOutput.matchScore
+            max_tris = min(alignmentOutput.motifCounts...)
+            best_matching = alignmentOutput.matching
+            if profile 
+                exp_results = alignmentOutput.profile
+            end
+        elseif method === ΛTAME_MultiMotif_M()
+            if kwargs[:postProcessing] === noPostProcessing()
+                d_A, d_B, perm, (A_motifDistribution, B_motifDistribution, output) = fetch(future)
+            else
+                d_A, d_B, perm, (A_motifDistribution, B_motifDistribution, output, postProcessingOutput) = fetch(future)
+            end
+            best_matching_score = output.matchScore
+            best_matching = output.matching
+            A_tris = -1
+            B_tris = -1
+        elseif method === EigenAlign_M() || method == Degree_M() || method === Random_M() || method === LowRankEigenAlign_M() || method === LowRankEigenAlignOnlyEdges_M()
+            d_A, d_B, perm, (A_tris, B_tris, matched_tris, best_matching, _) = fetch(future)
+            max_tris = minimum((A_tris,B_tris))
+        end
+
+        accuracy = sum([1 for (i,j) in alignmentOutput.matching if get(perm,j,-1) == i])/n
+
+        D_A = sum(d_A)
+        D_B = sum(d_B)
+        degree_weighted_accuracy = sum([(get(perm,j,-1) == i) ? ((d_A[i] + d_B[j])/(D_A+D_B)) : 0.0 for (i,j) in best_matching])
+
+        data_to_save = Array{Any,1}(undef,0)
+    
+        push!(data_to_save,seed)
+        push!(data_to_save,p)
+        push!(data_to_save,n)
+        push!(data_to_save,accuracy)
+        push!(data_to_save, degree_weighted_accuracy)
+        if typeof(method) === ΛTAME_MultiMotif_M
+            push!(data_to_save,best_matching_score)
+            push!(data_to_save,A_motifCounts)
+            push!(data_to_save,B_motifCounts)
+            push!(data_to_save,A_motifDistribution)
+            push!(data_to_save,B_motifDistribution)
+        else
+            push!(data_to_save, matched_tris)
+            push!(data_to_save,A_tris)
+            push!(data_to_save,B_tris)
+            push!(data_to_save,max_tris)
+        end
+
+        if profile 
+            push!(data_to_save,exp_results)
+        end
+
+        if typeof(kwargs[:postProcessing]) <: KlauAlgo
+            push!(data_to_save,postProcessingOutput.original_edges_matched)
+            push!(data_to_save,postProcessingOutput.klau_edges_matched)
+            push!(data_to_save,postProcessingOutput.klau_tris_matched)
+            push!(data_to_save,sum([1 for (i,j) in postProcessingOutput.new_matching if get(perm,j,-1) == i])/n)
+            push!(data_to_save,postProcessingOutput.new_matching)
+            if profile
+                push!(data_to_save,postProcessingOutput.setup_rt)
+                push!(data_to_save,postProcessingOutput.klau_rt)
+            end
+        end
+
+        push!(results,data_to_save)
+                
     end
 
     return results
@@ -310,16 +344,10 @@ function distributed_random_trials(trial_count::Int,noise_model::ErdosRenyiNoise
 end
 
 function distributed_random_trials(trial_count::Int,noise_model::DuplicationNoise,seed_exps::Bool=false;
-        method::AlignmentMethod=ΛTAME(),graph::RandomGraphType=ErdosRenyi(),
-        n_sizes = [100, 500, 1000, 2000,5000],edge_inclusion_p = [.5,1.0],
+        method::AlignmentMethod=ΛTAME(),graph::RandomGraphType=ErdosRenyi(),n_sizes = [100, 500, 1000, 2000,5000],
+        edge_inclusion_p = [.5,1.0],
         step_percentage=[.1],profile=false,kwargs...)
 
-    #only handling even batch sizes
-    #@assert trial_count % process_count == 0
-
-    #ensure file is loaded on all processes
-    #@everywhere include_string(Main,$(read("LambdaTAME.jl",String)),"LambdaTAME.jl")
-    
 
     if seed_exps
         Random.seed!(0)
@@ -361,75 +389,88 @@ function distributed_random_trials(trial_count::Int,noise_model::DuplicationNois
 
     #TODO: fix parsing of returned functions
     for (seed,p,n,sp,future) in futures
-        if profile 
+        if method === ΛTAME_M() || method === LowRankTAME_M()
 
-            perm, dup_vertices, (A_tris, B_tris, output) = fetch(future)
-            matched_tris = output.matchScore
-            max_tris = min(output.motifCounts...)
-            best_matching = output.matching
-            exp_results = output.profile
-            #=
-            #local perm, dup_vertices
-            if (method === ΛTAME_M() && kwargs[:matchingMethod] === ΛTAME_GramMatching()) ||  method === LowRankTAME_M()
-                #throw(fetch(future))
-                #best_matched_motifs, max_motif_match, best_matching, U_best, V_best, profile = results
-                perm,dup_vertices, (A_tris, B_tris,(matched_tris, max_tris, _, _, best_matching, exp_results)) = fetch(future)
-            elseif (method === ΛTAME_M() && kwargs[:matchingMethod] === ΛTAME_rankOneMatching()) 
-                perm, dup_vertices, (A_tris, B_tris,(matched_tris, max_tris, _, _, _, _, best_matching, exp_results))= fetch(future)
-            elseif method === TAME_M()
-                perm, dup_vertices, (A_tris, B_tris,(matched_tris, max_tris, _, best_matching, exp_results))= fetch(future)
-            end
-            =#
-
-            accuracy_B_to_A = sum([1 for (i,j) in enumerate(perm) if get(best_matching,j,-1) == i])/n
-            accuracy_A_to_B = sum([1 for (i,j) in enumerate(perm) if get(best_matching,i,-1) == j])/n
-            #TODO: use a more robust method of catching how matchings are oriented
-            accuracy = max(accuracy_B_to_A,accuracy_A_to_B) 
-
-            dup_tolerant_perm = replaced_duplications_with_originals(perm,n, dup_vertices)
-            DT_accuracy_B_to_A = sum([1 for (i,j) in enumerate(dup_tolerant_perm) if get(best_matching,j,-1) == i])/n
-            DT_accuracy_A_to_B = sum([1 for (i,j) in enumerate(dup_tolerant_perm) if get(best_matching,i,-1) == j])/n
-            dup_vertex_tolerant_accuracy = max(DT_accuracy_B_to_A,DT_accuracy_A_to_B) 
-            
-            push!(results,(seed, p, n, sp, accuracy, dup_vertex_tolerant_accuracy, matched_tris, A_tris, B_tris, max_tris, exp_results))
-
-        else
-
-            if method === ΛTAME_M() || method === LowRankTAME_M() || method === TAME_M()
-                perm, dup_vertices, (A_tris, B_tris, output) = fetch(future)
-                matched_tris = output.matchScore
-                max_tris = min(output.motifCounts...)
-                best_matching = output.matching
-            elseif method === ΛTAME_MultiMotif_M()
- 
-                perm, dup_vertices, (A_motifCounts, B_motifCounts, A_motifDistribution, B_motifDistribution,output) = fetch(future)
-                best_matching_score = output.matchScore
-                best_matching = output.matching
-                A_tris = -1
-                B_tris = -1
-            elseif method === EigenAlign_M() || method == Degree_M() || method === Random_M() || method === LowRankEigenAlign_M() || method === LowRankEigenAlignOnlyEdges_M()
-                perm, dup_vertices, (A_tris, B_tris, matched_tris, best_matching, _) = fetch(future)
-                max_tris = minimum((A_tris,B_tris))
-            end
-
-            accuracy_B_to_A = sum([1 for (i,j) in enumerate(perm) if get(best_matching,j,-1) == i])/n
-            accuracy_A_to_B = sum([1 for (i,j) in enumerate(perm) if get(best_matching,i,-1) == j])/n
-            #TODO: use a more robust method of catching how matchings are oriented
-            accuracy = max(accuracy_B_to_A,accuracy_A_to_B) 
-
-            dup_tolerant_perm = replaced_duplications_with_originals(perm,n, dup_vertices)
-            DT_accuracy_B_to_A = sum([1 for (i,j) in enumerate(dup_tolerant_perm) if get(best_matching,j,-1) == i])/n
-            DT_accuracy_A_to_B = sum([1 for (i,j) in enumerate(dup_tolerant_perm) if get(best_matching,i,-1) == j])/n
-            dup_vertex_tolerant_accuracy = max(DT_accuracy_B_to_A,DT_accuracy_A_to_B) 
-            
-
-            if typeof(method) === ΛTAME_MultiMotif_M
-                push!(results,( seed, p, n, sp, accuracy, dup_vertex_tolerant_accuracy, best_matching_score, A_motifCounts, B_motifCounts, A_motifDistribution,B_motifDistribution))
+            if kwargs[:postProcessing] === noPostProcessing()
+                perm, dup_vertices, (A_tris, B_tris, alignmentOutput) = fetch(future)
             else
-                push!(results,( seed, p, n, sp, accuracy, dup_vertex_tolerant_accuracy, matched_tris, A_tris, B_tris, max_tris))
+                perm, dup_vertices, (A_tris, B_tris, alignmentOutput, postProcessingOutput) = fetch(future)
             end
 
-        end                    
+            matched_tris = alignmentOutput.matchScore
+            max_tris = min(alignmentOutput.motifCounts...)
+            best_matching = alignmentOutput.matching
+            if profile 
+                exp_results = alignmentOutput.profile
+            end
+      
+        elseif method === TAME_M()
+            perm, dup_vertices, (A_tris, B_tris, alignmentOutput) = fetch(future)
+            matched_tris = alignmentOutput.matchScore
+            max_tris = min(alignmentOutput.motifCounts...)
+            best_matching = alignmentOutput.matching
+            if profile 
+                exp_results = alignmentOutput.profile
+            end
+        elseif method === ΛTAME_MultiMotif_M()
+            if kwargs[:postProcessing] === noPostProcessing()
+                perm, dup_vertices, (A_motifDistribution, B_motifDistribution, alignmentOutput) = fetch(future)
+            else
+                perm, dup_vertices, (A_motifDistribution, B_motifDistribution, alignmentOutput, postProcessingOutput) = fetch(future)
+            end
+
+            best_matching_score = alignmentOutput.matchScore
+            best_matching = alignmentOutput.matching
+            A_tris = -1
+            B_tris = -1
+        elseif method === EigenAlign_M() || method == Degree_M() || method === Random_M() || method === LowRankEigenAlign_M() || method === LowRankEigenAlignOnlyEdges_M()
+            perm, dup_vertices, (A_tris, B_tris, matched_tris, best_matching, _) = fetch(future)
+            max_tris = minimum((A_tris,B_tris))
+        end
+
+        accuracy = sum([1 for (i,j) in alignmentOutput.matching if get(perm,j,-1) == i])/n
+        
+        dup_tolerant_perm = replaced_duplications_with_originals(perm,n, dup_vertices)
+        dup_vertex_tolerant_accuracy = sum([1 for (i,j) in alignmentOutput.matching if get(dup_tolerant_perm,j,-1) == i])/n
+
+
+        data_to_save = Array{Any,1}(undef,0)
+        push!(data_to_save,seed)
+        push!(data_to_save,p)
+        push!(data_to_save,n)
+        push!(data_to_save,sp)
+        push!(data_to_save,accuracy)
+        push!(data_to_save, dup_vertex_tolerant_accuracy)
+        if typeof(method) === ΛTAME_MultiMotif_M
+            push!(data_to_save,alignmentOutput.matchScore)
+            push!(data_to_save,alignmentOutput.motifCounts[1])
+            push!(data_to_save,alignmentOutput.motifCounts[2])
+            push!(data_to_save,A_motifDistribution)
+            push!(data_to_save,B_motifDistribution)
+        else
+            push!(data_to_save, matched_tris)
+            push!(data_to_save, A_tris)
+            push!(data_to_save, B_tris)
+            push!(data_to_save, max_tris)
+        end
+
+        if profile 
+            push!(data_to_save,exp_results)
+        end
+
+        if typeof(kwargs[:postProcessing]) <: KlauAlgo
+            push!(data_to_save,postProcessingOutput.original_edges_matched)
+            push!(data_to_save,postProcessingOutput.klau_edges_matched)
+            push!(data_to_save,postProcessingOutput.klau_tris_matched)
+            push!(data_to_save,sum([1 for (i,j) in postProcessingOutput.new_matching if get(perm,j,-1) == i])/n)
+            push!(data_to_save,postProcessingOutput.new_matching)
+            if profile
+                push!(data_to_save,postProcessingOutput.setup_rt)
+                push!(data_to_save,postProcessingOutput.klau_rt)
+            end
+        end
+
+        push!(results,data_to_save)               
     end    
     return results
 end
@@ -735,7 +776,6 @@ function random_graph_exp(n::Int, perturbation_p::Float64,graph::RandomGraphType
             end
             A = erdos_renyi(n,p)
         else
-            println(degreedist)
             A = erdos_renyi(n;degreedist)
             p = nnz(A)/n^2
         end

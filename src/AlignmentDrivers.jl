@@ -37,37 +37,50 @@ struct Random_M <: AlignmentMethod end
   addition to whatever is returned by 'align_tensors(_profiled)'.
 ------------------------------------------------------------------------------"""
 function align_matrices(A::SparseMatrixCSC{T,Int},B::SparseMatrixCSC{S,Int};
-                        profile=false,motif=Clique(),kwargs...) where {T,S}
+                        postProcessing::PostProcessingMethod,profile=false,
+                        motif=Clique(),kwargs...) where {T,S}
 
     method = typeof(kwargs[:method])
 
     A_ten = graph_to_ThirdOrderTensor(A)
     B_ten = graph_to_ThirdOrderTensor(B)
     
-    if method === ΛTAME_M || method === LowRankTAME_M  || method === TAME_M
+    if method === ΛTAME_M || method === LowRankTAME_M 
         if profile
-            results = align_tensors_profiled(A_ten,B_ten;kwargs...)
+            alignment_output = align_tensors_profiled(A_ten,B_ten;kwargs...)
         else
-            results = align_tensors(A_ten,B_ten;kwargs...)
+            alignment_output = align_tensors(A_ten,B_ten;kwargs...)
         end
 
-        return size(A_ten.indices,1), size(B_ten.indices,1), results
+        if typeof(postProcessing) === noPostProcessing
+            return size(A_ten.indices,1), size(B_ten.indices,1), alignment_output
+        else    
+            return size(A_ten.indices,1), size(B_ten.indices,1), alignment_output, post_process_alignment(A,B,alignment_output,postProcessing;kwargs...)
+        end
+    elseif method === TAME_M
+        if profile
+            alignment_output = align_tensors_profiled(A_ten,B_ten;kwargs...)
+        else
+            alignment_output = align_tensors(A_ten,B_ten;kwargs...)
+        end
+        return size(A_ten.indices,1), size(B_ten.indices,1), alignment_output
 
     elseif method === ΛTAME_MultiMotif_M
 
         A_tensors = tensors_from_graph(A,kwargs[:orders],kwargs[:samples],motif)        
         B_tensors = tensors_from_graph(B,kwargs[:orders],kwargs[:samples],motif)
         
-        A_motifCounts = [size(x.indices,2) for x in A_tensors]
-        B_motifCounts = [size(x.indices,2) for x in B_tensors]
-
         A_motifDistribution = [contraction(tensor,ones(tensor.n))./factorial(tensor.order-1) for tensor in A_tensors]
         B_motifDistribution = [contraction(tensor,ones(tensor.n))./factorial(tensor.order-1) for tensor in B_tensors]
 
         #TODO: standardize kwarg consumption
         subkwargs = Dict([(k,v) for (k,v) in kwargs if k != :orders && k != :samples])
-        return A_motifCounts, B_motifCounts,A_motifDistribution, B_motifDistribution, align_tensors(A_tensors,B_tensors;subkwargs...)
-
+        if typeof(postProcessing) === noPostProcessing
+            return A_motifDistribution, B_motifDistribution, align_tensors(A_tensors,B_tensors;subkwargs...)
+        else
+            alignment_output = align_tensors(A_tensors,B_tensors;subkwargs...)
+            return A_motifDistribution, B_motifDistribution, alignment_output, post_process_alignment(A,B,alignment_output,postProcessing;subkwargs...)
+        end
     elseif method === EigenAlign_M || method === Degree_M || method === Random_M || method === LowRankEigenAlign_M || method === LowRankEigenAlignOnlyEdges_M
         
         if method === LowRankEigenAlign_M
@@ -75,7 +88,7 @@ function align_matrices(A::SparseMatrixCSC{T,Int},B::SparseMatrixCSC{S,Int};
             (ma,mb,_,_),t = @timed align_networks_eigenalign(A,B,iters,"lowrank_svd_union",3)
             matching = Dict{Int,Int}([i=>j for (i,j) in zip(ma,mb)]) 
         elseif method === LowRankEigenAlignOnlyEdges_M
-            matching,t =@timed lowRankEigenAlignEdgesOnly(A,B) 
+            matching,t = @timed lowRankEigenAlignEdgesOnly(A,B) 
         elseif method === EigenAlign_M
             (ma,mb),t = @timed NetworkAlignment.EigenAlign(A,B)
             matching = Dict{Int,Int}(zip(ma,mb))
@@ -92,11 +105,71 @@ function align_matrices(A::SparseMatrixCSC{T,Int},B::SparseMatrixCSC{S,Int};
         triangle_count, gaped_triangles  = TAME_score(A_ten,B_ten,matching) 
         return size(A_ten.indices,1), size(B_ten.indices,1), triangle_count, matching, t 
     else
-        throw(ArgumentError("method must be of type LambdaTAME_M, LowRankTAME_M, TAME_M, EigenAlign_M, LowRankEigenAlign_M, LowRankEigenAlignEdgesOnly_M, Degree_M, or Random_M."))
+        throw(ArgumentError("method must be of type ΛTAME_M, LowRankTAME_M, TAME_M, EigenAlign_M, LowRankEigenAlign_M, LowRankEigenAlignEdgesOnly_M, Degree_M, or Random_M."))
     end
-
-    
 end
+
+struct KlauPostProcessReturn <: returnType
+    original_edges_matched::Int
+    new_matching::Union{Dict{Int,Int},Vector{Int}}
+    klau_edges_matched::Int
+    klau_tris_matched::Int
+    setup_rt::Union{Nothing,Float64}
+    klau_rt::Union{Nothing,Float64}
+end
+
+function post_process_alignment(A::SparseMatrixCSC{T,Int},B::SparseMatrixCSC{S,Int},
+                           alignment_output::returnType,postProcessing::KlauAlgo;
+                           profile=false,kwargs...) where {T,S}
+
+    method = typeof(kwargs[:method])
+    A_ten = graph_to_ThirdOrderTensor(A)
+    B_ten = graph_to_ThirdOrderTensor(B)
+    method = typeof(alignment_output)
+    if method <: ΛTAME_Return || method <: LowRankTAME_Return || method <: ΛTAME_MultiMotif_Return
+
+
+        best_matched_motifs = alignment_output.matchScore
+        max_motif_match = min(alignment_output.motifCounts...)
+        best_U, best_V = alignment_output.embedding
+        best_matching = alignment_output.matching
+        if profile
+            profiling = alignment_output.profile
+        end
+      
+        k = Int(ceil(.02*min(size(A,1),size(B,1))))
+        k = 5
+
+        if postProcessing.k == -1
+            k = size(alignment_output.embedding[1],2)*2
+        else
+            k = postProcessing.k
+        end
+
+        if profile
+            (pp_matching,Klau_rt),setup_rt = @timed netalignmr(A,B,best_U, best_V, best_matching)# Dict([(j=>i) for (i,j) in best_matching]))
+        else
+            pp_matching,Klau_rt = netalignmr(A,B,best_U, best_V, best_matching,k)# Dict([(j=>i) for (i,j) in best_matching]))
+        end
+
+        pp_matched_motif,_= TAME_score(A_ten,B_ten,pp_matching)
+        pp_matched_edges = Int(edges_matched(A,B,pp_matching)[1]/2) # code doesn't handle symmetries
+        original_matched_edges = edges_matched(A,B,alignment_output.matching)[1]/2
+
+        #combined_matching = combine_matchings(pp_matching,best_matching)
+        #println("combined matching length $(length(combined_matching))")
+        #println("combined score: $(TAME_score(A_ten,B_ten,combined_matching)))")
+     
+        if profile
+            return KlauPostProcessReturn(original_matched_edges,pp_matching,pp_matched_edges,pp_matched_motif, setup_rt, Klau_rt)
+        else
+            return KlauPostProcessReturn(original_matched_edges,pp_matching,pp_matched_edges,pp_matched_motif, nothing, nothing)
+        end
+    else
+        throw(ArgumentError("Post processing is only supported for ΛTAME_M got $(method)"))
+    end
+end
+
 
 """-----------------------------------------------------------------------------
   This function takes in a sparse matrix and builds a ThirdOrderSymTensor from 

@@ -725,6 +725,25 @@ function TAME_score(A_motifs::Dict{Array{Int,1},Int}, B::SymTensorUnweighted{S},
 
 end
 
+function edges_matched(A::SparseMatrixCSC{T,Int}, B::SparseMatrixCSC{T,Int}, mapping::Dict{Int,Int}) where T
+
+    edges_matched = 0
+    edges_missed = 0
+
+    B_nnz = Set(zip(findnz(B)[1:2]...))
+    
+    for (i,j,_) in zip(findnz(A)...)
+
+        ip = get(mapping,i,-1)
+        jp = get(mapping,j,-1)
+
+        if (ip,jp) in B_nnz
+            edges_matched += 1
+        else
+            edges_missed += 1
+        end
+
+    end
 
     return edges_matched, edges_missed
 end

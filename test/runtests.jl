@@ -63,11 +63,11 @@ macro test_nothrow(ex)
 end
 
 
-#include()
 include("Experiments_test.jl")
 #include("Contraction_test.jl")
 include("Matchings_test.jl")
-#include("TAME_Implementations_test.jl")
+include("AlignmentDrivers_test.jl")
+#include("PostProcessing_test.jl")
 include("TAME_implementation_test.jl")
 include("LowRankTAME_implementation_test.jl")
 include("LambdaTAME_implementation_test.jl")
