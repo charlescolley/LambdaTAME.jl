@@ -66,6 +66,7 @@ end
 
 
 include("Experiments_test.jl")
+include("fileio_test.jl")
 #include("Contraction_test.jl")
 include("Matchings_test.jl")
 include("AlignmentDrivers_test.jl")

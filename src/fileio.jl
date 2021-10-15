@@ -138,3 +138,18 @@ function write_to_armadillo_raw_ascii_format(X::Array{T,2},output_file::String) 
         end
     end
 end
+
+
+function write_smat(A::SparseMatrixCSC{T,Int},path::String;delimeter::Char=',',kwargs...) where T
+	@assert path[end-4:end] == ".smat"
+	open(path,"w") do f 
+		header = join([size(A)...,nnz(A)],delimeter)# ::NTuple{3,Int}
+		println(f,header)
+		for (i,j,v)=zip(findnz(A)...)
+			i -= 1
+			j -= 1
+			print(f,i,delimeter,j,delimeter)
+			println(f,v)
+		end
+	end
+end
