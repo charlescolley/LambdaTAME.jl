@@ -27,6 +27,8 @@ NORM_CHECK_TOL = 1e-15
 
 tensor_A_file="test_tensors/test_tensorB.ssten"
 tensor_B_file="test_tensors/test_tensorA.ssten"
+matrix_A_file="test_tensors/testA.smat"
+matrix_B_file="test_tensors/testB.smat"
     #NOTE Flipped to address m >= n assertion error in bipartite_matching_primal_dual
 
 # Third Order Symmetric Tensor

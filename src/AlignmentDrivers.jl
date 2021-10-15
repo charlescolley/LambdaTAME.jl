@@ -109,6 +109,13 @@ function align_matrices(A::SparseMatrixCSC{T,Int},B::SparseMatrixCSC{S,Int};
     end
 end
 
+function align_matrices(fileA,fileB;kwargs...)
+    A = MatrixNetworks.readSMAT(fileA)
+    B = MatrixNetworks.readSMAT(fileB)
+    return align_matrices(A,B;kwargs...)
+end
+
+
 struct KlauPostProcessReturn <: returnType
     original_edges_matched::Int
     new_matching::Union{Dict{Int,Int},Vector{Int}}
@@ -382,7 +389,11 @@ end
 function align_tensors(graph_A_file::String,graph_B_file::String;
                        ThirdOrderSparse=true,profile=false,
                        kwargs...)
+    if haskey(kwargs,:postProcessing)
+        kwargs = Dict([(k,v) for (k,v) in kwargs if k != :postProcessing])
+    end #TODO: this is a quick fix 
 
+    
     if ThirdOrderSparse
         A = load_ThirdOrderSymTensor(graph_A_file)
         B = load_ThirdOrderSymTensor(graph_B_file)

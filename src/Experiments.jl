@@ -99,35 +99,15 @@ Output
     network). 
 
 ------------------------------------------------------------------------------"""
-function distributed_pairwise_alignment(files::Array{String,1},dirpath::String;
+function distributed_pairwise_ssten_alignment(files::Array{String,1},dirpath::String;
                                         method::AlignmentMethod=ΛTAME_M(),profile=false,kwargs...)
-
-    #@everywhere include_string(Main,$(read("LambdaTAME.jl",String)),"LambdaTAME.jl")
-
-    alignment_object = ""
-    if all( [f[end-5:end] == ".ssten" for f in files]) #tensors 
-        alignment_object = "Tensors" 
-    elseif all( [f[end-4:end] == ".smat" for f in files]) #matrices
-        alignment_object = "Matrices"
-    else 
-        throw(ArgumentError("all files must be the same file type, either all '.ssten' or '.smat'."))
-    end
 
     futures = []
 	exp_results = []
 
-    #Best_alignment_ratio = Array{Float64}(undef,length(ssten_files),length(ssten_files))
-
     for i in 1:length(files)
         for j in i+1:length(files)
-
-            if alignment_object == "Tensors"
-                future = @spawn align_tensors(dirpath*files[i],dirpath*files[j];profile=profile,method=method,kwargs...)
-            elseif alignment_object == "Matrices"
-                A = MatrixNetworks.readSMAT(dirpath*files[i])
-                B = MatrixNetworks.readSMAT(dirpath*files[j])
-                future = @spawn align_matrices(A,B;profile=profile,method=method,kwargs...)
-            end
+            future = @spawn align_tensors(dirpath*files[i],dirpath*files[j];profile=profile,method=method,kwargs...)
             push!(futures,((i,j),future))
         end
     end
@@ -135,29 +115,130 @@ function distributed_pairwise_alignment(files::Array{String,1},dirpath::String;
     for ((i,j), future) in futures
 
         if method === ΛTAME_M() || method === LowRankTAME_M() || method === TAME_M()
-            output = fetch(future)
-            matched_tris = output.matchScore
-            max_tris = min(output.motifCounts...)
-            best_matching = output.matching
+            alignmentOutput = fetch(future)
+            matched_tris = alignmentOutput.matchScore
+            best_matching = alignmentOutput.matching
+            A_tens, B_tens = alignmentOutput.motifCounts
             if profile
-                results = output.profile
+                profiling_results = alignmentOutput.profile
 			end
+		end
+    
+        data_to_save = Array{Any,1}(undef,0)
+        push!(data_to_save,files[i])
+        push!(data_to_save,files[j])
+        push!(data_to_save,matched_tris)
+        push!(data_to_save,best_matching)
+        push!(data_to_save,A_tens)
+        push!(data_to_save,B_tens)
+    
+        if profile 
+            push!(data_to_save,profiling_results)
+        end
+
+        push!(exp_results,data_to_save)
+    end
+
+    
+
+    return exp_results
+end
+
+
+function distributed_pairwise_smat_alignment(files::Array{String,1},dirpath::String;
+                                             method::AlignmentMethod=ΛTAME_M(),profile=false,kwargs...)
+
+    futures = []
+	exp_results = []
+
+    for i in 1:length(files)
+        for j in i+1:length(files)
+            future = @spawn align_matrices(dirpath*files[i],dirpath*files[j];profile,method,kwargs...)
+            push!(futures,((i,j),future))
+        end
+    end
+
+    for ((i,j), future) in futures
+
+        if method === ΛTAME_M() || method === LowRankTAME_M()
+            if kwargs[:postProcessing] === noPostProcessing()
+                _,_,alignmentOutput = fetch(future)
+            else
+                _,_,alignmentOutput, postProcessingOutput = fetch(future)
+            end
+            matched_tris = alignmentOutput.matchScore
+            max_tris = min(alignmentOutput.motifCounts...)
+            best_matching = alignmentOutput.matching
+            A_tens, B_tens = alignmentOutput.motifCounts
+            if profile
+                profiling_results = alignmentOutput.profile
+			end
+        elseif method === TAME_M()
+            _,_,alignmentOutput = fetch(future)
+            matched_tris = alignmentOutput.matchScore
+            max_tris = min(alignmentOutput.motifCounts...)
+            best_matching = alignmentOutput.matching
+            A_tens, B_tens = alignmentOutput.motifCounts
+            if profile
+                profiling_results = alignmentOutput.profile
+			end
+        elseif method === ΛTAME_MultiMotif_M()
+            throw("unimplemented")
         elseif method === EigenAlign_M() || method === Degree_M() || method === Random_M() || method === LowRankEigenAlign_M()
-            A_tens, B_tens, matched_tris, best_matching, results = fetch(future)
+            A_tens, B_tens, matched_tris, best_matching, profiling_results = fetch(future)
             max_tris = min(A_tens, B_tens)
             profile = true
 		end
         
-		if profile
-			push!(exp_results,(files[i],files[j],matched_tris, max_tris, best_matching, results))
-		else
-			push!(exp_results,(files[i],files[j],matched_tris, max_tris, best_matching))
-		end
+        data_to_save = Array{Any,1}(undef,0)
+        push!(data_to_save,files[i])
+        push!(data_to_save,files[j])
+        
+        if method === ΛTAME_MultiMotif_M()
+            #= TODO: adding ΛTAME_MultiMotif_M support 
+            push!(data_to_save,best_matching_score)
+            push!(data_to_save,A_motifCounts)
+            push!(data_to_save,B_motifCounts)
+            push!(data_to_save,A_motifDistribution)
+            push!(data_to_save,B_motifDistribution)
+            =#
+        else
+            push!(data_to_save, matched_tris)
+            push!(data_to_save, A_tens)
+            push!(data_to_save, B_tens)
+        end
+
+        if profile 
+            push!(data_to_save,profiling_results)
+        end
+
+        if typeof(kwargs[:postProcessing]) <: KlauAlgo
+            push!(data_to_save,postProcessingOutput.original_edges_matched)
+            push!(data_to_save,postProcessingOutput.klau_edges_matched)
+            push!(data_to_save,postProcessingOutput.klau_tris_matched)
+            push!(data_to_save,postProcessingOutput.new_matching)
+            if profile
+                push!(data_to_save,postProcessingOutput.setup_rt)
+                push!(data_to_save,postProcessingOutput.klau_rt)
+            end
+        end
+
+        push!(exp_results,data_to_save)
     end
 
     return exp_results
 end
 
+function distributed_pairwise_alignment(files::Array{String,1},args...;kwargs...)
+     if all( [f[end-5:end] == ".ssten" for f in files]) #tensors 
+        return distributed_pairwise_ssten_alignment(files,args...;kwargs...) 
+     elseif all( [f[end-4:end] == ".smat" for f in files]) #matrices
+         return distributed_pairwise_smat_alignment(files,args...;kwargs...)
+     else 
+         throw(ArgumentError("all files must be the same file type, either all '.ssten' or '.smat'."))
+     end
+ end
+ 
 
 function self_alignment(dir::String;kwargs...)
 
