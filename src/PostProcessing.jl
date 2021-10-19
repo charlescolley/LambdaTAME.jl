@@ -2,8 +2,15 @@ abstract type PostProcessingMethod end
 
 struct KlauAlgo <: PostProcessingMethod 
     k::Int
+    a::Int;
+	b::Int;
+	stepm::Int;
+	rtype::Int;
+	maxiter::Int;
+	verbose::Bool;
+	gamma::Float64;
 end
-KlauAlgo() = KlauAlgo(-1)
+KlauAlgo() = KlauAlgo(-1,1,1,25,2,1000,false,.4)
 struct noPostProcessing <: PostProcessingMethod end
 
 """-----------------------------------------------------------------------------
@@ -190,31 +197,31 @@ end
 -----------------------------------------------------------------------------"""
 
 function netalignmr(A::SparseMatrixCSC{T,Int},B::SparseMatrixCSC{T,Int},
-                    U::Matrix{T},V::Matrix{T};kwargs...) where T
+                    U::Matrix{T},V::Matrix{T},params::KlauAlgo;kwargs...) where T
     (_,_,matching,_)=  bipartite_matching_primal_dual(U*V';kwargs...)
-    return netalignmr(A,B,knearest_sparsification(U,V,matching_array_to_dict(matching),2*min(size(U,2),size(V,2))))
+    return netalignmr(A,B,knearest_sparsification(U,V,matching_array_to_dict(matching),2*min(size(U,2),size(V,2))),params)
 end
 
 function netalignmr(A::SparseMatrixCSC{T,Int},B::SparseMatrixCSC{T,Int},
-                    U::Matrix{T},V::Matrix{T},k::Int;kwargs...) where T
+                    U::Matrix{T},V::Matrix{T},k::Int,params::KlauAlgo;kwargs...) where T
     (_,_,matching,_)=  bipartite_matching_primal_dual(U*V';kwargs...)
-    return netalignmr(A,B,knearest_sparsification(U,V,matching_array_to_dict(matching),k))
+    return netalignmr(A,B,knearest_sparsification(U,V,matching_array_to_dict(matching),k),params)
 end
 
 function netalignmr(A::SparseMatrixCSC{T,Int},B::SparseMatrixCSC{T,Int},
                     U::Matrix{T},V::Matrix{T},
-                    matching::Union{Vector{NTuple{2,Int}},Dict{Int,Int}},k::Int) where T
-    return netalignmr(A,B,knearest_sparsification(U,V,matching,k))
+                    matching::Union{Vector{NTuple{2,Int}},Dict{Int,Int}},k::Int,params::KlauAlgo) where T
+    return netalignmr(A,B,knearest_sparsification(U,V,matching,k),params)
 end
 
 function netalignmr(A::SparseMatrixCSC{T,Int},B::SparseMatrixCSC{T,Int},
                     U::Matrix{T},V::Matrix{T},
-                    matching::Union{Vector{NTuple{2,Int}},Dict{Int,Int}}) where T
-    return netalignmr(A,B,knearest_sparsification(U,V,matching,2*min(size(U,2),size(V,2))))
+                    matching::Union{Vector{NTuple{2,Int}},Dict{Int,Int}},params::KlauAlgo) where T
+    return netalignmr(A,B,knearest_sparsification(U,V,matching,2*min(size(U,2),size(V,2))),params)
 end
 
 
-function netalignmr(A::SparseMatrixCSC{T1,Int},B::SparseMatrixCSC{T1,Int},L::SparseMatrixCSC{T2,Int}) where {T1,T2}
+function netalignmr(A::SparseMatrixCSC{T1,Int},B::SparseMatrixCSC{T1,Int},L::SparseMatrixCSC{T2,Int},params::KlauAlgo) where {T1,T2}
 
 	@assert size(L,1) == size(A,1) && size(L,2) == size(B,1)
 
@@ -222,23 +229,9 @@ function netalignmr(A::SparseMatrixCSC{T1,Int},B::SparseMatrixCSC{T1,Int},L::Spa
 	S,w,li,lj = netalign_setup(A,B,L)
 
 	# align networks
-	a = 1;
-	b = 1;
-	stepm = 25;
-	rtype = 1;
-	maxiter = 10;
-	verbose = true;
-	gamma = 0.4;
-	(xbest,st,status,hist), t_netalignmr = @timed NetworkAlign.netalignmr(S,w,a,b,li,lj,gamma,stepm,rtype,maxiter,verbose)
+	(xbest,st,status,hist), t_netalignmr = @timed NetworkAlign.netalignmr(S,w,params.a,params.b,li,lj,params.gamma,params.stepm, 
+                                                                          params.rtype,params.maxiter, params.verbose)
 
-    #=
-    matching = Dict{Int,Int}()
-	for (x,i,j) in zip(xbest,li,lj)
-		if x == 1.0
-            matching[j] = i
-		end
-	end
-    =#
     matching = matching_array_to_dict(bipartite_matching(sparse(li,lj,xbest)).match)
 
 	return matching, t_netalignmr, L

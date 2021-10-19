@@ -349,7 +349,7 @@ function distributed_random_trials(trial_count::Int,noise_model::ErdosRenyiNoise
             max_tris = min(alignmentOutput.motifCounts...)
             best_matching = alignmentOutput.matching
             if profile 
-                exp_results = alignmentOutput.profile
+                profiling_results = alignmentOutput.profile
             end
         elseif method === TAME_M()
             d_A, d_B, perm, (A_tris, B_tris, alignmentOutput) = fetch(future)
@@ -357,13 +357,16 @@ function distributed_random_trials(trial_count::Int,noise_model::ErdosRenyiNoise
             max_tris = min(alignmentOutput.motifCounts...)
             best_matching = alignmentOutput.matching
             if profile 
-                exp_results = alignmentOutput.profile
+                profiling_results = alignmentOutput.profile
             end
         elseif method === ΛTAME_MultiMotif_M()
             if kwargs[:postProcessing] === noPostProcessing()
                 d_A, d_B, perm, (A_motifDistribution, B_motifDistribution, output) = fetch(future)
             else
                 d_A, d_B, perm, (A_motifDistribution, B_motifDistribution, output, postProcessingOutput) = fetch(future)
+            end
+            if profile 
+                profiling_results = alignmentOutput.profile
             end
             best_matching_score = output.matchScore
             best_matching = output.matching
@@ -401,7 +404,7 @@ function distributed_random_trials(trial_count::Int,noise_model::ErdosRenyiNoise
         end
 
         if profile 
-            push!(data_to_save,exp_results)
+            push!(data_to_save,profiling_results)
         end
 
         if typeof(kwargs[:postProcessing]) <: KlauAlgo
@@ -482,7 +485,7 @@ function distributed_random_trials(trial_count::Int,noise_model::DuplicationNois
             max_tris = min(alignmentOutput.motifCounts...)
             best_matching = alignmentOutput.matching
             if profile 
-                exp_results = alignmentOutput.profile
+                profiling_results = alignmentOutput.profile
             end
       
         elseif method === TAME_M()
@@ -491,7 +494,7 @@ function distributed_random_trials(trial_count::Int,noise_model::DuplicationNois
             max_tris = min(alignmentOutput.motifCounts...)
             best_matching = alignmentOutput.matching
             if profile 
-                exp_results = alignmentOutput.profile
+                profiling_results = alignmentOutput.profile
             end
         elseif method === ΛTAME_MultiMotif_M()
             if kwargs[:postProcessing] === noPostProcessing()
@@ -499,8 +502,10 @@ function distributed_random_trials(trial_count::Int,noise_model::DuplicationNois
             else
                 perm, dup_vertices, (A_motifDistribution, B_motifDistribution, alignmentOutput, postProcessingOutput) = fetch(future)
             end
+            if profile 
+                profiling_results = alignmentOutput.profile
+            end
 
-            best_matching_score = alignmentOutput.matchScore
             best_matching = alignmentOutput.matching
             A_tris = -1
             B_tris = -1
@@ -536,7 +541,7 @@ function distributed_random_trials(trial_count::Int,noise_model::DuplicationNois
         end
 
         if profile 
-            push!(data_to_save,exp_results)
+            push!(data_to_save,profiling_results)
         end
 
         if typeof(kwargs[:postProcessing]) <: KlauAlgo

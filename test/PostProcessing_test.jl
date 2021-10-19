@@ -19,10 +19,10 @@ import LambdaTAME: spatial_network, duplication_perturbation_noise_model, netali
     L = sparse(1:min(n,m),1:min(n,m),1,n,m)
     L += sprand(size(L)...,.1) # add some fill in
     @suppress_out begin     
-        @inferred netalignmr(B,A,V,U,5)
-        @inferred netalignmr(B,A,V,U,matching,5)
-        @inferred netalignmr(B,A,V,U)
-        @inferred netalignmr(B,A,V,U,matching)
-        @inferred netalignmr(B,A,L)
+        @inferred netalignmr(B,A,V,U,5,KlauAlgo())
+        @inferred netalignmr(B,A,V,U,matching,5,KlauAlgo())
+        @inferred netalignmr(B,A,V,U,KlauAlgo())
+        @inferred netalignmr(B,A,V,U,matching,KlauAlgo())
+        @inferred netalignmr(B,A,L,KlauAlgo())
     end
 end

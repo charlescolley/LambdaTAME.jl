@@ -16,10 +16,10 @@ using Metis
 #  https://github.com/charlescolley/DistributedTensorConstruction.jl.git
 using DistributedTensorConstruction
 # imports SymTensorUnweighted type, tensors_from_graph, contraction_divide_out! 
+import DistributedTensorConstruction: contraction
 
 using NetworkAlign
 
-#using Hungarian  #TODO: remove
 import Statistics: mean
 import Arpack: svds
 import Combinatorics: permutations

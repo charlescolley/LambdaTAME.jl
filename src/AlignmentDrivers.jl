@@ -55,7 +55,7 @@ function align_matrices(A::SparseMatrixCSC{T,Int},B::SparseMatrixCSC{S,Int};
         if typeof(postProcessing) === noPostProcessing
             return size(A_ten.indices,1), size(B_ten.indices,1), alignment_output
         else    
-            return size(A_ten.indices,1), size(B_ten.indices,1), alignment_output, post_process_alignment(A,B,alignment_output,postProcessing;kwargs...)
+            return size(A_ten.indices,1), size(B_ten.indices,1), alignment_output, post_process_alignment(A,B,alignment_output,postProcessing;profile,kwargs...)
         end
     elseif method === TAME_M
         if profile
@@ -79,7 +79,7 @@ function align_matrices(A::SparseMatrixCSC{T,Int},B::SparseMatrixCSC{S,Int};
             return A_motifDistribution, B_motifDistribution, align_tensors(A_tensors,B_tensors;subkwargs...)
         else
             alignment_output = align_tensors(A_tensors,B_tensors;subkwargs...)
-            return A_motifDistribution, B_motifDistribution, alignment_output, post_process_alignment(A,B,alignment_output,postProcessing;subkwargs...)
+            return A_motifDistribution, B_motifDistribution, alignment_output, post_process_alignment(A,B,alignment_output,postProcessing;profile,subkwargs...)
         end
     elseif method === EigenAlign_M || method === Degree_M || method === Random_M || method === LowRankEigenAlign_M || method === LowRankEigenAlignOnlyEdges_M
         
@@ -135,9 +135,6 @@ function post_process_alignment(A::SparseMatrixCSC{T,Int},B::SparseMatrixCSC{S,I
     method = typeof(alignment_output)
     if method <: ΛTAME_Return || method <: LowRankTAME_Return || method <: ΛTAME_MultiMotif_Return
 
-
-        best_matched_motifs = alignment_output.matchScore
-        max_motif_match = min(alignment_output.motifCounts...)
         best_U, best_V = alignment_output.embedding
         best_matching = alignment_output.matching
         if profile
@@ -154,18 +151,15 @@ function post_process_alignment(A::SparseMatrixCSC{T,Int},B::SparseMatrixCSC{S,I
         end
 
         if profile
-            (pp_matching,Klau_rt),setup_rt = @timed netalignmr(A,B,best_U, best_V, best_matching)# Dict([(j=>i) for (i,j) in best_matching]))
+            (pp_matching,Klau_rt),full_rt = @timed netalignmr(A,B,best_U, best_V, best_matching,k,postProcessing)
+            setup_rt = full_rt - Klau_rt
         else
-            pp_matching,Klau_rt = netalignmr(A,B,best_U, best_V, best_matching,k)# Dict([(j=>i) for (i,j) in best_matching]))
+            pp_matching,Klau_rt = netalignmr(A, B,best_U, best_V, best_matching,k,postProcessing)
         end
 
         pp_matched_motif,_= TAME_score(A_ten,B_ten,pp_matching)
         pp_matched_edges = Int(edges_matched(A,B,pp_matching)[1]/2) # code doesn't handle symmetries
         original_matched_edges = edges_matched(A,B,alignment_output.matching)[1]/2
-
-        #combined_matching = combine_matchings(pp_matching,best_matching)
-        #println("combined matching length $(length(combined_matching))")
-        #println("combined score: $(TAME_score(A_ten,B_ten,combined_matching)))")
      
         if profile
             return KlauPostProcessReturn(original_matched_edges,pp_matching,pp_matched_edges,pp_matched_motif, setup_rt, Klau_rt)
@@ -255,33 +249,6 @@ end
 function align_tensors_profiled(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor;
 					            method::AlignmentMethod=ΛTAME_M(),no_matching=false,kwargs...)
 
-	#put larger tensor on the left
-    #=
-	if B.n > A.n
-        println("swapping tensors in 'align_tensors_profiled'. ")
-		results =  align_tensors_profiled(B,A;method = method, no_matching=no_matching,kwargs...)
-		#flip the matchings if A and B were swapped
-		if typeof(method) === ΛTAME_M 
-			if kwargs[:matchingMethod] === ΛTAME_rankOneMatching()
-				best_TAME_PP_tris, max_triangle_match, U_best, V_best, best_i, best_j, best_matching, profile = results
-				return best_TAME_PP_tris, max_triangle_match, V_best, U_best, best_j, best_i, Dict((j,i) for (i,j) in best_matching), profile
-			else 
-				best_matched_motifs, max_motif_match, U_best, V_best,best_matching, profile = results
-				#BUG: best_matching is returning a vector and not a mapping, type stability is broken too
-				return best_matched_motifs, max_motif_match, V_best, U_best, Dict((j,i) for (i,j) in enumerate(best_matching))::Dict{Int64,Int64}, profile
-			end
-		elseif typeof(method) == LowRankTAME_M
-			best_TAME_PP_tris, max_triangle_match, U_best, V_best, best_matching,profile = results
-			return best_TAME_PP_tris, max_triangle_match, V_best, U_best, Dict((j,i) for (i,j) in best_matching), profile
-		elseif typeof(method) === TAME_M
-			best_TAME_PP_tris, max_triangle_match, best_TAME_PP_x, best_matching,profile = results
-            # TODO: must reshape returned best_TAME_PP_x
-			return best_TAME_PP_tris, max_triangle_match, best_TAME_PP_x, Dict((j,i) for (i,j) in best_matching), profile
-		end
-
-	end
-    =#
-
 	if typeof(method) == ΛTAME_M
 		return ΛTAME_param_search_profiled(A,B;kwargs...)
 	elseif typeof(method) === LowRankTAME_M
@@ -325,32 +292,6 @@ function align_tensors(A::Union{ThirdOrderSymTensor,SymTensorUnweighted{S}},
 	                   B::Union{ThirdOrderSymTensor,SymTensorUnweighted{S}}; 
 					   method::AlignmentMethod=ΛTAME_M(),no_matching=false,kwargs...) where {S <: Motif}
 
-	#TODO: test if ternary is a problem
-	#put larger tensor on the left
-    #=
-	if B.n > A.n
-		#TODO: this typeof(A) may fail
-		results = align_tensors(B,A;method = method, no_matching=no_matching,kwargs...)
-		#flip the matchings if A and B were swapped
-		if typeof(method) === ΛTAME_M
-			if kwargs[:matchingMethod] === ΛTAME_rankOneMatching()
-
-				best_TAME_PP_tris, max_triangle_match, U_best, V_best,best_i, best_j, best_matching = results
-				return best_TAME_PP_tris, max_triangle_match, V_best, U_best, best_j, best_i, Dict((j,i) for (i,j) in best_matching)
-			else 
-				best_matched_motifs, max_motif_match, U_best, V_best, best_matching = results
-				return best_matched_motifs, max_motif_match, V_best, U_best, Dict((j,i) for (i,j) in best_matching)
-			end
-		elseif typeof(method) === LowRankTAME_M
-			best_TAME_PP_tris, max_triangle_match, U_best, V_best, best_matching = results
-			return best_TAME_PP_tris, max_triangle_match, V_best, U_best, Dict((j,i) for (i,j) in best_matching)
-		elseif typeof(method) === TAME_M
-			best_TAME_PP_tris, max_triangle_match, best_TAME_PP_x, best_matching = results
-			return best_TAME_PP_tris, max_triangle_match, best_TAME_PP_x, Dict((j,i) for (i,j) in best_matching)
-		end
-	end
-    =#
-
 	if typeof(method) === ΛTAME_M || typeof(method) === ΛTAME_MultiMotif_M
 		return ΛTAME_param_search(A,B;kwargs...)
 	elseif typeof(method) === LowRankTAME_M
@@ -365,13 +306,6 @@ end
 
 function align_tensors(A::Array{SymTensorUnweighted{S},1}, B::Array{SymTensorUnweighted{S},1}; 
 			           method::AlignmentMethod=ΛTAME_M(),no_matching=false,kwargs...) where {S <: Motif}
-
-    #=
-	if (B[1].n > A[1].n)
-		results = align_tensors(B,A;method = method, no_matching=no_matching,kwargs...)
-		return results[1:end-1]..., Dict((j,i) for (i,j) in results[end])
-	end
-    =#
 
 	if typeof(method) === ΛTAME_M || typeof(method) === ΛTAME_MultiMotif_M
 		return ΛTAME_param_search(A,B;kwargs...)
@@ -393,7 +327,7 @@ function align_tensors(graph_A_file::String,graph_B_file::String;
         kwargs = Dict([(k,v) for (k,v) in kwargs if k != :postProcessing])
     end #TODO: this is a quick fix 
 
-    
+
     if ThirdOrderSparse
         A = load_ThirdOrderSymTensor(graph_A_file)
         B = load_ThirdOrderSymTensor(graph_B_file)
