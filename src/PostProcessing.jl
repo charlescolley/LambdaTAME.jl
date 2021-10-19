@@ -1,16 +1,15 @@
 abstract type PostProcessingMethod end
 
-struct KlauAlgo <: PostProcessingMethod 
-    k::Int
-    a::Int;
-	b::Int;
-	stepm::Int;
-	rtype::Int;
-	maxiter::Int;
-	verbose::Bool;
-	gamma::Float64;
+@with_kw struct KlauAlgo <: PostProcessingMethod 
+    k::Int = -1;
+    a::Int = 1;
+	b::Int = 1;
+	stepm::Int = 25;
+	rtype::Int = 2;
+	maxiter::Int = 1000;
+	verbose::Bool = false;
+	gamma::Float64 =.4;
 end
-KlauAlgo() = KlauAlgo(-1,1,1,25,2,1000,false,.4)
 struct noPostProcessing <: PostProcessingMethod end
 
 """-----------------------------------------------------------------------------

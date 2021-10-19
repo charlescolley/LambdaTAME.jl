@@ -9,6 +9,7 @@ using Random
 using MatrixNetworks
 using DataStructures
 using NearestNeighbors
+using Parameters
 
 using Distributions
 using Metis
