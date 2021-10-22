@@ -248,6 +248,84 @@ function ΛTAME_param_search_profiled(A,B;
 end
 
 
+function ΛTAME_param_search_profiled(A_tensors::Array{SymTensorUnweighted{S},1},B_tensors::Array{SymTensorUnweighted{S},1};
+							iter::Int = 15,tol::Float64=1e-6,
+							alphas::Array{F,1}=[.5,1.0],
+							betas::Array{F,1} =[1000.0,100.0,10.0,1.0,0.0,0.1,0.01,0.001],
+							matchingMethod::MatchingMethod=ΛTAME_rankOneMatching(),kwargs...) where {F <: AbstractFloat, S <: Motif}
+
+	motifCountA = [size(A.indices,2) for A in A_tensors]
+	motifCountB = [size(B.indices,2) for B in B_tensors]
+	max_motif_match = [min(A_motifCount,B_motifCount) for (A_motifCount,B_motifCount) in zip(motifCountA,motifCountB)]
+
+	m = maximum([A.n for A in A_tensors])
+	n = maximum([B.n for B in B_tensors])
+
+	U = Array{Float64,2}(undef,m,iter)
+	V = Array{Float64,2}(undef,n,iter)
+	best_U = Array{Float64,2}(undef,m,iter)
+	best_V = Array{Float64,2}(undef,n,iter)
+
+	profiling = Dict(
+		"TAME_timings" => Array{Float64,1}(undef,length(alphas)*length(betas)),
+		"Matching Timings"=> Array{Float64,1}(undef,length(alphas)*length(betas)),
+		"Scoring Timings"=> Array{Float64,1}(undef,length(alphas)*length(betas)),
+	)
+	exp_index = 1
+
+	best_matching_score = -1
+	best_i  = -1
+	best_j = -1
+	best_matched_motifs::Array{Int,1} = []
+	best_matching = Dict{Int,Int}()
+
+	for α in alphas
+		for beta in betas
+
+			(U,V),ΛTAME_runtime = @timed ΛTAME(A_tensors,B_tensors,beta,iter,tol,α)
+			profiling["TAME_timings"][exp_index] = ΛTAME_runtime 
+			
+			if typeof(matchingMethod) === ΛTAME_rankOneMatching
+				((matching_score, matched_motifs, i, j, matching,scoring_time), full_runtime) = @timed search_Krylov_space(A_tensors,B_tensors,U,V;returnScoringTimings=returnTimings())
+				profiling["Matching Timings"][exp_index] = full_runtime - scoring_time
+				profiling["Scoring Timings"][exp_index] = scoring_time 
+			elseif typeof(matchingMethod) === ΛTAME_GramMatching
+				((matching_score, matched_motifs, matching, matching_time, scoring_time),matching_time) = @timed TAME_score(A_tensors,B_tensors,U*V';return_timings=returnTimings(),kwargs...)
+				i = -1
+				j = -1
+				profiling["Matching Timings"][exp_index] = matching_time
+				profiling["Scoring Timings"][exp_index] = scoring_time
+			else 
+				throw(TypeError("typeof MatchingMethod must be either ΛTAME_rankOneMatching or ΛTAME_GramMatching"))
+			end
+
+			exp_index +=1 
+
+			if matching_score > best_matching_score
+				best_matching_score = matching_score
+				best_matched_motifs = matched_motifs
+				best_i = i
+				best_j = j
+				best_U = U
+				best_V = V
+				best_matching = matching
+			end
+			println("α:$(α) -- β:$(beta) finished -- motif_match:$matched_motifs -- max_motifs:$max_motif_match -- matching_score:$matching_score -- best score:$best_matching_score")
+			
+		end
+	end
+	
+	println("best i:$best_i -- best j:$best_j")
+	if typeof(matchingMethod) === ΛTAME_rankOneMatching
+		return ΛTAME_MultiMotif_Return(best_matching_score,best_matched_motifs, (motifCountA,motifCountB),
+					best_matching,(best_i, best_j),(best_U, best_V),profiling)
+	else
+		return ΛTAME_MultiMotif_Return(best_matching_score,best_matched_motifs, (motifCountA,motifCountB),
+					best_matching,nothing,(best_U, best_V),profiling)
+	end
+
+end
+
 #=------------------------------------------------------------------------------
              		    Spectral Relaxation Routines
 ------------------------------------------------------------------------------=#

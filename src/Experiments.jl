@@ -183,7 +183,15 @@ function distributed_pairwise_smat_alignment(files::Array{String,1},dirpath::Str
                 profiling_results = alignmentOutput.profile
 			end
         elseif method === ΛTAME_MultiMotif_M()
-            throw("unimplemented")
+            if kwargs[:postProcessing] === noPostProcessing()
+                A_motifDistribution, B_motifDistribution,alignmentOutput = fetch(future)
+            else
+                A_motifDistribution, B_motifDistribution,alignmentOutput, postProcessingOutput = fetch(future)
+            end
+
+            if profile
+                profiling_results = alignmentOutput.profile
+			end
         elseif method === EigenAlign_M() || method === Degree_M() || method === Random_M() || method === LowRankEigenAlign_M()
             A_tens, B_tens, matched_tris, best_matching, profiling_results = fetch(future)
             max_tris = min(A_tens, B_tens)
@@ -195,13 +203,11 @@ function distributed_pairwise_smat_alignment(files::Array{String,1},dirpath::Str
         push!(data_to_save,files[j])
         
         if method === ΛTAME_MultiMotif_M()
-            #= TODO: adding ΛTAME_MultiMotif_M support 
-            push!(data_to_save,best_matching_score)
-            push!(data_to_save,A_motifCounts)
-            push!(data_to_save,B_motifCounts)
+            push!(data_to_save,alignmentOutput.matchScore)
+            push!(data_to_save,alignmentOutput.motifCounts[1])
+            push!(data_to_save,alignmentOutput.motifCounts[2])
             push!(data_to_save,A_motifDistribution)
             push!(data_to_save,B_motifDistribution)
-            =#
         else
             push!(data_to_save, matched_tris)
             push!(data_to_save, A_tens)
@@ -232,7 +238,8 @@ end
 
 function distributed_pairwise_alignment(files::Array{String,1},args...;kwargs...)
      if all( [f[end-5:end] == ".ssten" for f in files]) #tensors 
-        return distributed_pairwise_ssten_alignment(files,args...;kwargs...) 
+        subkwargs = Dict([(k,v) for (k,v) in kwargs if k != :postProcessing]) #ssten can't support post processing
+        return distributed_pairwise_ssten_alignment(files,args...;subkwargs...) 
      elseif all( [f[end-4:end] == ".smat" for f in files]) #matrices
          return distributed_pairwise_smat_alignment(files,args...;kwargs...)
      else 

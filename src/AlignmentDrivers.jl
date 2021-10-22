@@ -75,10 +75,16 @@ function align_matrices(A::SparseMatrixCSC{T,Int},B::SparseMatrixCSC{S,Int};
 
         #TODO: standardize kwarg consumption
         subkwargs = Dict([(k,v) for (k,v) in kwargs if k != :orders && k != :samples])
-        if typeof(postProcessing) === noPostProcessing
-            return A_motifDistribution, B_motifDistribution, align_tensors(A_tensors,B_tensors;subkwargs...)
+
+        if profile 
+            alignment_output = align_tensors_profiled(A_tensors,B_tensors;subkwargs...)
         else
             alignment_output = align_tensors(A_tensors,B_tensors;subkwargs...)
+        end
+
+        if typeof(postProcessing) === noPostProcessing
+            return A_motifDistribution, B_motifDistribution, alignment_output
+        else
             return A_motifDistribution, B_motifDistribution, alignment_output, post_process_alignment(A,B,alignment_output,postProcessing;profile,subkwargs...)
         end
     elseif method === EigenAlign_M || method === Degree_M || method === Random_M || method === LowRankEigenAlign_M || method === LowRankEigenAlignOnlyEdges_M
@@ -247,17 +253,18 @@ end
 	see the '_profiled' versions of the code to see what is returned by each 
 	function.
 ------------------------------------------------------------------------------"""
-function align_tensors_profiled(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor;
-					            method::AlignmentMethod=ΛTAME_M(),no_matching=false,kwargs...)
+function align_tensors_profiled(A::Union{ThirdOrderSymTensor,SymTensorUnweighted{S},Vector{SymTensorUnweighted{S}}}, 
+                                B::Union{ThirdOrderSymTensor,SymTensorUnweighted{S},Vector{SymTensorUnweighted{S}}};
+					            method::AlignmentMethod=ΛTAME_M(),no_matching=false,kwargs...) where {S <: Motif}
 
-	if typeof(method) == ΛTAME_M
+	if typeof(method) == ΛTAME_M || typeof(method) === ΛTAME_MultiMotif_M
 		return ΛTAME_param_search_profiled(A,B;kwargs...)
 	elseif typeof(method) === LowRankTAME_M
-		return LowRankTAME_param_search_profiled(A,B;no_matching = no_matching,kwargs...)
+		return LowRankTAME_param_search_profiled(A,B;no_matching,kwargs...)
 	elseif typeof(method) === TAME_M
-		return TAME_param_search_profiled(A,B;no_matching = no_matching,kwargs...)
+		return TAME_param_search_profiled(A,B;no_matching,kwargs...)
 	else
-		throw(ArgumentError("method must be one of 'LambdaTAME', 'LowRankTAME', or 'TAME'."))
+		throw(ArgumentError("method must be one of 'LambdaTAME', ΛTAME_MultiMotif_M, 'LowRankTAME', or 'TAME'."))
 	end
 end
 
@@ -289,22 +296,23 @@ end
 	  and V components of the best iterate. 
 
 -----------------------------------------------------------------------------"""
-function align_tensors(A::Union{ThirdOrderSymTensor,SymTensorUnweighted{S}}, 
-	                   B::Union{ThirdOrderSymTensor,SymTensorUnweighted{S}}; 
+function align_tensors(A::Union{ThirdOrderSymTensor,SymTensorUnweighted{S},Vector{SymTensorUnweighted{S}}}, 
+	                   B::Union{ThirdOrderSymTensor,SymTensorUnweighted{S},Vector{SymTensorUnweighted{S}}}; 
 					   method::AlignmentMethod=ΛTAME_M(),no_matching=false,kwargs...) where {S <: Motif}
 
 	if typeof(method) === ΛTAME_M || typeof(method) === ΛTAME_MultiMotif_M
 		return ΛTAME_param_search(A,B;kwargs...)
 	elseif typeof(method) === LowRankTAME_M
-		return LowRankTAME_param_search(A,B;no_matching = no_matching,kwargs...)
+		return LowRankTAME_param_search(A,B;no_matching,kwargs...)
 	elseif typeof(method) === TAME_M
-		return TAME_param_search(A,B;no_matching = no_matching,kwargs...)
+		return TAME_param_search(A,B;no_matching,kwargs...)
 	else
-		throw(ArgumentError("method must be one of LambdaTAME_M,ΛTAME_MultiMotif_M, LowRankTAME_M, or TAME_M."))
+		throw(ArgumentError("method must be one of LambdaTAME_M, ΛTAME_MultiMotif_M, LowRankTAME_M, or TAME_M."))
 	end
 
 end
 
+#=
 function align_tensors(A::Array{SymTensorUnweighted{S},1}, B::Array{SymTensorUnweighted{S},1}; 
 			           method::AlignmentMethod=ΛTAME_M(),no_matching=false,kwargs...) where {S <: Motif}
 
@@ -319,6 +327,7 @@ function align_tensors(A::Array{SymTensorUnweighted{S},1}, B::Array{SymTensorUnw
 	end
 
 end
+=#
 
 
 function align_tensors(graph_A_file::String,graph_B_file::String;
