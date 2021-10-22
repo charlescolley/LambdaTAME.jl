@@ -118,11 +118,12 @@ end
 
 struct KlauPostProcessReturn <: returnType
     original_edges_matched::Int
-    new_matching::Union{Dict{Int,Int},Vector{Int}}
+    matching::Union{Dict{Int,Int},Vector{Int}}
     klau_edges_matched::Int
     klau_tris_matched::Int
     setup_rt::Union{Nothing,Float64}
     klau_rt::Union{Nothing,Float64}
+    L_sparsity::Float64
 end
 
 function post_process_alignment(A::SparseMatrixCSC{T,Int},B::SparseMatrixCSC{S,Int},
@@ -151,10 +152,10 @@ function post_process_alignment(A::SparseMatrixCSC{T,Int},B::SparseMatrixCSC{S,I
         end
 
         if profile
-            (pp_matching,Klau_rt),full_rt = @timed netalignmr(A,B,best_U, best_V, best_matching,k,postProcessing)
+            (pp_matching,Klau_rt,L_sparsity),full_rt = @timed netalignmr(A,B,best_U, best_V, best_matching,k,postProcessing)
             setup_rt = full_rt - Klau_rt
         else
-            pp_matching,Klau_rt = netalignmr(A, B,best_U, best_V, best_matching,k,postProcessing)
+            pp_matching, Klau_rt, L_sparsity = netalignmr(A, B,best_U, best_V, best_matching,k,postProcessing)
         end
 
         pp_matched_motif,_= TAME_score(A_ten,B_ten,pp_matching)
@@ -162,9 +163,9 @@ function post_process_alignment(A::SparseMatrixCSC{T,Int},B::SparseMatrixCSC{S,I
         original_matched_edges = edges_matched(A,B,alignment_output.matching)[1]/2
      
         if profile
-            return KlauPostProcessReturn(original_matched_edges,pp_matching,pp_matched_edges,pp_matched_motif, setup_rt, Klau_rt)
+            return KlauPostProcessReturn(original_matched_edges,pp_matching,pp_matched_edges,pp_matched_motif, setup_rt, Klau_rt, L_sparsity)
         else
-            return KlauPostProcessReturn(original_matched_edges,pp_matching,pp_matched_edges,pp_matched_motif, nothing, nothing)
+            return KlauPostProcessReturn(original_matched_edges,pp_matching,pp_matched_edges,pp_matched_motif, nothing, nothing, L_sparsity)
         end
     else
         throw(ArgumentError("Post processing is only supported for ΛTAME_M got $(method)"))

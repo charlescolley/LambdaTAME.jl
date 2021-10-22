@@ -216,11 +216,12 @@ function distributed_pairwise_smat_alignment(files::Array{String,1},dirpath::Str
             push!(data_to_save,postProcessingOutput.original_edges_matched)
             push!(data_to_save,postProcessingOutput.klau_edges_matched)
             push!(data_to_save,postProcessingOutput.klau_tris_matched)
-            push!(data_to_save,postProcessingOutput.new_matching)
+            push!(data_to_save,postProcessingOutput.matching)
             if profile
                 push!(data_to_save,postProcessingOutput.setup_rt)
                 push!(data_to_save,postProcessingOutput.klau_rt)
             end
+            push!(data_to_save,postProcessingOutput.L_sparsity)
         end
 
         push!(exp_results,data_to_save)
@@ -411,12 +412,13 @@ function distributed_random_trials(trial_count::Int,noise_model::ErdosRenyiNoise
             push!(data_to_save,postProcessingOutput.original_edges_matched)
             push!(data_to_save,postProcessingOutput.klau_edges_matched)
             push!(data_to_save,postProcessingOutput.klau_tris_matched)
-            push!(data_to_save,sum([1 for (i,j) in postProcessingOutput.new_matching if get(perm,j,-1) == i])/n)
-            push!(data_to_save,postProcessingOutput.new_matching)
+            push!(data_to_save,sum([1 for (i,j) in postProcessingOutput.matching if get(perm,j,-1) == i])/n)
+            push!(data_to_save,postProcessingOutput.matching)
             if profile
                 push!(data_to_save,postProcessingOutput.setup_rt)
                 push!(data_to_save,postProcessingOutput.klau_rt)
             end
+            push!(data_to_save,postProcessingOutput.L_sparsity)
         end
 
         push!(results,data_to_save)
@@ -548,12 +550,13 @@ function distributed_random_trials(trial_count::Int,noise_model::DuplicationNois
             push!(data_to_save,postProcessingOutput.original_edges_matched)
             push!(data_to_save,postProcessingOutput.klau_edges_matched)
             push!(data_to_save,postProcessingOutput.klau_tris_matched)
-            push!(data_to_save,sum([1 for (i,j) in postProcessingOutput.new_matching if get(perm,j,-1) == i])/n)
-            push!(data_to_save,postProcessingOutput.new_matching)
+            push!(data_to_save,sum([1 for (i,j) in postProcessingOutput.matching if get(perm,j,-1) == i])/n)
+            push!(data_to_save,postProcessingOutput.matching)
             if profile
                 push!(data_to_save,postProcessingOutput.setup_rt)
                 push!(data_to_save,postProcessingOutput.klau_rt)
             end
+            push!(data_to_save,postProcessingOutput.L_sparsity)
         end
 
         push!(results,data_to_save)               

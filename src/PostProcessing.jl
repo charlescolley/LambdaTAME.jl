@@ -5,8 +5,8 @@ abstract type PostProcessingMethod end
     a::Int = 1;
 	b::Int = 1;
 	stepm::Int = 25;
-	rtype::Int = 2;
-	maxiter::Int = 1000;
+	rtype::Int = 1;
+	maxiter::Int = 500;
 	verbose::Bool = false;
 	gamma::Float64 =.4;
 end
@@ -233,7 +233,7 @@ function netalignmr(A::SparseMatrixCSC{T1,Int},B::SparseMatrixCSC{T1,Int},L::Spa
 
     matching = matching_array_to_dict(bipartite_matching(sparse(li,lj,xbest)).match)
 
-	return matching, t_netalignmr, L
+	return matching, t_netalignmr, nnz(L)/(size(A,1)*size(B,1))
 
 end
 
