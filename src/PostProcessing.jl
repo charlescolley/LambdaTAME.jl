@@ -230,8 +230,12 @@ function netalignmr(A::SparseMatrixCSC{T1,Int},B::SparseMatrixCSC{T1,Int},L::Spa
 	# align networks
 	(xbest,st,status,hist), t_netalignmr = @timed NetworkAlign.netalignmr(S,w,params.a,params.b,li,lj,params.gamma,params.stepm, 
                                                                           params.rtype,params.maxiter, params.verbose)
+    final_link_L = sparse(li,lj,xbest,size(A,1),size(B,1))
+    dropzeros!(final_link_L)
 
-    matching = matching_array_to_dict(bipartite_matching(sparse(li,lj,xbest)).match)
+    matching = MatrixNetworks.edge_list(NetworkAlign.bipartite_matching(final_link_L))
+
+    matching = Dict(zip(matching...))
 
 	return matching, t_netalignmr, nnz(L)/(size(A,1)*size(B,1))
 
