@@ -237,7 +237,7 @@ function netalignmr(A::SparseMatrixCSC{T1,Int},B::SparseMatrixCSC{T1,Int},L::Spa
 
     matching = Dict(zip(matching...))
 
-	return matching, t_netalignmr, nnz(L)/(size(A,1)*size(B,1))
+	return matching, t_netalignmr, nnz(L)/(size(A,1)*size(B,1)), status
 
 end
 

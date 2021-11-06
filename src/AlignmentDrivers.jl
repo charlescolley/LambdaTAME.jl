@@ -130,6 +130,7 @@ struct KlauPostProcessReturn <: returnType
     setup_rt::Union{Nothing,Float64}
     klau_rt::Union{Nothing,Float64}
     L_sparsity::Float64
+    f_status::Tuple{Float64,Float64}
 end
 
 function post_process_alignment(A::SparseMatrixCSC{T,Int},B::SparseMatrixCSC{S,Int},
