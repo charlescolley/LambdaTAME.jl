@@ -228,6 +228,7 @@ function distributed_pairwise_smat_alignment(files::Array{String,1},dirpath::Str
                 push!(data_to_save,postProcessingOutput.klau_rt)
             end
             push!(data_to_save,postProcessingOutput.L_sparsity)
+            push!(data_to_save,postProcessingOutput.f_status)
         end
 
         push!(exp_results,data_to_save)
@@ -426,6 +427,7 @@ function distributed_random_trials(trial_count::Int,noise_model::ErdosRenyiNoise
                 push!(data_to_save,postProcessingOutput.klau_rt)
             end
             push!(data_to_save,postProcessingOutput.L_sparsity)
+            push!(data_to_save,postProcessingOutput.f_status)
         end
 
         push!(results,data_to_save)
@@ -564,6 +566,7 @@ function distributed_random_trials(trial_count::Int,noise_model::DuplicationNois
                 push!(data_to_save,postProcessingOutput.klau_rt)
             end
             push!(data_to_save,postProcessingOutput.L_sparsity)
+            push!(data_to_save,postProcessingOutput.f_status)
         end
 
         push!(results,data_to_save)               
