@@ -145,9 +145,57 @@ function post_process_alignment(A::SparseMatrixCSC{T,Int},B::SparseMatrixCSC{S,I
 
         best_U, best_V = alignment_output.embedding
         best_matching = alignment_output.matching
-        if profile
-            profiling = alignment_output.profile
+      
+        if postProcessing.k == -1
+            k = size(alignment_output.embedding[1],2)*2
+        else
+            k = postProcessing.k
         end
+
+   
+        if profile
+            (pp_matching,Klau_rt,L_sparsity,fvals),full_rt = @timed netalignmr(A,B,best_U, best_V, best_matching,k,postProcessing)
+            setup_rt = full_rt - Klau_rt
+        else
+            pp_matching, Klau_rt, L_sparsity,fvals = netalignmr(A, B,best_U, best_V, best_matching,k,postProcessing)
+        end
+
+
+        pp_matched_motif,_= TAME_score(A_ten,B_ten,pp_matching)
+        pp_matched_edges = Int(edges_matched(A,B,pp_matching)[1]/2) # code doesn't handle symmetries
+        original_matched_edges = edges_matched(A,B,alignment_output.matching)[1]/2
+     
+        if profile
+            return KlauPostProcessReturn(original_matched_edges,pp_matching,pp_matched_edges,pp_matched_motif, setup_rt, Klau_rt, L_sparsity,Tuple(fvals))
+        else
+            return KlauPostProcessReturn(original_matched_edges,pp_matching,pp_matched_edges,pp_matched_motif, nothing, nothing, L_sparsity,Tuple(fvals))
+        end
+
+    else
+        throw(ArgumentError("Post processing is only supported for ΛTAME_M got $(method)"))
+    end
+end
+
+struct SuccessiveKlauPostProcessReturn <: returnType
+    original_edges_matched::Int
+    matching::Union{Dict{Int,Int},Vector{Int}}
+    klau_edges_matched::Int
+    klau_tris_matched::Int
+    profiling::Union{Nothing,Dict{String,Union{Vector{Float64},Vector{Int64},Vector{Vector{Float64}}}}}
+end
+
+function post_process_alignment(A::SparseMatrixCSC{T,Int},B::SparseMatrixCSC{S,Int},
+                           alignment_output::returnType,postProcessing::SuccessiveKlauAlgo;
+                           profile=false,kwargs...) where {T,S}
+
+    method = typeof(kwargs[:method])
+    A_ten = graph_to_ThirdOrderTensor(A)
+    B_ten = graph_to_ThirdOrderTensor(B)
+    method = typeof(alignment_output)
+    if method <: ΛTAME_Return || method <: LowRankTAME_Return || method <: ΛTAME_MultiMotif_Return
+
+        best_U, best_V = alignment_output.embedding
+        best_matching = alignment_output.matching
       
         k = Int(ceil(.02*min(size(A,1),size(B,1))))
         k = 5
@@ -159,23 +207,23 @@ function post_process_alignment(A::SparseMatrixCSC{T,Int},B::SparseMatrixCSC{S,I
         end
 
         if profile
-            (pp_matching,Klau_rt,L_sparsity),full_rt = @timed netalignmr(A,B,best_U, best_V, best_matching,k,postProcessing)
-            setup_rt = full_rt - Klau_rt
+            pp_matching, profiling_results = successive_netalignmr_profiled(A, B, best_U, best_V, best_matching, postProcessing)
         else
-            pp_matching, Klau_rt, L_sparsity = netalignmr(A, B,best_U, best_V, best_matching,k,postProcessing)
+            pp_matching = successive_netalignmr(A, B, best_U, best_V, best_matching, postProcessing)
         end
 
         pp_matched_motif,_= TAME_score(A_ten,B_ten,pp_matching)
         pp_matched_edges = Int(edges_matched(A,B,pp_matching)[1]/2) # code doesn't handle symmetries
-        original_matched_edges = edges_matched(A,B,alignment_output.matching)[1]/2
+        original_matched_edges = Int(edges_matched(A,B,alignment_output.matching)[1]/2)
      
         if profile
-            return KlauPostProcessReturn(original_matched_edges,pp_matching,pp_matched_edges,pp_matched_motif, setup_rt, Klau_rt, L_sparsity)
+            return SuccessiveKlauPostProcessReturn(original_matched_edges,pp_matching,pp_matched_edges,pp_matched_motif, profiling_results)
         else
-            return KlauPostProcessReturn(original_matched_edges,pp_matching,pp_matched_edges,pp_matched_motif, nothing, nothing, L_sparsity)
+            return SuccessiveKlauPostProcessReturn(original_matched_edges,pp_matching,pp_matched_edges,pp_matched_motif,nothing)
         end
+
     else
-        throw(ArgumentError("Post processing is only supported for ΛTAME_M got $(method)"))
+        throw(ArgumentError("Post processing is only supported for ΛTAME_M, ΛTAME_MultiMotif_M, LowRankTAME_M got $(method)"))
     end
 end
 

@@ -1,4 +1,5 @@
 abstract type PostProcessingMethod end
+struct noPostProcessing <: PostProcessingMethod end
 
 @with_kw struct KlauAlgo <: PostProcessingMethod 
     k::Int = -1;
@@ -10,7 +11,25 @@ abstract type PostProcessingMethod end
 	verbose::Bool = false;
 	gamma::Float64 =.4;
 end
-struct noPostProcessing <: PostProcessingMethod end
+
+abstract type SKUpdateRule end
+struct constant_R <: SKUpdateRule end
+struct linear_R <: SKUpdateRule end
+struct fgap_R <: SKUpdateRule end
+struct overlap_R <: SKUpdateRule end
+struct edges_R <: SKUpdateRule end
+
+@with_kw struct SuccessiveKlauAlgo <: PostProcessingMethod 
+    k::Int = -1;
+	iterDelta::Int = 100;
+	verbose::Bool = true;
+    update_rule::SKUpdateRule = overlap_R();
+    maximum_Klau_iters::Int=1000;
+    successive_iter::Int=10;
+    start_maxIter::Int = 100;
+end
+
+
 
 """-----------------------------------------------------------------------------
    Greedily creates a b matching from a rank 1 bipartite matching problem. Only
@@ -240,6 +259,279 @@ function netalignmr(A::SparseMatrixCSC{T1,Int},B::SparseMatrixCSC{T1,Int},L::Spa
 	return matching, t_netalignmr, nnz(L)/(size(A,1)*size(B,1)), status
 
 end
+#=
+function successive_netalignmr(A::SparseMatrixCSC{T,Int},B::SparseMatrixCSC{T,Int},
+                               U::Matrix{T},V::Matrix{T},
+                               matching::Union{Vector{NTuple{2,Int}},Dict{Int,Int}}
+                               ,params::successiveKlauAlgo) where T
+    
+    if typeof(matching) === Vector{NTuple{2,Int}}
+        matching = Dict(matching)
+    end
+
+	(prev_matching,_,sparsity),first_run = @timed netalignmr(A,B,U,V,matching_array_to_dict(matching),size(U,2),params)
+                                    #using size(U,2) as a stand in for rank(U)
+
+    timings = [first_run]
+    sparsities = [sparsity]
+	cur_maxiter = 50
+    maximum_iters=1000
+	prev_match_change = 0
+	for i = 1:10
+		(klau_matching,_,sparsity),t = @timed netalignmr(A,B,U,V,prev_matching,2*15,KlauAlgo(maxiter=cur_maxiter))
+        push!(timings,t)
+        push!(sparsities,sparsity)
+        match_change = length(intersect(Set(klau_matching),Set(prev_matching)))
+
+		println("matchings changed by $(match_change - prev_match_change)")
+		if cur_maxiter < maximum_iters
+			if match_change <= 15
+				cur_maxiter *= 2
+				println("new matching similar to previous one, upping Klau iterations to $cur_maxiter")
+			end
+		end
+
+
+		if klau_matching == match_change
+			println("matching didn't change")
+		end
+		
+		prev_match_change = match_change
+		prev_matching = copy(klau_matching)
+	end
+    return klau_matching, timings, sparsities
+end
+=#
+function successive_netalignmr_profiled(A::SparseMatrixCSC{T,Int},B::SparseMatrixCSC{T,Int},
+                                        U::Matrix{T},V::Matrix{T},
+                                        m0::Union{Vector{NTuple{2,Int}},Dict{Int,Int}},
+                                        params::SuccessiveKlauAlgo) where T
+
+    if typeof(m0) === Vector{NTuple{2,Int}}
+        m0 = Dict(m0)
+    end
+
+    overlap_check = Int(ceil(.05*min(size(A,1),size(B,1))))
+	edge_match = matching -> edges_matched(A,B,matching)[1]/2
+
+	#  --  Build first link matrix  --  #
+    T_U,t_u = @timed BallTree(U')
+	T_V,t_v = @timed BallTree(V')
+    kkn_rt = t_u + t_v
+	
+	L0,t  = @timed knearest_sparsification(T_U,T_V,U,V,m0,size(U,2)) 
+    kkn_rt += t
+
+	#run one call of Klau like normal
+	klau_params = KlauAlgo()
+	(old_matching,_,_,status),rt = @timed netalignmr(A,B,L0,klau_params)
+	
+	matching_stats = Dict([
+		("edges_matched",[edge_match(old_matching)]),
+		("runtime",[rt]),
+		("kkn L runtime",[kkn_rt]),
+		("iters_used",[klau_params.maxiter]),
+		("match_overlap",[-1]),
+		("status",[status])
+	])
+
+	f_gap = matching_stats["status"][end][2] - matching_stats["status"][end][1]
+    if params.verbose
+	    println("iter 0:rt:$(matching_stats["runtime"][end]) -- match_overlap:$(matching_stats["match_overlap"][end]) -- edges_mapped:$(matching_stats["edges_matched"][end]) -- status:$(matching_stats["status"][end]) -- f_gap:$(f_gap)")
+    end
+    cur_maxiter = params.start_maxIter
+	
+	prev_check_val = 0
+	nextTimeBreak=false
+	
+	best_edgeMatch = -1
+	best_matching = Dict{Int,Int}()
+	for i = 1:params.successive_iter
+
+		L,t = @timed knearest_sparsification(T_U,T_V,U,V,old_matching,size(U,2)) 
+		push!(matching_stats["kkn L runtime"],t)
+		(klau_matching,_,_,status),rt = @timed netalignmr(A,B,L,KlauAlgo(maxiter=cur_maxiter))
+		
+		push!(matching_stats["runtime"],rt)
+		push!(matching_stats["match_overlap"],length(intersect(Set(klau_matching),Set(old_matching))))
+		push!(matching_stats["edges_matched"],edge_match(klau_matching))
+		push!(matching_stats["iters_used"],cur_maxiter)
+		push!(matching_stats["status"],status)
+
+		fgap = matching_stats["status"][end][2] - matching_stats["status"][end][1]
+        if params.verbose
+    		println("iter $i: rt:$(matching_stats["runtime"][end]) -- match_overlap:$(matching_stats["match_overlap"][end]) -- edges_mapped:$(matching_stats["edges_matched"][end]) -- status:$(matching_stats["status"][end]) -- f_gap:$(fgap)")
+        end
+
+		if cur_maxiter < params.maximum_Klau_iters
+
+			if params.update_rule === fgap_R()
+				should_miter_increase = fgap > prev_check_val
+			elseif params.update_rule === edges_R()
+				should_miter_increase = matching_stats["edges_matched"][end] < prev_check_val
+			elseif params.update_rule === overlap_R()
+				should_miter_increase = ((matching_stats["match_overlap"][end] - prev_check_val) <= overlap_check)
+			elseif params.update_rule === linear_R()
+				should_miter_increase = true
+			elseif params.update_rule == constant_R()
+				should_miter_increase = false
+			end
+
+			if should_miter_increase
+				cur_maxiter += params.iterDelta
+                if params.verbose
+				    println("upping Klau iterations to $cur_maxiter")
+                end
+			end
+		end
+
+		if matching_stats["edges_matched"][end] >= best_edgeMatch
+			best_edgeMatch = matching_stats["edges_matched"][end]
+			best_matching = copy(klau_matching)
+		end
+
+		if length(old_matching) == matching_stats["match_overlap"][end] 
+            if params.verbose
+			    print("matching didn't change")
+            end
+            if nextTimeBreak
+                if params.verbose
+				    println(" twice in a row, breaking...")
+                end
+				break
+			else
+                if params.verbose
+    				print("\n")
+                end
+				nextTimeBreak=true
+			end
+		else
+			nextTimeBreak=false
+		end
+		
+		if params.update_rule === fgap_R()
+			prev_check_val = fgap
+		elseif params.update_rule === edges_R()
+			prev_check_val = matching_stats["edges_matched"][end]
+		elseif params.update_rule === overlap_R()
+			prev_check_val = matching_stats["match_overlap"][end]
+		end
+
+		old_matching = copy(klau_matching)
+	end
+	return best_matching, matching_stats
+
+end
+
+function successive_netalignmr(A::SparseMatrixCSC{T,Int},B::SparseMatrixCSC{T,Int},
+                               U::Matrix{T},V::Matrix{T},
+                               m0::Union{Vector{NTuple{2,Int}},Dict{Int,Int}},
+                               params::SuccessiveKlauAlgo) where T
+
+    if typeof(m0) === Vector{NTuple{2,Int}}
+        m0 = Dict(m0)
+    end
+
+    overlap_check = Int(ceil(.05*min(size(A,1),size(B,1))))
+
+	edge_match = matching -> edges_matched(A,B,matching)[1]/2
+
+	#  --  Build first link matrix  --  #
+    
+	T_U = BallTree(U')
+	T_V = BallTree(V')
+	L0 = knearest_sparsification(T_U,T_V,U,V,m0,size(U,2)) 
+
+	#run one call of Klau like normal
+	klau_params = KlauAlgo()
+	old_matching,_,_,status = netalignmr(A,B,L0,klau_params)
+	
+	f_gap = status[2] - status[1]
+    if params.verbose
+	    println("iter 0: match_overlap:n/a -- edges_mapped:$(edge_match(old_matching)) -- status:$status -- f_gap:$f_gap")
+    end
+    cur_maxiter = params.start_maxIter
+	
+	prev_check_val = 0
+	nextTimeBreak=false
+	
+	best_edgeMatch = -1
+	best_matching = Dict{Int,Int}()
+	for i = 1:params.successive_iter
+
+		L = knearest_sparsification(T_U,T_V,U,V,old_matching,size(U,2)) 
+
+		klau_matching,_,_,status = netalignmr(A,B,L,KlauAlgo(maxiter=cur_maxiter))
+        overlap = length(intersect(Set(klau_matching),Set(old_matching)))
+        fgap = status[2] - status[1]
+        edges_matched = edge_match(klau_matching)
+		
+        if params.verbose
+            println("iter $i: match_overlap:$overlap -- edges_mapped:$edges_matched -- status:$status -- f_gap:$f_gap")
+        end
+
+		if cur_maxiter < params.maximum_Klau_iters
+
+			if params.update_rule === fgap_R()
+                fgap = status[2] - status[1]
+				should_miter_increase = fgap > prev_check_val
+			elseif params.update_rule === edges_R()
+				should_miter_increase = edges_matched  < prev_check_val
+			elseif params.update_rule === overlap_R()
+                overlap = length(intersect(Set(klau_matching),Set(old_matching)))
+				should_miter_increase = ((overlap - prev_check_val) <= overlap_check)
+			elseif params.update_rule === linear_R()
+				should_miter_increase = true
+			elseif params.update_rule == constant_R()
+				should_miter_increase = false
+			end
+
+			if should_miter_increase
+				cur_maxiter += params.iterDelta
+                if params.verbose
+				    println("upping Klau iterations to $cur_maxiter")
+                end
+			end
+		end
+
+		if edges_matched >= best_edgeMatch
+			best_edgeMatch = edges_matched
+			best_matching = copy(klau_matching)
+		end
+
+		if length(old_matching) == overlap 
+            if params.verbose
+			    print("matching didn't change")
+            end
+            if nextTimeBreak
+                if params.verbose
+				    println(" twice in a row, breaking...")
+                end
+				break
+			else
+                if params.verbose
+    				print("\n")
+                end
+				nextTimeBreak=true
+			end
+		else
+			nextTimeBreak=false
+		end
+
+		#TODO: check to see if this fails
+		if params.update_rule === fgap_R()
+			prev_check_val = fgap
+		elseif params.update_rule === edges_R()
+			prev_check_val = edges_matched
+		elseif params.update_rule === overlap_R()
+			prev_check_val = overlap
+		end
+
+		old_matching = copy(klau_matching)
+	end
+	return best_matching
+
+end
 
 function knearest_sparsification(U::Matrix{T},V::Matrix{T},matching::Union{Vector{NTuple{2,Int}},Dict{Int,Int}},k) where T
 
@@ -276,6 +568,40 @@ function knearest_sparsification(U::Matrix{T},V::Matrix{T},matching::Union{Vecto
 	return sparse_L
 end
 
+function knearest_sparsification(T_U::BT,T_V::BT,U::Matrix{T},V::Matrix{T},matching::Union{Vector{NTuple{2,Int}},Dict{Int,Int}},k) where {BT <: BallTree,T}
+
+    @assert maximum([i for (i,j) in matching]) <= size(U,1)
+    @assert maximum([j for (i,j) in matching]) <= size(V,1)
+
+	m = size(U,1)
+	n = size(V,1)
+
+	candidates = Set()
+
+	for (i,j) in matching 
+		U_idxs = knn(T_U, U[i,:], minimum((k,m)))[1]
+		V_idxs = knn(T_V, V[j,:], minimum((k,n)))[1]
+
+		for ip in U_idxs 
+			push!(candidates,(ip,j))
+		end
+
+		for jp in V_idxs 
+			push!(candidates,(i,jp))
+		end
+	end
+
+    li = []
+    lj = []
+    lv = []
+
+	for (i,j) in candidates	
+        push!(li,i)
+        push!(lj,j)
+		push!(lv,U[i,:]'*V[j,:])
+	end
+	return sparse(li,lj,lv,m,n)
+end
 
 function findEmbeddingLookalikes(X::Matrix{S},idx,k) where S
 	n = size(X,1)

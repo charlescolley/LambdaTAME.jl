@@ -229,6 +229,15 @@ function distributed_pairwise_smat_alignment(files::Array{String,1},dirpath::Str
             end
             push!(data_to_save,postProcessingOutput.L_sparsity)
             push!(data_to_save,postProcessingOutput.f_status)
+        elseif typeof(kwargs[:postProcessing]) <: SuccessiveKlauAlgo
+
+            push!(data_to_save,postProcessingOutput.original_edges_matched)
+            push!(data_to_save,postProcessingOutput.klau_edges_matched)
+            push!(data_to_save,postProcessingOutput.klau_tris_matched)
+            push!(data_to_save,postProcessingOutput.matching)
+            if profile
+                push!(data_to_save,postProcessingOutput.profiling)
+            end
         end
 
         push!(exp_results,data_to_save)
@@ -428,6 +437,16 @@ function distributed_random_trials(trial_count::Int,noise_model::ErdosRenyiNoise
             end
             push!(data_to_save,postProcessingOutput.L_sparsity)
             push!(data_to_save,postProcessingOutput.f_status)
+        elseif typeof(kwargs[:postProcessing]) <: SuccessiveKlauAlgo
+
+            push!(data_to_save,postProcessingOutput.original_edges_matched)
+            push!(data_to_save,postProcessingOutput.klau_edges_matched)
+            push!(data_to_save,postProcessingOutput.klau_tris_matched)
+            push!(data_to_save,sum([1 for (i,j) in postProcessingOutput.matching if get(perm,j,-1) == i])/n)
+            push!(data_to_save,postProcessingOutput.matching)
+            if profile
+                push!(data_to_save,postProcessingOutput.profiling)
+            end
         end
 
         push!(results,data_to_save)
@@ -567,6 +586,16 @@ function distributed_random_trials(trial_count::Int,noise_model::DuplicationNois
             end
             push!(data_to_save,postProcessingOutput.L_sparsity)
             push!(data_to_save,postProcessingOutput.f_status)
+        elseif typeof(kwargs[:postProcessing]) <: SuccessiveKlauAlgo
+
+            push!(data_to_save,postProcessingOutput.original_edges_matched)
+            push!(data_to_save,postProcessingOutput.klau_edges_matched)
+            push!(data_to_save,postProcessingOutput.klau_tris_matched)
+            push!(data_to_save,sum([1 for (i,j) in postProcessingOutput.matching if get(perm,j,-1) == i])/n)
+            push!(data_to_save,postProcessingOutput.matching)
+            if profile
+                push!(data_to_save,postProcessingOutput.profiling)
+            end
         end
 
         push!(results,data_to_save)               

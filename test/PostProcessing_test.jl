@@ -1,6 +1,6 @@
 using SparseArrays, Distributions
-import LambdaTAME: spatial_network, duplication_perturbation_noise_model, netalignmr
-@testset "Klau's Algo" begin
+import LambdaTAME: spatial_network, duplication_perturbation_noise_model, netalignmr, knearest_sparsification, successive_netalignmr, successive_netalignmr_profiled
+@testset "Post Processing" begin
 
     m=10
     steps=10
@@ -18,11 +18,28 @@ import LambdaTAME: spatial_network, duplication_perturbation_noise_model, netali
     matching = collect(enumerate(1:size(A,1)))
     L = sparse(1:min(n,m),1:min(n,m),1,n,m)
     L += sprand(size(L)...,.1) # add some fill in
-    @suppress_out begin     
-        @inferred netalignmr(B,A,V,U,5,KlauAlgo())
-        @inferred netalignmr(B,A,V,U,matching,5,KlauAlgo())
-        @inferred netalignmr(B,A,V,U,KlauAlgo())
-        @inferred netalignmr(B,A,V,U,matching,KlauAlgo())
-        @inferred netalignmr(B,A,L,KlauAlgo())
+
+    @testset "Klau Algorithm" begin 
+        @suppress_out begin     
+            @inferred netalignmr(B,A,V,U,5,KlauAlgo())
+            @inferred netalignmr(B,A,V,U,matching,5,KlauAlgo())
+            @inferred netalignmr(B,A,V,U,KlauAlgo())
+            @inferred netalignmr(B,A,V,U,matching,KlauAlgo())
+            @inferred netalignmr(B,A,L,KlauAlgo())
+        end
     end
+
+
+    @testset "Successive Klau Algorithm" begin
+        @suppress_out begin 
+            @inferred successive_netalignmr(B,A,V,U,matching,SuccessiveKlauAlgo(k=5,iterDelta=10,successive_iter=3))
+            @inferred successive_netalignmr_profiled(B,A,V,U,matching,SuccessiveKlauAlgo(k=5,iterDelta=10,successive_iter=3))
+        end
+    end
+
+    @testset "k nearest sparsification" begin
+        @inferred knearest_sparsification(V,U,matching,5)
+    end
+
 end
+
