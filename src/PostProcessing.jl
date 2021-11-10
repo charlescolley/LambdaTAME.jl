@@ -257,6 +257,7 @@ function netalignmr(A::SparseMatrixCSC{T1,Int},B::SparseMatrixCSC{T1,Int},L::Spa
     matching = Dict(zip(matching...))
 
 	return matching, t_netalignmr, nnz(L)/(size(A,1)*size(B,1)), status
+<<<<<<< HEAD
 
 end
 #=
@@ -530,6 +531,8 @@ function successive_netalignmr(A::SparseMatrixCSC{T,Int},B::SparseMatrixCSC{T,In
 		old_matching = copy(klau_matching)
 	end
 	return best_matching
+=======
+>>>>>>> 726ef929fb8db472e9b7d74714503910777264ba
 
 end
 
