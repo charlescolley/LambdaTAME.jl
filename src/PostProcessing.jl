@@ -90,6 +90,12 @@ function b_matching(u::Array{Float64,1}, v::Array{Float64,1}, b::Int)
 
     return Matchings[1:(match_idx-1)]
 
+
+
+@with_kw struct TabuSearch <: PostProcessingMethod 
+    k::Int = -1;
+	iterations::Int=10;
+	verbose::Bool = true;
 end
 
 
@@ -627,3 +633,668 @@ function findEmbeddingLookalikes(X::Matrix{S},idx,k) where S
 	end
 	return ei,ej
 end
+
+#
+#  Tabu Search Methods
+#
+
+
+#=
+@with_kw struct TabuSearch <: PostProcessingMethod 
+    k::Int = -1;
+	iterations::Int=10;
+	verbose::Bool = true;
+end
+=#
+
+#function tabu_search_profiled(A, B, A_ten, B_ten, U, V ,matching,max_iters,k,method="new")
+function tabu_search_profiled(A::SparseMatrixCSC{T,Int},B::SparseMatrixCSC{T,Int},
+							  A_ten, B_ten, U::Matrix{T},V::Matrix{T},
+							  m0::Dict{Int,Int},  params::TabuSearch) where T
+	#k = 15
+	
+	profile_results = Dict{String,Union{Vector{Tuple{Int64,Int64}},Vector{Float64}}}([
+		("runtimes",Vector{Float64}(undef,0)),
+		("motif match",Vector{Tuple{Int64,Int64}}(undef,0)),
+		("edge match",Vector{Tuple{Int64,Int64}}(undef,0)),
+		("seq runtimes",Vector{Float64}(undef,0)),
+		("top runtimes",Vector{Float64}(undef,0))
+	])
+
+
+	if params.k == -1
+		k = 2*size(U,2)
+	else
+		k = params.k
+	end
+
+	if params.verbose
+		edges_matched = LambdaTAME.edges_matched(A,B,m0)
+		motifs_matched = LambdaTAME.TAME_score(A_ten,B_ten,m0)
+		println("iter 0: edges_matched -- $edges_matched  motifs matched -- $motifs_matched")
+	end
+	#cur_matching = LT_res.matching
+	cur_matching = copy(m0)
+	for i =1:params.iterations
+
+		(new_matching, seq_scoring_runtimes, top_scoring_runtimes),rt = @timed tabu_search_profiled(A,B,A_ten,B_ten,U,V,cur_matching,k)
+		
+		push!(profile_results["runtimes"],rt)
+		push!(profile_results["seq runtimes"],seq_scoring_runtimes)
+		push!(profile_results["top runtimes"],top_scoring_runtimes)
+
+		push!(profile_results["motif match"],LambdaTAME.TAME_score(A_ten,B_ten,new_matching)) 
+									#TAME_score wants most motifs in left arg
+		push!(profile_results["edge match"],LambdaTAME.edges_matched(A,B,new_matching))
+		cur_matching = new_matching
+
+		if params.verbose
+			println("iter $i: edges_matched -- $(profile_results["edge match"][end])  motifs matched -- $(profile_results["motif match"][end])  rt -- $rt seq_rt:$seq_scoring_runtimes, top_rt:$top_scoring_runtimes")
+		end
+
+	end
+
+
+	return cur_matching, profile_results
+end
+
+function tabu_search(A::SparseMatrixCSC{T,Int},B::SparseMatrixCSC{T,Int},
+							  A_ten, B_ten, U::Matrix{T},V::Matrix{T},
+							  m0::Dict{Int,Int},  params::TabuSearch) where T
+
+	if params.k == -1
+		k = 2*size(U,2)
+	else
+		k = params.k
+	end
+
+	if params.verbose
+		edges_matched = LambdaTAME.edges_matched(A,B,m0)
+		motifs_matched = LambdaTAME.TAME_score(A_ten,B_ten,m0)
+		println("iter 0: edges_matched -- $edges_matched  motifs matched -- $motifs_matched")
+	end
+	#cur_matching = LT_res.matching
+	cur_matching = copy(m0)
+	for i =1:params.iterations
+
+		new_matching = tabu_search(A,B,A_ten,B_ten,U,V,cur_matching,k)
+		
+		cur_matching = new_matching
+
+		if params.verbose
+			edges_matched = LambdaTAME.edges_matched(A,B,new_matching)
+			motifs_matched = LambdaTAME.TAME_score(A_ten,B_ten,new_matching)
+			println("iter $i: edges_matched -- $edges_matched  motifs matched -- $motifs_matched")
+		end
+
+	end
+
+
+	return cur_matching
+end
+
+function create_edge_idx_map(A_ten::SymTensorUnweighted{Clique})
+
+	node_to_edge_indices = Vector{Vector{Int}}(undef,A_ten.n)
+	for i in 1:A_ten.n
+		node_to_edge_indices[i] = Vector{Int}(undef,0)
+	end
+
+	for edge_idx in 1:size(A_ten.indices,2)
+		for i in 1:size(A_ten.indices,1)
+			ip = A_ten.indices[i,edge_idx]
+			push!(node_to_edge_indices[ip],edge_idx)
+		end
+	end
+	return node_to_edge_indices
+end
+
+function create_edge_idx_map(A_ten::ThirdOrderSymTensor)
+
+	node_to_edge_indices = Vector{Vector{Int}}(undef,A_ten.n)
+	for i in 1:A_ten.n
+		node_to_edge_indices[i] = Vector{Int}(undef,0)
+	end
+
+	for edge_idx in 1:size(A_ten.indices,1)
+		for i in 1:size(A_ten.indices,2)
+			ip = A_ten.indices[edge_idx,i]
+			push!(node_to_edge_indices[ip],edge_idx)
+		end
+	end
+	return node_to_edge_indices
+end
+
+
+
+
+function tabu_search_profiled(A,B,A_ten,B_ten,U,V,matching,k)#,match_method="top_sim")
+
+
+	m = size(A,1)
+	n = size(B,1)
+
+	T_U = BallTree(U')
+	T_V = BallTree(V')
+
+	B_motifs = Set{Vector{Int}}()
+
+	if typeof(B_ten) === ThirdOrderSymTensor
+		for idx = 1:size(B_ten.indices,1)
+			push!(B_motifs,B_ten.indices[idx,:])
+		end
+	else
+		for idx = 1:size(B_ten.indices,2)
+			push!(B_motifs,B_ten.indices[:,idx])
+		end
+	end
+
+	A_node_edge_indices = create_edge_idx_map(A_ten)
+
+	seq_scoring_runtimes = 0.0
+	top_scoring_runtimes = 0.0
+
+	matched_matches = [m for m in matching if (m[1] != -1) && (m[2] != -1)]
+
+	#println(length(unmatched_matches))
+
+	cur_seq_sim = seq_similarity(U,V,matched_matches)
+	#cur_top_sim, cur_motif_matched = top_similarity(B_motifs, A_ten,V,U,matching)
+	if typeof(B_ten) === ThirdOrderSymTensor
+		mode = 1
+	else
+		mode = 2
+	end
+	cur_motif_matched = TAME_score(B_motifs,A_ten,Set(size(A_ten.indices,mode):-1:1), matching)
+		#TODO: check if this can be done with a TAME_score function
+
+	#is it faster to precomputer X = UV'?
+	unprocessed_matches = sort(matched_matches,by=match->dot(U[match[1],:],V[match[2],:]),rev=true)
+
+	prev_matching = copy(matching)
+	updatable_matching = copy(matching)
+	updatable_inverted_matching = Dict([(j,i) for (i,j) in updatable_matching])
+
+	for (i,_) in unprocessed_matches
+
+		ip = get(updatable_matching,i,-1)
+
+		if ip != -1 
+			pref_B = Set(vcat(knn(T_V, V[ip,:], minimum((k,n)))[1],findnz(B[:,ip])[1]))
+		else
+			pref_B = Set()
+		end
+		
+		if i != -1
+			pref_A = Set(vcat(knn(T_U, U[i,:], minimum((k,m)))[1],findnz(A[:,i])[1])) 
+																		# assuming symmetric matrices
+			start_A_edge_mask = Set(A_node_edge_indices[i])
+		else
+			pref_A = Set()
+			start_A_edge_mask = Set()
+		end
+	
+
+		#
+		#  check the local neighborhood of ip in B
+		# 
+
+		for jp in pref_B 
+
+	
+			j = get(updatable_inverted_matching,jp,-1)
+
+			# -- swap edges + compute change in  sequence scores -- #
+			updatable_matching[i] = jp
+			if j != -1 #if jp was matched 
+
+				updatable_matching[j] = ip
+				A_edge_mask = union(start_A_edge_mask,Set(A_node_edge_indices[j]))
+				
+				# -- Compute sequence sim change -- # 
+
+				if ip != -1
+					start_seq_sim,t = @timed dot(U[i,:],V[ip,:]) + dot(U[j,:],V[jp,:])
+					seq_scoring_runtimes += t
+					end_seq_sim,t =@timed dot(U[i,:],V[jp,:]) + dot(U[j,:],V[ip,:])
+					seq_scoring_runtimes += t
+				else
+					start_seq_sim,t = @timed dot(U[j,:],V[jp,:])
+					seq_scoring_runtimes += t
+					end_seq_sim,t =@timed dot(U[i,:],V[jp,:])
+					seq_scoring_runtimes += t
+				end
+				# doing it in loop means vectors 
+				# are more likely to be cached
+
+			else
+
+				if ip == -1 
+					continue # both are unmatched, 
+							 # no neighborhood to check in B
+				end
+
+				A_edge_mask = start_A_edge_mask
+
+				start_seq_sim,t = @timed dot(U[i,:],V[ip,:])
+				seq_scoring_runtimes += t
+				end_seq_sim,t = @timed dot(U[i,:],V[jp,:])
+				seq_scoring_runtimes += t
+
+			end
+
+			seq_sim_change = end_seq_sim - start_seq_sim
+
+			#
+			# Compute Change in topogical similarity
+			#
+
+
+			#(start_top_sim,start_motif_count),t = @timed top_similarity(B_motifs,A_ten,A_edge_mask,V,U,prev_matching)
+			(start_motif_count),t = @timed TAME_score(B_motifs,A_ten,A_edge_mask,prev_matching)
+			
+			top_scoring_runtimes += t
+
+			#(end_top_sim,end_motif_count),t = @timed top_similarity(B_motifs,A_ten,A_edge_mask,V,U,updatable_matching)
+			(end_motif_count),t = @timed TAME_score(B_motifs,A_ten,A_edge_mask,updatable_matching)
+			
+			top_scoring_runtimes += t
+			motif_match_change = (end_motif_count - start_motif_count)
+			#top_sim_change = (end_top_sim - start_top_sim)		
+			
+			#=
+			if match_method == "top_sim"
+				check_val = top_sim_change
+			elseif match_method == "motif_count"
+				check_val = motif_match_change
+			end
+			=#
+			check_val = motif_match_change
+
+			if check_val > 0 ||  (check_val == 0.0 && seq_sim_change > 0)
+
+				cur_motif_matched += motif_match_change
+				#cur_top_sim += top_sim_change
+				cur_seq_sim += seq_sim_change
+
+	
+				# update the previous matching to be the same as cur
+				prev_matching[i] = jp 
+				prev_matching[j] = ip 
+
+				# update invertible matchings				
+				updatable_inverted_matching[ip] = j
+				updatable_inverted_matching[jp] = i
+							#we can do this at the end bc 
+							#we only use them at the start
+				
+				ip = jp #update for future loops
+
+			else  #change the matching back 
+
+				updatable_matching[i] = ip
+				updatable_matching[j] = jp
+
+			end
+
+
+
+		end
+
+		#
+		#  check the local neighborhood of i in A
+		# 
+
+
+		for j in pref_A 
+	
+			jp = get(updatable_matching,j,-1)
+
+			updatable_matching[j] = ip
+			updatable_matching[i] = jp
+
+			if jp != -1
+
+				A_edge_mask = union(start_A_edge_mask,Set(A_node_edge_indices[j]))
+				
+				if ip != -1
+					start_seq_sim,t = @timed dot(U[i,:],V[ip,:]) + dot(U[j,:],V[jp,:])
+					seq_scoring_runtimes += t
+					end_seq_sim,t =@timed dot(U[i,:],V[jp,:]) + dot(U[j,:],V[ip,:])
+					seq_scoring_runtimes += t
+				else
+					start_seq_sim,t = @timed dot(U[j,:],V[jp,:])
+					seq_scoring_runtimes += t
+					end_seq_sim,t =@timed dot(U[i,:],V[jp,:])
+					seq_scoring_runtimes += t
+				end
+
+			else
+				if ip == -1 
+					continue # both are unmatched, 
+							 # no neighborhood to check in B
+				end
+
+				A_edge_mask = start_A_edge_mask
+
+				start_seq_sim,t = @timed dot(U[i,:],V[ip,:])
+				seq_scoring_runtimes += t
+				end_seq_sim,t = @timed dot(U[j,:],V[ip,:])
+				seq_scoring_runtimes += t
+			end
+			seq_sim_change = end_seq_sim - start_seq_sim
+
+			#
+			# Compute Change in topogical similarity
+			#
+		
+			#(start_top_sim,start_motif_count),t = @timed top_similarity(B_motifs,A_ten,A_edge_mask,V,U,prev_matching)
+			(start_motif_count),t = @timed TAME_score(B_motifs,A_ten,A_edge_mask,prev_matching)
+			top_scoring_runtimes += t
+
+			#(end_top_sim, end_motif_count),t =   @timed top_similarity(B_motifs,A_ten,A_edge_mask,V,U,updatable_matching)
+			(end_motif_count),t =   @timed TAME_score(B_motifs,A_ten,A_edge_mask,updatable_matching)
+			
+			top_scoring_runtimes += t
+			motif_match_change = (end_motif_count - start_motif_count)
+			#top_sim_change = (end_top_sim - start_top_sim)
+			
+			#=
+			if match_method == "top_sim"
+				check_val = top_sim_change
+			elseif match_method == "motif_count"
+				check_val = motif_match_change 
+			end
+			=#
+
+			check_val = motif_match_change 
+
+			if check_val > 0 ||  (check_val == 0.0 && seq_sim_change > 0)
+
+				cur_motif_matched += motif_match_change
+				#cur_top_sim += top_sim_change
+				cur_seq_sim += seq_sim_change
+
+				# update the previous matching to be the same as cur
+				prev_matching[i] = jp 
+				prev_matching[j] = ip 
+
+				updatable_inverted_matching[ip] = j
+				updatable_inverted_matching[jp] = i
+
+				ip = jp 
+				#matching = copy(updatable_matching)
+
+			else #change back the matching
+				updatable_matching[i] = ip
+				updatable_matching[j] = jp
+			end
+		end
+
+	end
+
+	return updatable_matching, seq_scoring_runtimes, top_scoring_runtimes
+
+end
+
+
+function tabu_search(A,B,A_ten,B_ten,U,V,matching,k)#,match_method="top_sim")
+
+
+	m = size(A,1)
+	n = size(B,1)
+
+	T_U = BallTree(U')
+	T_V = BallTree(V')
+
+	B_motifs = Set{Vector{Int}}()
+
+	if typeof(B_ten) == ThirdOrderSymTensor
+		for idx = 1:size(B_ten.indices,1)
+			push!(B_motifs,B_ten.indices[idx,:])
+		end
+	else
+		for idx = 1:size(B_ten.indices,2)
+			push!(B_motifs,B_ten.indices[:,idx])
+		end
+	end
+
+	A_node_edge_indices = create_edge_idx_map(A_ten)
+
+	#seq_scoring_runtimes = 0.0
+	#top_scoring_runtimes = 0.0
+
+	matched_matches = [m for m in matching if (m[1] != -1) && (m[2] != -1)]
+
+	#println(length(unmatched_matches))
+
+	cur_seq_sim = seq_similarity(U,V,matched_matches)
+
+	if typeof(B_ten) === ThirdOrderSymTensor
+		mode = 1
+	else
+		mode = 2
+	end
+	cur_motif_matched = TAME_score(B_motifs, A_ten, Set(size(A_ten.indices,mode):-1:1),matching)
+													#matching doesn't reorient using this orientation
+	
+	#is it faster to precomputer X = UV'?
+	unprocessed_matches = sort(matched_matches,by=match->dot(U[match[1],:],V[match[2],:]),rev=true)
+
+	prev_matching = copy(matching)
+	updatable_matching = copy(matching)
+	updatable_inverted_matching = Dict([(j,i) for (i,j) in updatable_matching])
+
+	for (i,_) in unprocessed_matches
+
+		ip = get(updatable_matching,i,-1)
+
+		if ip != -1 
+			pref_B = Set(vcat(knn(T_V, V[ip,:], minimum((k,n)))[1],findnz(B[ip,:])[1]))
+			#append!(pref_B,sample(sample(1:B.n,10)))
+		else
+			pref_B = Set()
+		end
+		
+		if i != -1
+			pref_A = Set(vcat(knn(T_U, U[i,:], minimum((k,m)))[1],findnz(A[:,i])[1])) 
+																		# assuming symmetric matrices
+			#append!(pref_A,sample(sample(1:A.n,10)))
+			start_A_edge_mask = Set(A_node_edge_indices[i])
+		else
+			pref_A = Set()
+			start_A_edge_mask = Set()
+		end
+	
+
+		#
+		#  check the local neighborhood of ip in B
+		# 
+
+		for jp in pref_B 
+
+	
+			j = get(updatable_inverted_matching,jp,-1)
+
+			# -- swap edges + compute change in  sequence scores -- #
+			updatable_matching[i] = jp
+			if j != -1 #if jp was matched 
+
+				updatable_matching[j] = ip
+				A_edge_mask = union(start_A_edge_mask,Set(A_node_edge_indices[j]))
+				
+				# -- Compute sequence sim change -- # 
+				if ip != -1
+					start_seq_sim = dot(U[i,:],V[ip,:]) + dot(U[j,:],V[jp,:])
+					end_seq_sim = dot(U[j,:],V[ip,:]) + dot(U[i,:],V[jp,:])
+				else
+					start_seq_sim = dot(U[j,:],V[jp,:])
+					end_seq_sim = dot(U[i,:],V[jp,:])
+				end
+				
+							# doing it in loop means vectors 
+							# are more likely to be cached
+
+			else
+
+				if ip == -1 
+					continue # both are unmatched, 
+							 # no neighborhood to check in B
+				end
+				A_edge_mask = start_A_edge_mask
+
+				start_seq_sim = dot(U[i,:],V[ip,:])
+				end_seq_sim = dot(U[i,:],V[jp,:])
+
+			end
+
+			seq_sim_change = end_seq_sim - start_seq_sim
+
+			#
+			# Compute Change in topogical similarity
+			#
+
+
+			start_motif_count = TAME_score(B_motifs,A_ten,A_edge_mask,prev_matching)
+			end_motif_count = TAME_score(B_motifs,A_ten,A_edge_mask,updatable_matching)
+		
+			motif_match_change = (end_motif_count - start_motif_count)
+			
+			#=
+			if match_method == "top_sim"
+				check_val = top_sim_change
+			elseif match_method == "motif_count"
+				check_val = motif_match_change
+			end
+			=#
+			check_val = motif_match_change
+
+			if check_val > 0 ||  (check_val == 0.0 && seq_sim_change > 0)
+
+				cur_motif_matched += motif_match_change
+				#cur_top_sim += top_sim_change
+				cur_seq_sim += seq_sim_change
+
+	
+				# update the previous matching to be the same as cur
+				prev_matching[i] = jp 
+				prev_matching[j] = ip 
+
+				# update invertible matchings				
+				updatable_inverted_matching[ip] = j
+				updatable_inverted_matching[jp] = i
+							#we can do this at the end bc 
+							#we only use them at the start
+				
+				ip = jp #update for future loops
+
+			else  #change the matching back 
+
+				updatable_matching[i] = ip
+				updatable_matching[j] = jp
+
+			end
+
+
+
+		end
+
+		#
+		#  check the local neighborhood of i in A
+		# 
+
+
+		for j in pref_A 
+	
+			jp = get(updatable_matching,j,-1)
+
+			updatable_matching[j] = ip
+			updatable_matching[i] = jp
+
+			if jp != -1
+
+				A_edge_mask = union(start_A_edge_mask,Set(A_node_edge_indices[j]))
+				
+				#start_seq_sim,t = @timed dot(U[i,:],V[ip,:]) + dot(U[j,:],V[jp,:])
+				#seq_scoring_runtimes += t
+
+				if ip != -1
+					start_seq_sim = dot(U[i,:],V[ip,:]) + dot(U[j,:],V[jp,:])
+					end_seq_sim = dot(U[j,:],V[ip,:]) + dot(U[i,:],V[jp,:])
+				else
+					start_seq_sim = dot(U[j,:],V[jp,:])
+					end_seq_sim = dot(U[i,:],V[jp,:])
+				end
+
+				#seq_scoring_runtimes += t
+
+			else
+
+				if ip == -1 
+					continue # both are unmatched, 
+							 # no neighborhood to check in B
+				end
+				A_edge_mask = start_A_edge_mask
+
+				start_seq_sim = dot(U[i,:],V[ip,:])
+				end_seq_sim = dot(U[j,:],V[ip,:])
+
+			end
+			seq_sim_change = end_seq_sim - start_seq_sim
+
+			#
+			# Compute Change in topogical similarity
+			#
+		
+			#=
+			(start_top_sim,start_motif_count),t = @timed top_similarity(B_motifs,A_ten,A_edge_mask,V,U,prev_matching)
+			top_scoring_runtimes += t
+
+			(end_top_sim, end_motif_count),t =   @timed top_similarity(B_motifs,A_ten,A_edge_mask,V,U,updatable_matching)
+			top_scoring_runtimes += t
+			=#
+
+			start_motif_count = TAME_score(B_motifs,A_ten,A_edge_mask,prev_matching)
+			end_motif_count = TAME_score(B_motifs,A_ten,A_edge_mask,updatable_matching)
+		
+			motif_match_change = (end_motif_count - start_motif_count)
+			#top_sim_change = (end_top_sim - start_top_sim)
+			
+			#=
+			if match_method == "top_sim"
+				check_val = top_sim_change
+			elseif match_method == "motif_count"
+				check_val = motif_match_change 
+			end
+			=#
+
+			check_val = motif_match_change 
+
+			if check_val > 0 ||  (check_val == 0.0 && seq_sim_change > 0)
+
+				cur_motif_matched += motif_match_change
+				#cur_top_sim += top_sim_change
+				cur_seq_sim += seq_sim_change
+
+				# update the previous matching to be the same as cur
+				prev_matching[i] = jp 
+				prev_matching[j] = ip 
+
+				updatable_inverted_matching[ip] = j
+				updatable_inverted_matching[jp] = i
+
+				ip = jp 
+				#matching = copy(updatable_matching)
+
+			else #change back the matching
+				updatable_matching[i] = ip
+				updatable_matching[j] = jp
+			end
+		end
+
+	end
+
+	return updatable_matching
+
+end
+

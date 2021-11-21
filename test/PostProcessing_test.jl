@@ -1,5 +1,6 @@
 using SparseArrays, Distributions
 import LambdaTAME: spatial_network, duplication_perturbation_noise_model, netalignmr, knearest_sparsification, successive_netalignmr, successive_netalignmr_profiled
+import LambdaTAME: tabu_search_profiled, tabu_search
 @testset "Post Processing" begin
 
     m=10
@@ -39,6 +40,21 @@ import LambdaTAME: spatial_network, duplication_perturbation_noise_model, netali
 
     @testset "k nearest sparsification" begin
         @inferred knearest_sparsification(V,U,matching,5)
+    end
+
+    @testset "Tabu Search" begin 
+
+        A_ten = DistributedTensorConstruction.tensor_from_graph(A,3,Clique())
+        B_ten = DistributedTensorConstruction.tensor_from_graph(B,3,Clique())
+
+        k = 15
+        @inferred tabu_search(A,B,A_ten,B_ten,U,V,Dict(matching),d)
+        @inferred tabu_search_profiled(A,B,A_ten,B_ten,U,V,Dict(matching),d)
+        @inferred tabu_search(A,B,A_ten,B_ten,U,V,Dict(matching),TabuSearch())
+        @inferred tabu_search_profiled(A,B,A_ten,B_ten,U,V,Dict(matching),TabuSearch())
+
+        
+
     end
 
 end

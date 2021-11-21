@@ -27,9 +27,6 @@ function self_alignment(ssten_files::Array{String,1};method="LambdaTAME")
 
 end
 
-
-
-
 function apply_Metis_permutation!(A::SparseMatrixCSC,k::Int=100)
 
 	n = size(A,1)
@@ -238,6 +235,17 @@ function distributed_pairwise_smat_alignment(files::Array{String,1},dirpath::Str
             if profile
                 push!(data_to_save,postProcessingOutput.profiling)
             end
+        elseif typeof(kwargs[:postProcessing]) <: TabuSearch
+
+            push!(data_to_save,postProcessingOutput.original_edges_matched)
+            push!(data_to_save,postProcessingOutput.tabu_edges_matched)
+            push!(data_to_save,postProcessingOutput.tabu_tris_matched)
+            push!(data_to_save,postProcessingOutput.matching)
+            if profile
+                push!(data_to_save,postProcessingOutput.profiling)
+                push!(data_to_save,postProcessingOutput.full_runtime)
+            end
+
         end
 
         push!(exp_results,data_to_save)
@@ -305,16 +313,9 @@ Output
     with the profile flag on, is appended at the end.     
 ------------------------------------------------------------------------------"""
 function distributed_random_trials(trial_count::Int,noise_model::ErdosRenyiNoise,seed_exps::Bool=false
-                                   ;method::AlignmentMethod=ΛTAME(),graph::RandomGraphType=ErdosRenyi(),
+                                   ;method::AlignmentMethod=ΛTAME_M(),graph::RandomGraphType=ErdosRenyi(),
                                    n_sizes = [100, 500, 1000, 2000,5000],p_remove = [.01,.05],
                                    profile=false,kwargs...)
-
-    #only handling even batch sizes
-    #@assert trial_count % process_count == 0
-
-    #ensure file is loaded on all processes
-    #@everywhere include_string(Main,$(read("LambdaTAME.jl",String)),"LambdaTAME.jl")
-
    
 	if seed_exps
 		Random.seed!(0)
@@ -447,7 +448,20 @@ function distributed_random_trials(trial_count::Int,noise_model::ErdosRenyiNoise
             if profile
                 push!(data_to_save,postProcessingOutput.profiling)
             end
+        elseif typeof(kwargs[:postProcessing]) <: TabuSearch
+
+            push!(data_to_save,postProcessingOutput.original_edges_matched)
+            push!(data_to_save,postProcessingOutput.tabu_edges_matched)
+            push!(data_to_save,postProcessingOutput.tabu_tris_matched)
+            push!(data_to_save,sum([1 for (i,j) in postProcessingOutput.matching if get(perm,j,-1) == i])/n)
+            push!(data_to_save,postProcessingOutput.matching)
+            if profile
+                push!(data_to_save,postProcessingOutput.profiling)
+                push!(data_to_save,postProcessingOutput.full_runtime)
+            end
+
         end
+        
 
         push!(results,data_to_save)
                 
@@ -458,15 +472,16 @@ function distributed_random_trials(trial_count::Int,noise_model::ErdosRenyiNoise
 end
 
 function distributed_random_trials(trial_count::Int,noise_model::DuplicationNoise,seed_exps::Bool=false;
-        method::AlignmentMethod=ΛTAME(),graph::RandomGraphType=ErdosRenyi(),n_sizes = [100, 500, 1000, 2000,5000],
-        edge_inclusion_p = [.5,1.0],
-        step_percentage=[.1],profile=false,kwargs...)
-
+                                    method::AlignmentMethod=ΛTAME_M(),graph::RandomGraphType=ErdosRenyi(),
+                                    n_sizes = [100, 500, 1000, 2000,5000],
+                                    edge_inclusion_p = [.5,1.0],
+                                    step_percentage=[.1],profile=false,kwargs...)
 
     if seed_exps
         Random.seed!(0)
         seeds = rand(UInt64, length(step_percentage),length(edge_inclusion_p),length(n_sizes), trial_count)
     end
+
 
     seed = nothing
     results = []
@@ -544,10 +559,11 @@ function distributed_random_trials(trial_count::Int,noise_model::DuplicationNois
             max_tris = minimum((A_tris,B_tris))
         end
 
-        accuracy = sum([1 for (i,j) in alignmentOutput.matching if get(perm,j,-1) == i])/n
-        
+        accuracy = sum([1 for (i,j) in alignmentOutput.matching if get(perm,i,-1) == j])/n
+                                                                    #align_matrices is called with B,A since B > A
+         
         dup_tolerant_perm = replaced_duplications_with_originals(perm,n, dup_vertices)
-        dup_vertex_tolerant_accuracy = sum([1 for (i,j) in alignmentOutput.matching if get(dup_tolerant_perm,j,-1) == i])/n
+        dup_vertex_tolerant_accuracy = sum([1 for (j,i) in alignmentOutput.matching if get(dup_tolerant_perm,i,-1) == j])/n
 
 
         data_to_save = Array{Any,1}(undef,0)
@@ -578,7 +594,7 @@ function distributed_random_trials(trial_count::Int,noise_model::DuplicationNois
             push!(data_to_save,postProcessingOutput.original_edges_matched)
             push!(data_to_save,postProcessingOutput.klau_edges_matched)
             push!(data_to_save,postProcessingOutput.klau_tris_matched)
-            push!(data_to_save,sum([1 for (i,j) in postProcessingOutput.matching if get(perm,j,-1) == i])/n)
+            push!(data_to_save,sum([1 for (j,i) in postProcessingOutput.matching if get(perm,j,-1) == i])/n)
             push!(data_to_save,postProcessingOutput.matching)
             if profile
                 push!(data_to_save,postProcessingOutput.setup_rt)
@@ -591,10 +607,21 @@ function distributed_random_trials(trial_count::Int,noise_model::DuplicationNois
             push!(data_to_save,postProcessingOutput.original_edges_matched)
             push!(data_to_save,postProcessingOutput.klau_edges_matched)
             push!(data_to_save,postProcessingOutput.klau_tris_matched)
-            push!(data_to_save,sum([1 for (i,j) in postProcessingOutput.matching if get(perm,j,-1) == i])/n)
+            push!(data_to_save,sum([1 for (j,i) in postProcessingOutput.matching if get(perm,j,-1) == i])/n)
             push!(data_to_save,postProcessingOutput.matching)
             if profile
                 push!(data_to_save,postProcessingOutput.profiling)
+            end
+        elseif typeof(kwargs[:postProcessing]) <: TabuSearch
+
+            push!(data_to_save,postProcessingOutput.original_edges_matched)
+            push!(data_to_save,postProcessingOutput.tabu_edges_matched)
+            push!(data_to_save,postProcessingOutput.tabu_tris_matched)
+            push!(data_to_save,sum([1 for (j,i) in postProcessingOutput.matching if get(perm,j,-1) == i])/n)
+            push!(data_to_save,postProcessingOutput.matching)
+            if profile
+                push!(data_to_save,postProcessingOutput.profiling)
+                push!(data_to_save,postProcessingOutput.full_runtime)
             end
         end
 
@@ -959,7 +986,81 @@ function random_graph_exp(n::Int, perturbation_p::Float64,graph::RandomGraphType
 
 
     if typeof(noise_model) === DuplicationNoise
-        perm,dup_vertices,align_matrices(A,B;kwargs...)
+        #  B is always larger than A 
+        perm,dup_vertices,align_matrices(B,A;kwargs...)
+    else
+        return d_A,d_B,perm,align_matrices(A,B;kwargs...)
+    end
+end
+
+function random_graph_exp(file::String,perturbation_p::Float64;noise_model::NoiseModelFlag,seed=nothing,step_percent=.1,
+                          use_metis=false,degreedist=nothing,p_edges=nothing,kwargs...)
+
+
+    if seed !== nothing
+        println("seeding with $seed")
+		Random.seed!(seed)
+	end
+
+    A = MatrixNetworks.readSMAT(file)
+    n = size(A,1)
+    
+    #=
+	elseif typeof(graph) === RandomGeometric
+
+		if degreedist === nothing
+            k = 10
+            if p_edges === nothing 
+                p = k/n
+            end
+			A = random_geometric_graph(n,k)
+		else
+			d = 2
+			A = spatial_network(n, d;degreedist= degreedist)
+			p = nnz(A)/n^2
+		end
+
+    elseif typeof(graph) == HyperKron
+        if p_edges === nothing 
+            p = .4#2*log(n)/n
+        end
+		r = .4
+
+		A = sparse(gpa_graph(n,p,r,5))
+
+	else
+		error("invalid graph type: $graph_type\n must be either 'ER','RandomGeometric' or 'HyperKron'")
+	end
+    =#
+
+    if typeof(noise_model) === ErdosRenyiNoise
+        p = nnz(A)
+        p_add = (p*perturbation_p)/(1-p)
+        #B = ER_noise_model(A,0.0,perturbation_p)#,p_add)
+        B = ER_noise_model(A,perturbation_p,p_add)
+    elseif  typeof(noise_model) === DuplicationNoise
+        steps = Int(ceil(step_percent*size(A,1))) #adds in 10% new nodes by default
+        B,dup_vertices = duplication_perturbation_noise_model(A,steps, perturbation_p)
+    end
+
+
+    perm = shuffle(1:size(B,1))
+    B = B[perm,perm]
+
+    #return A, B , perm
+
+	if use_metis
+		apply_Metis_permutation!(A,100)
+		apply_Metis_permutation!(B,100)
+	end
+
+    d_A = A*ones(size(A,1))
+    d_B = B*ones(size(B,1))
+
+
+    if typeof(noise_model) === DuplicationNoise
+        #  B is always larger than A 
+        return perm,dup_vertices,align_matrices(B,A;kwargs...),A,B
     else
         return d_A,d_B,perm,align_matrices(A,B;kwargs...)
     end

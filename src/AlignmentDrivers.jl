@@ -55,7 +55,7 @@ function align_matrices(A::SparseMatrixCSC{T,Int},B::SparseMatrixCSC{S,Int};
         if typeof(postProcessing) === noPostProcessing
             return size(A_ten.indices,1), size(B_ten.indices,1), alignment_output
         else    
-            return size(A_ten.indices,1), size(B_ten.indices,1), alignment_output, post_process_alignment(A,B,alignment_output,postProcessing;profile,kwargs...)
+            return size(A_ten.indices,1), size(B_ten.indices,1), alignment_output, post_process_alignment(A,B,A_ten,B_ten,alignment_output,postProcessing;profile,kwargs...)
         end
     elseif method === TAME_M
         if profile
@@ -85,7 +85,7 @@ function align_matrices(A::SparseMatrixCSC{T,Int},B::SparseMatrixCSC{S,Int};
         if typeof(postProcessing) === noPostProcessing
             return A_motifDistribution, B_motifDistribution, alignment_output
         else
-            return A_motifDistribution, B_motifDistribution, alignment_output, post_process_alignment(A,B,alignment_output,postProcessing;profile,subkwargs...)
+            return A_motifDistribution, B_motifDistribution, alignment_output, post_process_alignment(A,B,A_tensors,B_tensors,alignment_output,postProcessing;profile,subkwargs...)
         end
     elseif method === EigenAlign_M || method === Degree_M || method === Random_M || method === LowRankEigenAlign_M || method === LowRankEigenAlignOnlyEdges_M
         
@@ -134,12 +134,10 @@ struct KlauPostProcessReturn <: returnType
 end
 
 function post_process_alignment(A::SparseMatrixCSC{T,Int},B::SparseMatrixCSC{S,Int},
-                           alignment_output::returnType,postProcessing::KlauAlgo;
-                           profile=false,kwargs...) where {T,S}
+                                A_ten,B_ten,
+                                alignment_output::returnType,postProcessing::KlauAlgo;
+                                profile=false,kwargs...) where {T,S}
 
-    method = typeof(kwargs[:method])
-    A_ten = graph_to_ThirdOrderTensor(A)
-    B_ten = graph_to_ThirdOrderTensor(B)
     method = typeof(alignment_output)
     if method <: ΛTAME_Return || method <: LowRankTAME_Return || method <: ΛTAME_MultiMotif_Return
 
@@ -185,12 +183,10 @@ struct SuccessiveKlauPostProcessReturn <: returnType
 end
 
 function post_process_alignment(A::SparseMatrixCSC{T,Int},B::SparseMatrixCSC{S,Int},
-                           alignment_output::returnType,postProcessing::SuccessiveKlauAlgo;
-                           profile=false,kwargs...) where {T,S}
+                            A_ten,B_ten,
+                            alignment_output::returnType,postProcessing::SuccessiveKlauAlgo;
+                            profile=false,kwargs...) where {T,S}
 
-    method = typeof(kwargs[:method])
-    A_ten = graph_to_ThirdOrderTensor(A)
-    B_ten = graph_to_ThirdOrderTensor(B)
     method = typeof(alignment_output)
     if method <: ΛTAME_Return || method <: LowRankTAME_Return || method <: ΛTAME_MultiMotif_Return
 
@@ -227,6 +223,63 @@ function post_process_alignment(A::SparseMatrixCSC{T,Int},B::SparseMatrixCSC{S,I
     end
 end
 
+struct TabuSearchPostProcessReturn <: returnType
+    original_edges_matched::Int
+    matching::Union{Dict{Int,Int},Vector{Int}}
+    tabu_edges_matched::Int
+    tabu_tris_matched::Int
+    full_runtime::Union{Nothing,Float64}
+    profiling::Union{Nothing,Dict{String,Union{Vector{Tuple{Int64,Int64}},Vector{Float64}}}}
+end
+
+function post_process_alignment(A::SparseMatrixCSC{T,Int},B::SparseMatrixCSC{S,Int},
+                                A_ten, B_ten, alignment_output::returnType,
+                                postProcessing::TabuSearch; profile=false,
+                                kwargs...) where {T,S}
+
+
+    if typeof(A_ten) <: Vector 
+        A_ten =  A_ten[end]
+    end
+
+    if typeof(B_ten) <: Vector 
+        B_ten =  B_ten[end]
+    end
+
+    method = typeof(kwargs[:method])
+   # A_ten = graph_to_ThirdOrderTensor(A)
+    # B_ten = graph_to_ThirdOrderTensor(B)
+    method = typeof(alignment_output)
+
+    if method <: ΛTAME_Return || method <: LowRankTAME_Return || method <: ΛTAME_MultiMotif_Return
+
+        best_U, best_V = alignment_output.embedding
+        best_matching = alignment_output.matching
+
+
+        if profile
+            #(pp_matching,Klau_rt,L_sparsity,fvals),full_rt = @timed netalignmr(A,B,best_U, best_V, best_matching,k,postProcessing)
+            #setup_rt = full_rt - Klau_rt
+            (pp_matching,profile_results),full_rt = @timed tabu_search_profiled(A,B,A_ten, B_ten, best_U, best_V, best_matching,  postProcessing)
+        else
+            pp_matching = tabu_search(A, B, A_ten, B_ten, best_U, best_V, best_matching,  postProcessing)
+        end
+
+
+        pp_matched_motif,_= TAME_score(A_ten,B_ten,pp_matching)
+        pp_matched_edges = Int(edges_matched(A,B,pp_matching)[1]/2) # code doesn't handle symmetries
+        original_matched_edges = edges_matched(A,B,alignment_output.matching)[1]/2
+     
+        if profile
+            return TabuSearchPostProcessReturn(original_matched_edges,pp_matching,pp_matched_edges,pp_matched_motif,full_rt, profile_results)
+        else
+            return TabuSearchPostProcessReturn(original_matched_edges,pp_matching,pp_matched_edges,pp_matched_motif,nothing, nothing,)
+        end
+
+    else
+        throw(ArgumentError("Post processing is only supported for ΛTAME_M got $(method)"))
+    end
+end
 
 """-----------------------------------------------------------------------------
   This function takes in a sparse matrix and builds a ThirdOrderSymTensor from 

@@ -305,8 +305,6 @@ function search_Krylov_space(A::Array{SymTensorUnweighted{S},1},B::Array{SymTens
             
             matching_score = 0 
             for i= 1:length(A)
-                #println(binomial(size(A[i],1),2))
-                #println(matched_motifs[i])
                 matching_score += binomial(size(A[i].indices,1),2)*matched_motifs[i]
             end
 
@@ -423,7 +421,9 @@ end
 """
 
 function TAME_score(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor,Match_mapping::Dict{Int,Int})
-    
+    # matching oriented A -> B 
+
+
     match_len = length(Match_mapping)
 
     Triangle_check = Dict{Array{Int,1},Int}()
@@ -480,8 +480,8 @@ end
 #TODO: may remove the array mapping routines 
 function TAME_score(A::SymTensorUnweighted{S},B::SymTensorUnweighted{S}, mapping::Array{Int,1}) where {S <: Motif}
 
+    # matching oriented B -> A
     @assert size(A.indices,1) == size(B.indices,1)
-
 
     if size(B.indices,2) > size(A.indices,2)
         inverted_mapping = -ones(Int, maximum(mapping))
@@ -519,6 +519,7 @@ function TAME_score(A::SymTensorUnweighted{S},B::SymTensorUnweighted{S}, mapping
 end
 
 function TAME_score(A::Array{SymTensorUnweighted{S},1},B::Array{SymTensorUnweighted{S},1},A_to_B_mapping::Dict{Int,Int}) where {S <: Motif}
+    # matching oriented A -> B 
 
     @assert length(A) == length(B)
     for i = 1:length(A) #ensure orders are the same at each i
@@ -563,11 +564,13 @@ function TAME_score(A::Array{SymTensorUnweighted{S},1},B::Array{SymTensorUnweigh
 end
 
 function TAME_score(A::SymTensorUnweighted{Clique},B::SymTensorUnweighted{Clique}, mapping::Dict{Int,Int})
+    # matching oriented A -> B 
 
     @assert size(A.indices,1) == size(B.indices,1)
-    #println("using clique code")
 
+    #=
     if size(B.indices,2) > size(A.indices,2)
+        println("inverting")
         inverted_mapping = Dict{Int,Int}()
 
         for (v,u) in mapping
@@ -579,19 +582,18 @@ function TAME_score(A::SymTensorUnweighted{Clique},B::SymTensorUnweighted{Clique
         #return (-1,"ERROR:mapping needs to be inverted")
         return TAME_score(B, A,inverted_mapping)
     end
+    =#
 
     order =  size(A.indices,1)
-    A_motifs = Set(eachcol(A.indices))
+    B_motifs = Set(eachcol(B.indices))
 
     matched_motifs = 0
     gaped_motifs = 0
 
-    for idx =1:size(B.indices,2)
-        edge = B.indices[:,idx]
-        new_edge = [get(mapping,i,-1) for i in edge]
-        sort!(new_edge)
-
-        if new_edge in A_motifs
+    for idx =1:size(A.indices,2)
+        edge = A.indices[:,idx]
+        new_edge = sort([get(mapping,i,-1) for i in edge])
+        if new_edge in B_motifs
             matched_motifs += 1
         else
             gaped_motifs += 1
@@ -603,7 +605,8 @@ function TAME_score(A::SymTensorUnweighted{Clique},B::SymTensorUnweighted{Clique
 end
 
 function TAME_score(A::SymTensorUnweighted{Cycle},B::SymTensorUnweighted{Cycle}, mapping::Dict{Int,Int})
-
+    # matching oriented B -> A 
+    
     @assert size(A.indices,1) == size(B.indices,1)
 
     if size(B.indices,2) > size(A.indices,2)
@@ -946,4 +949,106 @@ function bipartite_matching_primal_dual(X::Union{Matrix{T},Adjoint{T,Matrix{T}}}
     end
 
     return val, noute, A_to_B, B_to_A
+end
+
+
+#
+# Tabu Search Methods
+# 
+
+function seq_similarity(U,V,matching)
+
+	sim = 0.0
+	for (i,ip) in matching 
+		sim += dot(U[i,:],V[ip,:])
+	end
+	return sim
+end
+
+function TAME_score(A_motifs::Set{Vector{Int}},B::SymTensorUnweighted{Clique},
+						B_edge_mask::Set{Int64},U::Matrix{T},V::Matrix{T}, 
+						mapping::Dict{Int,Int}) where T
+
+	#@assert maximum(keys(mapping)) <= B.n  # mapping oriented from B -> A
+
+    #top_sim = 0
+	motifs_matched = 0 
+
+
+    for idx in B_edge_mask
+		
+        edge = B.indices[:,idx]
+		
+        new_edge = [get(mapping,i,-1) for i in edge]
+        sort!(new_edge)
+
+		#_,jp,kp = edge
+		#_,j,k = new_edge
+
+        if new_edge in A_motifs
+		
+			#top_sim += 1 + max(dot(U[j,:],V[jp,:]) + dot(U[k,:],V[kp,:]),
+		    #					   dot(U[j,:],V[kp,:]) + dot(U[k,:],V[jp,:]))
+			motifs_matched += 1 
+
+        end
+	
+
+    end
+
+    return top_sim, motifs_matched
+
+end
+
+
+function TAME_score(A_motifs::Set{Vector{Int}},B::SymTensorUnweighted{Clique},
+					B_edge_mask::Set{Int64}, mapping::Dict{Int,Int}) where T
+
+
+	motifs_matched = 0 
+
+    for idx in B_edge_mask
+		
+        edge = B.indices[:,idx]
+		
+        new_edge = [get(mapping,i,-1) for i in edge]
+        sort!(new_edge)
+
+        if new_edge in A_motifs
+		
+			motifs_matched += 1 
+
+        end
+
+    end
+    return motifs_matched
+
+end
+
+function TAME_score(A_motifs::Set{Vector{Int}},B::ThirdOrderSymTensor,
+					B_edge_mask::Set{Int64}, mapping::Dict{Int,Int}) where T
+
+
+	motifs_matched = 0 
+
+
+    for idx in B_edge_mask
+		
+        edge = B.indices[idx,:]
+		
+        new_edge = [get(mapping,i,-1) for i in edge]
+        sort!(new_edge)
+
+        if new_edge in A_motifs
+		
+			motifs_matched += 1 
+
+        end
+	
+
+    end
+
+
+    return motifs_matched
+
 end
