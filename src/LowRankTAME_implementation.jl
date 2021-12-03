@@ -100,6 +100,95 @@ function LowRankTAME_param_search_profiled(A::ThirdOrderSymTensor,B::ThirdOrderS
 
 end
 
+function LowRankTAME_param_search(A,B;
+						          iter::Int = 15,tol::Float64=1e-6,
+						          U_0::Array{Float64,2} = ones(A.n,1),
+						          V_0::Array{Float64,2} = ones(B.n,1),
+						          alphas::Array{F,1}=[.5,1.0],
+						          betas::Array{F,1} =[1000.0,100.0,10.0,1.0,0.0,0.1,0.01,0.001],
+						          kwargs...) where {F <: AbstractFloat}
+	A_motifs = size(A.indices,2)
+	B_motifs = size(B.indices,2)
+    max_motif_match = min(A_motifs,B_motifs)
+
+    best_TAME_PP_motifs = -1
+	best_matching = Dict{Int,Int}()
+
+	m = A.n
+	n = B.n
+
+
+	best_TAME_PP_U = ones(m,1)
+	best_TAME_PP_V = ones(n,1)
+
+    for α in alphas
+        for β in betas
+
+			U, V, motifs_matched, matching =
+				LowRankTAME(A,B,U_0,V_0,β,iter,tol,α;kwargs...)
+
+            if  motifs_matched > best_TAME_PP_motifs
+                best_TAME_PP_motifs = motifs_matched
+				best_matching = matching
+				best_TAME_PP_U = copy(U)
+				best_TAME_PP_V = copy(V)
+
+            end
+			println("α:$α -- β:$β -- tri_match:$motifs_matched -- max_tris:$max_motif_match -- best tri match:$best_TAME_PP_motifs")
+        end
+
+    end
+
+	return LowRankTAME_Return(best_TAME_PP_motifs,(A_motifs,B_motifs),best_matching,
+	                          (best_TAME_PP_U, best_TAME_PP_V), nothing)
+
+end
+
+function LowRankTAME_param_search_profiled(A,B;
+											iter::Int = 15,tol::Float64=1e-6,
+											alphas::Array{F,1}=[.5,1.0],
+											betas::Array{F,1} =[100.0,10.0,1.0,0.0],
+											kwargs...) where {F <: AbstractFloat}
+	A_motifs = size(A.indices,2)
+	B_motifs = size(B.indices,2)
+
+	max_motif_match = min(A_motifs,B_motifs)
+
+	best_TAME_PP_motif = -1
+	best_matching = Dict{Int,Int}()
+
+	best_TAME_PP_U = ones(A.n,1)
+	best_TAME_PP_V = ones(B.n,1)
+
+	experiment_profiles = Array{Tuple{String,Dict{String,Union{Array{Float64,1},Array{Array{Float64,1},1}}}},1}(undef,0)
+
+    for α in alphas
+        for β in betas
+
+			U, V, motifs_matched, matching, experiment_profile =
+				LowRankTAME_profiled(A,B,ones(A.n,1),ones(B.n,1), β,iter,tol,α;kwargs...)
+
+			push!(experiment_profiles,("α:$(α)_β:$(β)",experiment_profile))
+
+            if motifs_matched > best_TAME_PP_motif
+				best_TAME_PP_motif = motifs_matched
+				best_matching = matching
+				best_TAME_PP_U = copy(U)
+				best_TAME_PP_V = copy(V)
+
+            end
+			println("α:$α -- β:$β -- motif_match:$best_TAME_PP_motif -- max_motifs $max_motif_match")
+        end
+
+    end
+
+	return LowRankTAME_Return(best_TAME_PP_motif,(A_motifs,B_motifs),best_matching,
+							 (best_TAME_PP_U, best_TAME_PP_V), experiment_profiles)
+
+
+end
+
+
 #=------------------------------------------------------------------------------
              		    Spectral Relaxation Routines
 ------------------------------------------------------------------------------=#
@@ -463,5 +552,229 @@ function LowRankTAME_profiled(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor,
 	end
 
 	return best_U, best_V, best_triangle_count,best_matching, experiment_profile
+end
+
+function LowRankTAME(A::SymTensorUnweighted{M}, B::SymTensorUnweighted{M},
+                          U_0::Array{F,2},V_0::Array{F,2}, β::F, max_iter::Int,tol::F,α::F;
+						  max_rank::Int = minimum((A.n,B.n)),update_user::Int=-1,	
+						  no_matching::Bool=false,low_rank_matching::Bool=false,kwargs...) where {M <: Motif, F <:AbstractFloat}
+
+	@assert size(U_0,2) == size(V_0,2)
+
+	dimension = minimum((A.n,B.n))
+
+	best_matched_motif_count::Int = -1
+	best_matching = Dict{Int,Int}()
+
+	matched_motifs = -1
+	missed_motifs = -1
+
+	U_0 ./= norm(U_0)
+	V_0 ./= norm(V_0)
+
+
+	U_k = copy(U_0)
+	V_k = copy(V_0)
+
+	best_U::Array{F,2} = copy(U_k)
+	best_V::Array{F,2} = copy(U_k)
+
+    lambda = Inf
+
+    for i in 1:max_iter
+
+		A_comps,B_comps = get_kron_contract_comps(A,B,U_k,V_k)
+
+		lambda_k_1 = tr((B_comps'*V_k)*(U_k'*A_comps))
+
+
+		if α != 1.0 && β != 0.0
+			U_temp = hcat(sqrt(α) * A_comps, sqrt(α * β) * U_k, sqrt(1-α) * U_0)
+			V_temp = hcat(sqrt(α) * B_comps, sqrt(α * β) * V_k, sqrt(1-α) * V_0)
+		elseif α != 1.0
+			U_temp = hcat(sqrt(α)*A_comps, sqrt(1-α)*U_0)
+			V_temp = hcat(sqrt(α)*B_comps, sqrt(1-α)*V_0)
+		elseif β != 0.0
+			U_temp = hcat(A_comps, sqrt(β) * U_k)
+			V_temp = hcat(B_comps, sqrt(β) * V_k)
+		else
+			U_temp = A_comps
+			V_temp = B_comps
+		end
+
+		A_Q,A_R  = qr(U_temp)
+		B_Q,B_R = qr(V_temp)
+
+		core = A_R*B_R'
+		C_U,C_S::Array{Float64,1},C_Vt = svd(core)
+
+
+
+		singular_indexes= [i for i in 1:1:minimum((max_rank,length(C_S))) if C_S[i] > C_S[1]*eps(Float64)*dimension]
+
+		U_k_1 = A_Q*C_U[:,singular_indexes]
+		V_k_1 = B_Q*(C_Vt[:,singular_indexes]*diagm(C_S[singular_indexes]))
+
+		normalization_factor = sqrt(tr((V_k_1'*V_k_1)*(U_k_1'*U_k_1)))
+
+		U_k_1 ./= sqrt(normalization_factor)
+		V_k_1 ./= sqrt(normalization_factor)
+
+
+
+		if !no_matching
+			#evaluate the matchings
+			if low_rank_matching
+				matched_motifs, missed_motifs, matching = TAME_score(A,B,U_k_1,V_k_1;kwargs...)
+			else
+				matched_motifs, missed_motifs, matching = TAME_score(A,B,U_k_1*V_k_1';kwargs...)
+			end
+
+			
+			if matched_motifs > best_matched_motif_count
+				best_matching = matching
+				best_matched_motif_count = matched_motifs
+				best_U = copy(U_k_1)
+				best_V = copy(V_k_1)
+			end
+		end
+
+		if update_user != -1 && i % update_user == 0
+			println("λ_$i: $(lambda_k_1) -- rank:$(length(singular_indexes)) -- matched motifs:$(matched_motifs) -- missed motifs:$(missed_motifs)")
+		end
+
+		if abs(lambda_k_1 - lambda) < tol || i >= max_iter
+			return best_U, best_V, best_matched_motif_count,best_matching
+		end
+		#get the low rank factorization for the next one
+		U_k = copy(U_k_1)
+		V_k = copy(V_k_1)
+
+		lambda = lambda_k_1
+	end
+
+	return best_U, best_V, best_matched_motif_count,best_matching
+end
+
+function LowRankTAME_profiled(A::SymTensorUnweighted{M}, B::SymTensorUnweighted{M},
+                          U_0::Array{F,2},V_0::Array{F,2}, β::F, max_iter::Int,tol::F,α::F;
+						  max_rank::Int = minimum((A.n,B.n)),update_user::Int=-1,	
+						  no_matching::Bool=false,low_rank_matching::Bool=false,kwargs...) where {M <:Motif, F <:AbstractFloat}
+
+	@assert size(U_0,2) == size(V_0,2)
+
+	dimension = minimum((A.n,B.n))
+
+	best_matched_motif_count::Int = -1
+	best_matching = Dict{Int,Int}()
+
+	matched_motifs = -1
+	missed_motifs = -1
+
+	U_0 ./= norm(U_0)
+	V_0 ./= norm(V_0)
+
+	experiment_profile = Dict{String,Union{Array{F,1},Array{Array{F,1},1}}}(
+		"ranks"=>Array{Float64,1}(undef,0),
+		"contraction_timings"=>Array{Float64,1}(undef,0),
+		"svd_timings"=>Array{Float64,1}(undef,0),
+		"qr_timings"=>Array{Float64,1}(undef,0),
+		"matched_motifs"=>Array{Float64,1}(undef,0),
+		"sing_vals"=>Array{Array{Float64,1},1}(undef,0),
+		"matching_timings"=>Array{Float64,1}(undef,0),
+		"scoring_timings"=>Array{Float64,1}(undef,0)
+	)
+
+	U_k = copy(U_0)
+	V_k = copy(V_0)
+
+	best_U::Array{F,2} = copy(U_k)
+	best_V::Array{F,2} = copy(U_k)
+
+    lambda = Inf
+
+    for i in 1:max_iter
+
+		(A_comps,B_comps),t = @timed get_kron_contract_comps(A,B,U_k,V_k)
+		#A_comps,A_t = @timed contract_all_unique_permutations(A,U_k);
+		#B_comps,B_t = @timed contract_all_unique_permutations(B,V_k);
+
+		#return A_comps,B_comps
+		push!(experiment_profile["contraction_timings"],t)
+		lambda_k_1 = tr((B_comps'*V_k)*(U_k'*A_comps))
+
+
+		if α != 1.0 && β != 0.0
+			U_temp = hcat(sqrt(α) * A_comps, sqrt(α * β) * U_k, sqrt(1-α) * U_0)
+			V_temp = hcat(sqrt(α) * B_comps, sqrt(α * β) * V_k, sqrt(1-α) * V_0)
+		elseif α != 1.0
+			U_temp = hcat(sqrt(α)*A_comps, sqrt(1-α)*U_0)
+			V_temp = hcat(sqrt(α)*B_comps, sqrt(1-α)*V_0)
+		elseif β != 0.0
+			U_temp = hcat(A_comps, sqrt(β) * U_k)
+			V_temp = hcat(B_comps, sqrt(β) * V_k)
+		else
+			U_temp = A_comps
+			V_temp = B_comps
+		end
+
+		(A_Q,A_R),t_A = @timed qr(U_temp)
+		(B_Q,B_R),t_B = @timed qr(V_temp)
+		push!(experiment_profile["qr_timings"],t_A + t_B)
+
+		core = A_R*B_R'
+		(C_U,C_S::Array{Float64,1},C_Vt),t = @timed svd(core)
+		push!(experiment_profile["svd_timings"],t)
+
+
+		singular_indexes= [i for i in 1:1:minimum((max_rank,length(C_S))) if C_S[i] > C_S[1]*eps(Float64)*dimension]
+		push!(experiment_profile["sing_vals"],C_S)
+		push!(experiment_profile["ranks"],float(length(singular_indexes)))
+
+		U_k_1 = A_Q*C_U[:,singular_indexes]
+		V_k_1 = B_Q*(C_Vt[:,singular_indexes]*diagm(C_S[singular_indexes]))
+
+		normalization_factor = sqrt(tr((V_k_1'*V_k_1)*(U_k_1'*U_k_1)))
+
+		U_k_1 ./= sqrt(normalization_factor)
+		V_k_1 ./= sqrt(normalization_factor)
+
+
+
+		if !no_matching
+			#evaluate the matchings
+			if low_rank_matching
+				matched_motifs, missed_motifs, matching, matching_time, scoring_time = TAME_score(A,B,U_k_1,V_k_1;return_timings=returnTimings(),kwargs...)
+			else
+				matched_motifs, missed_motifs, matching, matching_time, scoring_time = TAME_score(A,B,U_k_1*V_k_1';return_timings=returnTimings(),kwargs...)
+			end
+
+			push!(experiment_profile["matched_motifs"],float(matched_motifs))
+			push!(experiment_profile["matching_timings"],float(matching_time))
+			push!(experiment_profile["scoring_timings"], float(scoring_time))
+			
+			if matched_motifs > best_matched_motif_count
+				best_matching = matching
+				best_matched_motif_count = matched_motifs
+				best_U = copy(U_k_1)
+				best_V = copy(V_k_1)
+			end
+		end
+
+		if update_user != -1 && i % update_user == 0
+			println("λ_$i: $(lambda_k_1) -- rank:$(length(singular_indexes)) -- matched motifs:$(matched_motifs) -- missed motifs:$(missed_motifs)")
+		end
+
+		if abs(lambda_k_1 - lambda) < tol || i >= max_iter
+			return best_U, best_V, best_matched_motif_count,best_matching, experiment_profile
+		end
+		#get the low rank factorization for the next one
+		U_k = copy(U_k_1)
+		V_k = copy(V_k_1)
+
+		lambda = lambda_k_1
+	end
+
+	return best_U, best_V, best_matched_motif_count,best_matching, experiment_profile
 end
 

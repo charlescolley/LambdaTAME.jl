@@ -272,6 +272,81 @@ function get_kron_contract_comps(A::Union{ThirdOrderSymTensor,UnweightedThirdOrd
     return A_comps, B_comps
 end
 
+function get_kron_contract_comps(A::Union{SymTensor{M,T},SymTensorUnweighted{M}},
+						B::Union{SymTensor{M,T},SymTensorUnweighted{M}},
+						U::Matrix{T},V::Matrix{T}) where {M <: Motif,T}
+	# adapted from contract_all_unique_permutations routine in DistributedTensorConstruction.jl
+	#=assuming that 
+		A.order == B.order,
+		size(U,2) == size(V,2), 
+		size(U,1) = A.n, and 
+		size(V,1) = B.n
+	=#
+    m,d = size(U)
+    
+    A_contraction_components = Array{T,2}(undef,A.n,binomial(d + A.order-2, A.order-1))
+	B_contraction_components = Array{T,2}(undef,B.n,binomial(d + B.order-2, B.order-1))
+                                                # n choose k w/ replacement
+    get_kron_contract_comps!(A,B,U,V,A_contraction_components,B_contraction_components,0,size(U,2),Array{Int}(undef,0))
+    
+    return A_contraction_components, B_contraction_components
+end
+
+function get_kron_contract_comps!(A::Union{SymTensor{M,T},SymTensorUnweighted{M}},
+						 B::Union{SymTensor{M,T},SymTensorUnweighted{M}},
+						 U::Matrix{T},V::Matrix{T},
+						 A_contraction_components::Matrix{T},
+						 B_contraction_components::Matrix{T},
+						 offset::Int,end_idx::Int,
+						 prefix_indices::Vector{Int},) where {M <: Motif,T}
+
+
+    d = size(U,2)
+    if A.order == 3 
+        indices = Array{Int}(undef,length(prefix_indices)+2)
+        indices[1:end-2] = prefix_indices
+
+        for i = 1:end_idx
+            indices[end-1] = i  
+            sub_A_mat = contract_to_mat(A, U[:,i])
+			sub_B_mat = contract_to_mat(B, V[:,i])
+            #for j = i:size(U,2)
+            for j = 1:i
+                indices[end] = j
+
+                factor = DistributedTensorConstruction.compute_multinomial(indices)
+                #println("edge:$indices  factor:$factor  ")
+
+                idx = offset + i*(i-1)÷2 + j
+            
+                A_contraction_components[:,idx] = factor*(sub_A_mat*U[:,j])
+				B_contraction_components[:,idx] = (sub_B_mat*V[:,j])
+            end
+        end
+    else
+
+        running_offset = copy(offset)
+        for i = 1:end_idx
+            sub_A = single_mode_ttv(A,U[:,i])
+			sub_B = single_mode_ttv(B,V[:,i])
+            prefix = copy(prefix_indices)
+            push!(prefix,i)
+     
+            get_kron_contract_comps!(sub_A,sub_B, U,V, 
+							A_contraction_components,B_contraction_components,
+							running_offset,i,prefix) 
+
+            running_offset += binomial(i + A.order-3, A.order-2)
+        end
+
+    end
+
+end
+
+
+
+
+
 
 function implicit_contraction(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor,x::Array{Float64,1})
 

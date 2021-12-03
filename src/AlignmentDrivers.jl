@@ -2,6 +2,7 @@ abstract type AlignmentMethod end
 struct ΛTAME_M <: AlignmentMethod end
 struct ΛTAME_MultiMotif_M <: AlignmentMethod end
 struct LowRankTAME_M <: AlignmentMethod end
+struct LowRankTAME_MultiMotif_M <: AlignmentMethod end
 struct TAME_M <: AlignmentMethod end
 struct EigenAlign_M <: AlignmentMethod end
 struct LowRankEigenAlign_M <: AlignmentMethod end
@@ -65,7 +66,7 @@ function align_matrices(A::SparseMatrixCSC{T,Int},B::SparseMatrixCSC{S,Int};
         end
         return size(A_ten.indices,1), size(B_ten.indices,1), alignment_output
 
-    elseif method === ΛTAME_MultiMotif_M
+    elseif method === ΛTAME_MultiMotif_M || method == LowRankTAME_MultiMotif_M
 
         A_tensors = tensors_from_graph(A,kwargs[:orders],kwargs[:samples],motif)        
         B_tensors = tensors_from_graph(B,kwargs[:orders],kwargs[:samples],motif)
@@ -361,6 +362,12 @@ function align_tensors_profiled(A::Union{ThirdOrderSymTensor,SymTensorUnweighted
 
 	if typeof(method) == ΛTAME_M || typeof(method) === ΛTAME_MultiMotif_M
 		return ΛTAME_param_search_profiled(A,B;kwargs...)
+
+    elseif typeof(method) == LowRankTAME_MultiMotif_M
+        if length(A) > 1
+            @warn "multi motifs are not actually supported, only one motif at a time currently"
+        end
+        return LowRankTAME_param_search_profiled(A[end],B[end];no_matching,kwargs...)
 	elseif typeof(method) === LowRankTAME_M
 		return LowRankTAME_param_search_profiled(A,B;no_matching,kwargs...)
 	elseif typeof(method) === TAME_M
@@ -404,7 +411,12 @@ function align_tensors(A::Union{ThirdOrderSymTensor,SymTensorUnweighted{S},Vecto
 
 	if typeof(method) === ΛTAME_M || typeof(method) === ΛTAME_MultiMotif_M
 		return ΛTAME_param_search(A,B;kwargs...)
-	elseif typeof(method) === LowRankTAME_M
+    elseif typeof(method) == LowRankTAME_MultiMotif_M
+        if length(A) > 1
+            @warn "multi motifs are not actually supported, only one motif at a time currently"
+        end
+        return LowRankTAME_param_search(A[end],B[end];no_matching,kwargs...)
+	elseif typeof(method) === LowRankTAME_M 
 		return LowRankTAME_param_search(A,B;no_matching,kwargs...)
 	elseif typeof(method) === TAME_M
 		return TAME_param_search(A,B;no_matching,kwargs...)

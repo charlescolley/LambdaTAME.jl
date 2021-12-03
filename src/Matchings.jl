@@ -3,6 +3,19 @@ abstract type MatchingFlag end
 struct returnTimings <: MatchingFlag end
 struct noTimings <: MatchingFlag end
 
+
+#match1 gets priority over match2
+function combine_matchings(match1::Dict{Int,Int},match2::Dict{Int,Int})
+
+    new_matching = copy(match1)
+    for (i,j) in match2
+        if !haskey(new_matching,i)
+            new_matching[i] = j
+        end
+    end
+    return new_matching
+end
+
 function degree_based_matching(A::SparseMatrixCSC{T,Int},B::SparseMatrixCSC{T,Int}) where T
 
 	m = size(A,1)
@@ -338,7 +351,7 @@ end
 
 
 
-function TAME_score(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor,U::Array{Float64,2},V::Array{Float64,2};return_timings::T=noTimings()) where {T <: MatchingFlag}
+function TAME_score(A,B,U::Array{Float64,2},V::Array{Float64,2};return_timings::T=noTimings()) where {T <: MatchingFlag}
 
     if typeof(return_timings) === returnTimings
         (Match_mapping, _), matching_time = @timed low_rank_matching(U,V)
@@ -386,7 +399,7 @@ function TAME_score(A::SymTensorUnweighted{S},B::SymTensorUnweighted{S},X::Array
     if typeof(return_timings) === returnTimings
         (_,_,matching,_) ,matching_time = @timed bipartite_matching_primal_dual(X;kwargs...)
         matching_dict = matching_array_to_dict(matching)
-        (triangle_count, gaped_triangles,matching), scoring_time = @timed TAME_score(A,B,matching_dict)
+        (triangle_count, gaped_triangles), scoring_time = @timed TAME_score(A,B,matching_dict)
         return triangle_count, gaped_triangles, matching_dict, matching_time, scoring_time
     else
         _,_,matching,_ = bipartite_matching_primal_dual(X;kwargs...)
