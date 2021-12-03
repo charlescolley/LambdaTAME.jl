@@ -343,6 +343,71 @@ function get_kron_contract_comps!(A::Union{SymTensor{M,T},SymTensorUnweighted{M}
 
 end
 
+function get_kron_contract_comps_with_accumulation_param(A::Union{SymTensor{M,T},SymTensorUnweighted{M}},
+						B::Union{SymTensor{M,T},SymTensorUnweighted{M}},
+						U::Matrix{T},V::Matrix{T}) where {M <: Motif,T}
+	# adapted from contract_all_unique_permutations routine in DistributedTensorConstruction.jl
+	#=assuming that 
+		A.order == B.order,
+		size(U,2) == size(V,2), 
+		size(U,1) = A.n, and 
+		size(V,1) = B.n
+	=#
+    X = zeros(T,A.n,B.n)
+                                                # n choose k w/ replacement
+    get_kron_contract_comps!(A,B,U,V,X,size(U,2),Array{Int}(undef,0))
+    
+    return X
+end
+
+function get_kron_contract_comps!(A::Union{SymTensor{M,T},SymTensorUnweighted{M}},
+								B::Union{SymTensor{M,T},SymTensorUnweighted{M}},
+								U::Matrix{T},V::Matrix{T},
+								X::Matrix{T},end_idx::Int,
+								prefix_indices::Vector{Int}) where {M <: Motif,T}
+
+
+    d = size(U,2)
+    if A.order == 3 
+        indices = Array{Int}(undef,length(prefix_indices)+2)
+        indices[1:end-2] = prefix_indices
+
+        for i = 1:end_idx
+            indices[end-1] = i  
+            sub_A_mat = contract_to_mat(A, U[:,i])
+			sub_B_mat = contract_to_mat(B, V[:,i])
+            #for j = i:size(U,2)
+            for j = 1:i
+                indices[end] = j
+                factor = DistributedTensorConstruction.compute_multinomial(indices)
+
+				u = factor*sub_A_mat*U[:,j]
+				v = sub_B_mat*V[:,j]
+
+				for col in 1:B.n
+					for row in 1:A.n
+						X[row,col] += u[row]*v[col]
+					end
+				end
+            end
+        end
+    else
+
+        #running_offset = copy(offset)
+        for i = 1:end_idx
+            sub_A = single_mode_ttv(A,U[:,i])
+			sub_B = single_mode_ttv(B,V[:,i])
+            prefix = copy(prefix_indices)
+            push!(prefix,i)
+     
+            get_kron_contract_comps!(sub_A, sub_B, U, V, X, i, prefix) 
+
+        end
+
+    end
+
+end
+
 
 
 

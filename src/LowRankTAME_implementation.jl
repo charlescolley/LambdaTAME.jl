@@ -554,10 +554,11 @@ function LowRankTAME_profiled(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor,
 	return best_U, best_V, best_triangle_count,best_matching, experiment_profile
 end
 
+
 function LowRankTAME(A::SymTensorUnweighted{M}, B::SymTensorUnweighted{M},
                           U_0::Array{F,2},V_0::Array{F,2}, β::F, max_iter::Int,tol::F,α::F;
 						  max_rank::Int = minimum((A.n,B.n)),update_user::Int=-1,	
-						  no_matching::Bool=false,low_rank_matching::Bool=false,kwargs...) where {M <: Motif, F <:AbstractFloat}
+						  no_matching::Bool=false,low_rank_matching::Bool=false,kwargs...) where {M <:Motif, F <:AbstractFloat}
 
 	@assert size(U_0,2) == size(V_0,2)
 
@@ -572,9 +573,13 @@ function LowRankTAME(A::SymTensorUnweighted{M}, B::SymTensorUnweighted{M},
 	U_0 ./= norm(U_0)
 	V_0 ./= norm(V_0)
 
-
 	U_k = copy(U_0)
 	V_k = copy(V_0)
+	X_k = U_0*V_0'
+
+	if α != 1.0
+		X_0_with_alpha = ((1-α)*U_0)*V_0'
+	end
 
 	best_U::Array{F,2} = copy(U_k)
 	best_V::Array{F,2} = copy(U_k)
@@ -583,53 +588,81 @@ function LowRankTAME(A::SymTensorUnweighted{M}, B::SymTensorUnweighted{M},
 
     for i in 1:max_iter
 
-		A_comps,B_comps = get_kron_contract_comps(A,B,U_k,V_k)
+		#use pure low rank version if won't use too much memory	
+		if binomial(size(U_k,2) + A.order-2, A.order-1) <= 10*dimension 
 
-		lambda_k_1 = tr((B_comps'*V_k)*(U_k'*A_comps))
+			(A_comps,B_comps),t = @timed get_kron_contract_comps(A,B,U_k,V_k)
+
+			lambda_k_1 = tr((B_comps'*V_k)*(U_k'*A_comps))
 
 
-		if α != 1.0 && β != 0.0
-			U_temp = hcat(sqrt(α) * A_comps, sqrt(α * β) * U_k, sqrt(1-α) * U_0)
-			V_temp = hcat(sqrt(α) * B_comps, sqrt(α * β) * V_k, sqrt(1-α) * V_0)
-		elseif α != 1.0
-			U_temp = hcat(sqrt(α)*A_comps, sqrt(1-α)*U_0)
-			V_temp = hcat(sqrt(α)*B_comps, sqrt(1-α)*V_0)
-		elseif β != 0.0
-			U_temp = hcat(A_comps, sqrt(β) * U_k)
-			V_temp = hcat(B_comps, sqrt(β) * V_k)
+			if α != 1.0 && β != 0.0
+				U_temp = hcat(sqrt(α) * A_comps, sqrt(α * β) * U_k, sqrt(1-α) * U_0)
+				V_temp = hcat(sqrt(α) * B_comps, sqrt(α * β) * V_k, sqrt(1-α) * V_0)
+			elseif α != 1.0
+				U_temp = hcat(sqrt(α)*A_comps, sqrt(1-α)*U_0)
+				V_temp = hcat(sqrt(α)*B_comps, sqrt(1-α)*V_0)
+			elseif β != 0.0
+				U_temp = hcat(A_comps, sqrt(β) * U_k)
+				V_temp = hcat(B_comps, sqrt(β) * V_k)
+			else
+				U_temp = A_comps
+				V_temp = B_comps
+			end
+
+			A_Q,A_R = qr(U_temp)
+			B_Q,B_R = qr(V_temp)
+
+			core = A_R*B_R'
+
+			C_U,C_S::Array{Float64,1},C_Vt = svd(core)
+
+			singular_indexes= [i for i in 1:1:minimum((max_rank,length(C_S))) if C_S[i] > C_S[1]*eps(Float64)*dimension]
+
+			U_k_1 = A_Q*C_U[:,singular_indexes]
+			V_k_1 = B_Q*(C_Vt[:,singular_indexes]*diagm(C_S[singular_indexes]))
+
+			normalization_factor = sqrt(tr((V_k_1'*V_k_1)*(U_k_1'*U_k_1)))
+
+			U_k_1 ./= sqrt(normalization_factor)
+			V_k_1 ./= sqrt(normalization_factor)
+
+			X_k_1 = U_k_1*V_k_1'
 		else
-			U_temp = A_comps
-			V_temp = B_comps
+
+			#use accumulation parameter version if too much memory will be used
+
+			X_k_1 = get_kron_contract_comps_with_accumulation_param(A,B,U_k,V_k)
+
+			lambda_k_1 = tr((U_k'*X_k_1)*V_k)  
+						# equivilant to <X,UV'> but uses less memory 
+			
+			if β != 0.0
+				X_k_1 .+= β*X_k 
+			end
+
+			if α != 1.0
+				X_k_1 .*= α
+				X_k_1 .+= X_0_with_alpha # has (1-α) inco
+			end
+
+			X_k_1 ./=norm(X_k_1)
+
+			(U, S, V) = svd(X_k_1)
+			singular_indexes= [i for i in 1:length(S) if S[i] > S[1]*eps(Float64)*dimension]
+
+			U_k_1 = U[:,singular_indexes]*diagm(S[singular_indexes])
+			V_k_1 = V[:,singular_indexes]
+
 		end
-
-		A_Q,A_R  = qr(U_temp)
-		B_Q,B_R = qr(V_temp)
-
-		core = A_R*B_R'
-		C_U,C_S::Array{Float64,1},C_Vt = svd(core)
-
-
-
-		singular_indexes= [i for i in 1:1:minimum((max_rank,length(C_S))) if C_S[i] > C_S[1]*eps(Float64)*dimension]
-
-		U_k_1 = A_Q*C_U[:,singular_indexes]
-		V_k_1 = B_Q*(C_Vt[:,singular_indexes]*diagm(C_S[singular_indexes]))
-
-		normalization_factor = sqrt(tr((V_k_1'*V_k_1)*(U_k_1'*U_k_1)))
-
-		U_k_1 ./= sqrt(normalization_factor)
-		V_k_1 ./= sqrt(normalization_factor)
-
-
 
 		if !no_matching
 			#evaluate the matchings
 			if low_rank_matching
-				matched_motifs, missed_motifs, matching = TAME_score(A,B,U_k_1,V_k_1;kwargs...)
+				matched_motifs, missed_motifs, matching  = TAME_score(A,B,U_k_1,V_k_1;kwargs...)
 			else
-				matched_motifs, missed_motifs, matching = TAME_score(A,B,U_k_1*V_k_1';kwargs...)
+				matched_motifs, missed_motifs, matching = TAME_score(A,B,X_k_1;kwargs...)
 			end
-
 			
 			if matched_motifs > best_matched_motif_count
 				best_matching = matching
@@ -649,12 +682,14 @@ function LowRankTAME(A::SymTensorUnweighted{M}, B::SymTensorUnweighted{M},
 		#get the low rank factorization for the next one
 		U_k = copy(U_k_1)
 		V_k = copy(V_k_1)
+		X_k = copy(X_k_1)
 
 		lambda = lambda_k_1
 	end
 
-	return best_U, best_V, best_matched_motif_count,best_matching
+	return best_U, best_V, best_matched_motif_count, best_matching
 end
+
 
 function LowRankTAME_profiled(A::SymTensorUnweighted{M}, B::SymTensorUnweighted{M},
                           U_0::Array{F,2},V_0::Array{F,2}, β::F, max_iter::Int,tol::F,α::F;
@@ -677,8 +712,7 @@ function LowRankTAME_profiled(A::SymTensorUnweighted{M}, B::SymTensorUnweighted{
 	experiment_profile = Dict{String,Union{Array{F,1},Array{Array{F,1},1}}}(
 		"ranks"=>Array{Float64,1}(undef,0),
 		"contraction_timings"=>Array{Float64,1}(undef,0),
-		"svd_timings"=>Array{Float64,1}(undef,0),
-		"qr_timings"=>Array{Float64,1}(undef,0),
+		"low_rank_factoring_timings"=>Array{Float64,1}(undef,0),
 		"matched_motifs"=>Array{Float64,1}(undef,0),
 		"sing_vals"=>Array{Array{Float64,1},1}(undef,0),
 		"matching_timings"=>Array{Float64,1}(undef,0),
@@ -687,6 +721,11 @@ function LowRankTAME_profiled(A::SymTensorUnweighted{M}, B::SymTensorUnweighted{
 
 	U_k = copy(U_0)
 	V_k = copy(V_0)
+	X_k = U_0*V_0'
+
+	if α != 1.0
+		X_0_with_alpha = ((1-α)*U_0)*V_0'
+	end
 
 	best_U::Array{F,2} = copy(U_k)
 	best_V::Array{F,2} = copy(U_k)
@@ -695,58 +734,96 @@ function LowRankTAME_profiled(A::SymTensorUnweighted{M}, B::SymTensorUnweighted{
 
     for i in 1:max_iter
 
-		(A_comps,B_comps),t = @timed get_kron_contract_comps(A,B,U_k,V_k)
-		#A_comps,A_t = @timed contract_all_unique_permutations(A,U_k);
-		#B_comps,B_t = @timed contract_all_unique_permutations(B,V_k);
+		#use pure low rank version if won't use too much memory	
+		if binomial(size(U_k,2) + A.order-2, A.order-1) <= 10*dimension 
 
-		#return A_comps,B_comps
-		push!(experiment_profile["contraction_timings"],t)
-		lambda_k_1 = tr((B_comps'*V_k)*(U_k'*A_comps))
+			(A_comps,B_comps),t = @timed LambdaTAME.get_kron_contract_comps(A,B,U_k,V_k)
+			push!(experiment_profile["contraction_timings"],t)
+
+			lambda_k_1 = tr((B_comps'*V_k)*(U_k'*A_comps))
 
 
-		if α != 1.0 && β != 0.0
-			U_temp = hcat(sqrt(α) * A_comps, sqrt(α * β) * U_k, sqrt(1-α) * U_0)
-			V_temp = hcat(sqrt(α) * B_comps, sqrt(α * β) * V_k, sqrt(1-α) * V_0)
-		elseif α != 1.0
-			U_temp = hcat(sqrt(α)*A_comps, sqrt(1-α)*U_0)
-			V_temp = hcat(sqrt(α)*B_comps, sqrt(1-α)*V_0)
-		elseif β != 0.0
-			U_temp = hcat(A_comps, sqrt(β) * U_k)
-			V_temp = hcat(B_comps, sqrt(β) * V_k)
+			if α != 1.0 && β != 0.0
+				U_temp = hcat(sqrt(α) * A_comps, sqrt(α * β) * U_k, sqrt(1-α) * U_0)
+				V_temp = hcat(sqrt(α) * B_comps, sqrt(α * β) * V_k, sqrt(1-α) * V_0)
+			elseif α != 1.0
+				U_temp = hcat(sqrt(α)*A_comps, sqrt(1-α)*U_0)
+				V_temp = hcat(sqrt(α)*B_comps, sqrt(1-α)*V_0)
+			elseif β != 0.0
+				U_temp = hcat(A_comps, sqrt(β) * U_k)
+				V_temp = hcat(B_comps, sqrt(β) * V_k)
+			else
+				U_temp = A_comps
+				V_temp = B_comps
+			end
+
+			(A_Q,A_R),t_A = @timed qr(U_temp)
+			(B_Q,B_R),t_B = @timed qr(V_temp)
+			low_rank_factor_t = t_A + t_B
+			#push!(experiment_profile["qr_timings"],t_A + t_B)
+
+			core,t = @timed A_R*B_R'
+			low_rank_factor_t += t 
+			(C_U,C_S::Array{Float64,1},C_Vt),t = @timed svd(core)
+			#push!(experiment_profile["svd_timings"],t)
+			low_rank_factor_t += t 
+
+			push!(experiment_profile["low_rank_factoring_timings"],low_rank_factor_t)
+
+
+			singular_indexes= [i for i in 1:1:minimum((max_rank,length(C_S))) if C_S[i] > C_S[1]*eps(Float64)*dimension]
+			push!(experiment_profile["sing_vals"],C_S)
+			push!(experiment_profile["ranks"],float(length(singular_indexes)))
+
+			U_k_1 = A_Q*C_U[:,singular_indexes]
+			V_k_1 = B_Q*(C_Vt[:,singular_indexes]*diagm(C_S[singular_indexes]))
+
+			normalization_factor = sqrt(tr((V_k_1'*V_k_1)*(U_k_1'*U_k_1)))
+
+			U_k_1 ./= sqrt(normalization_factor)
+			V_k_1 ./= sqrt(normalization_factor)
+
+			X_k_1 = U_k_1*V_k_1'
 		else
-			U_temp = A_comps
-			V_temp = B_comps
+
+			#use accumulation parameter version if too much memory will be used
+
+			X_k_1,t = @timed get_kron_contract_comps(A_ten,B_ten,U_k,V_k)
+			push!(experiment_profile["contraction_timings"],t)
+
+			lambda_k_1 = tr((U_k'*X_k_1)*V_k)  
+						# equivilant to <X,UV'> but uses less memory 
+			
+			if β != 0.0
+				X_k_1 .+= β*X_k 
+			end
+
+			if α != 1.0
+				X_k_1 .*= α
+				X_k_1 .+= X_0_with_alpha # has (1-α) incorporated already
+			end
+
+			X_k_1 ./=norm(X_k_1)
+
+			(U, S, V),low_rank_factor_t  = @timed svd(X_k_1)
+			push!(experiment_profile["low_rank_factoring_timings"],low_rank_factor_t)
+
+			singular_indexes= [i for i in 1:length(S) if S[i] > S[1]*eps(Float64)*dimension]
+
+			push!(experiment_profile["sing_vals"],S[singular_indexes])
+			push!(experiment_profile["ranks"],float(length(singular_indexes)))
+		
+			U_k_1 = U[:,singular_indexes]*diagm(S[singular_indexes])
+			V_k_1 = V[:,singular_indexes]
+
 		end
-
-		(A_Q,A_R),t_A = @timed qr(U_temp)
-		(B_Q,B_R),t_B = @timed qr(V_temp)
-		push!(experiment_profile["qr_timings"],t_A + t_B)
-
-		core = A_R*B_R'
-		(C_U,C_S::Array{Float64,1},C_Vt),t = @timed svd(core)
-		push!(experiment_profile["svd_timings"],t)
-
-
-		singular_indexes= [i for i in 1:1:minimum((max_rank,length(C_S))) if C_S[i] > C_S[1]*eps(Float64)*dimension]
-		push!(experiment_profile["sing_vals"],C_S)
-		push!(experiment_profile["ranks"],float(length(singular_indexes)))
-
-		U_k_1 = A_Q*C_U[:,singular_indexes]
-		V_k_1 = B_Q*(C_Vt[:,singular_indexes]*diagm(C_S[singular_indexes]))
-
-		normalization_factor = sqrt(tr((V_k_1'*V_k_1)*(U_k_1'*U_k_1)))
-
-		U_k_1 ./= sqrt(normalization_factor)
-		V_k_1 ./= sqrt(normalization_factor)
-
-
 
 		if !no_matching
 			#evaluate the matchings
 			if low_rank_matching
 				matched_motifs, missed_motifs, matching, matching_time, scoring_time = TAME_score(A,B,U_k_1,V_k_1;return_timings=returnTimings(),kwargs...)
 			else
-				matched_motifs, missed_motifs, matching, matching_time, scoring_time = TAME_score(A,B,U_k_1*V_k_1';return_timings=returnTimings(),kwargs...)
+				matched_motifs, missed_motifs, matching, matching_time, scoring_time = TAME_score(A,B,X_k_1;return_timings=returnTimings(),kwargs...)
 			end
 
 			push!(experiment_profile["matched_motifs"],float(matched_motifs))
@@ -771,6 +848,7 @@ function LowRankTAME_profiled(A::SymTensorUnweighted{M}, B::SymTensorUnweighted{
 		#get the low rank factorization for the next one
 		U_k = copy(U_k_1)
 		V_k = copy(V_k_1)
+		X_k = copy(X_k_1)
 
 		lambda = lambda_k_1
 	end
