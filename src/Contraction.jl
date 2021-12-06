@@ -519,6 +519,42 @@ function impTTVnodesym(nG::Int,nH::Int,x::Vector{Float64},Gti, Hti)
 	return y
 end
 
+function impTTVnodesym(m::Int,n::Int,order::Int,X::Matrix{T},A_Mi,B_Mi) where T
+
+
+    Y = zeros(T,size(X)...)
+
+	factor = factorial(order-1)
+
+	permutation_template = collect(permutations(1:(order-1)))
+
+	@inbounds for a = 1:m
+		for b = 1:n
+			newval = 0.0
+			for sub_edge_A in A_Mi[a]
+				for sub_edge_B in B_Mi[b]
+					
+					#_tame_edge_contract!(sub_edge_A, sub_edge_B,newval)
+					#for (sub_edge_A_p,sub_edge_B_p) in zip(permutations(sub_edge_A),permutations(sub_edge_B))
+					for p in permutation_template
+
+						x_prod = X[sub_edge_A[p[1]],sub_edge_B[1]]
+						for i = 2:(order-1)
+							x_prod *= X[sub_edge_A[p[i]],sub_edge_B[i]]
+						end
+						newval += x_prod 
+
+					end
+				end
+			end
+			Y[a,b] = factor*newval
+		end
+	end
+
+    return Y
+end
+
+
 
 
 """-----------------------------------------------------------------------------

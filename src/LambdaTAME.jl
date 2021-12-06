@@ -23,7 +23,7 @@ using NetworkAlign
 
 import Statistics: mean
 import Arpack: svds
-import Combinatorics: permutations
+import Combinatorics: permutations, combinations
 import StatsBase: sample
 
 #store path to project repo here
@@ -93,7 +93,7 @@ include("AdditionalAlignmentMethods.jl")
 #  --  From Experiments.jl --  #
 
 #all alignment method flag types
-export ΛTAME_M, ΛTAME_MultiMotif_M, LowRankTAME_M, LowRankTAME_MultiMotif_M, TAME_M, EigenAlign_M, LowRankEigenAlign_M, LowRankEigenAlignOnlyEdges_M, Degree_M ,Random_M
+export ΛTAME_M, ΛTAME_MultiMotif_M, LowRankTAME_M, LowRankTAME_MultiMotif_M, TAME_M, TAME_MultiMotif_M, EigenAlign_M, LowRankEigenAlign_M, LowRankEigenAlignOnlyEdges_M, Degree_M ,Random_M
 export ΛTAME_GramMatching, ΛTAME_rankOneMatching
 #random graph flag types
 export ErdosRenyi, RandomGeometric, HyperKron

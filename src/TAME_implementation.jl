@@ -89,6 +89,80 @@ function TAME_param_search_profiled(A::ThirdOrderSymTensor,B::ThirdOrderSymTenso
 
 end
 
+function TAME_param_search(A::SymTensorUnweighted{M},B::SymTensorUnweighted{M};
+                           iter::Int = 15,tol::Float64=1e-6, alphas::Array{F,1}=[.5,1.0],
+						   betas::Array{F,1} =[1000.0,100.0,10.0,1.0,0.0,0.1,0.01,0.001],
+						   kwargs...) where {F <: AbstractFloat,M <:Motif}
+	A_motifs = size(A.indices,2)
+	B_motifs = size(B.indices,2)
+	max_motif_match = min(A_motifs,B_motifs)
+	best_TAME_PP_motif::Int = -1
+	best_matching = Dict{Int,Int}()
+
+	m = A.n
+	n = B.n
+
+	best_TAME_PP_x = Array{Float64,2}(undef,m,n)
+
+
+    for α in alphas
+        for β in betas
+
+			x, motif_count, matching = TAME(A,B,β,iter,tol,α;W = ones(A.n,B.n),kwargs...)
+
+			if motif_count > best_TAME_PP_motif
+				best_matching = matching
+                best_TAME_PP_motif = motif_count
+				best_TAME_PP_x = copy(x)
+            end
+			println("α:$(α) -- β:$β finished -- tri_match:$(motif_count) -- max_tris $(max_motif_match) -- best tri_match:$(best_TAME_PP_motif)")
+        end
+
+    end
+
+
+	return TAME_Return(best_TAME_PP_motif,(A_motifs,B_motifs),best_matching,best_TAME_PP_x,nothing)
+end
+
+function TAME_param_search_profiled(A::SymTensorUnweighted{M},B::SymTensorUnweighted{M};
+                                    iter::Int = 15,tol::Float64=1e-6, alphas::Array{F,1}=[.5,1.0],
+						            betas::Array{F,1} =[1000.0,100.0,10.0,1.0,0.0,0.1,0.01,0.001],
+						            profile::Bool=false,profile_aggregation="all",
+						            kwargs...) where {F <: AbstractFloat, M <: Motif}
+	A_motifs = size(A.indices,2)
+	B_motifs = size(B.indices,2)
+	max_motif_match = min(A_motifs,B_motifs)
+    total_motif = size(A.indices,1) + size(B.indices,1)
+	best_TAME_PP_motif = -1
+	best_matching = Dict{Int,Int}()
+
+	m = A.n
+	n = B.n
+
+	best_TAME_PP_x = Array{Float64,2}(undef,m,n)
+	experiment_profiles = Array{Tuple{String,Dict{String,Union{Array{Float64,1},Array{Array{Float64,1},1}}}},1}(undef,0)
+
+    for α in alphas
+        for β in betas
+
+			x, motif_count, matching, experiment_profile = TAME_profiled(A,B,β,iter,tol,α;W = ones(m,n),kwargs...)
+			push!(experiment_profiles,("α:$(α)_β:$(β)",experiment_profile))
+
+			if motif_count > best_TAME_PP_motif
+				best_matching = matching
+                best_TAME_PP_motif = motif_count
+				best_TAME_PP_x = copy(x)
+            end
+			println("α:$(α) -- β:$β finished -- tri_match:$(best_TAME_PP_motif) -- max_motifs $(max_motif_match)")
+        end
+
+    end
+
+
+	return TAME_Return(best_TAME_PP_motif,(A_motifs,B_motifs),best_matching,best_TAME_PP_x,experiment_profiles)
+
+end
+
 #=------------------------------------------------------------------------------
              		    Spectral Relaxation Routines
 ------------------------------------------------------------------------------=#
@@ -97,6 +171,11 @@ end
 function setup_tame_data(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor)
 	return _index_triangles_nodesym(A.n,A.indices), _index_triangles_nodesym(B.n,B.indices)
 end
+
+function setup_tame_data(A::SymTensorUnweighted{M},B::SymTensorUnweighted{M}) where {M <: Motif}
+	return _index_motifs_nodesym(A.n,A.indices), _index_motifs_nodesym(B.n,B.indices)
+end
+
 
 function _index_triangles_nodesym(n,Tris::Array{Int,2})
 
@@ -108,6 +187,22 @@ function _index_triangles_nodesym(n,Tris::Array{Int,2})
 	end
 	sort!.(Ti)
 	return Ti
+end
+
+function _index_motifs_nodesym(n,Motifs::Array{Int,2})
+
+	free_modes = collect(size(Motifs,1):-1:1)
+	contracted_modes = collect(combinations(1:size(Motifs,1),size(Motifs,1)-1))
+
+	Mi = [Vector{Vector{Int}}(undef, 0) for i in 1:n ]
+	for edge in eachcol(Motifs)
+		for (free_mode,contracted_mode) in zip(free_modes,contracted_modes)
+			push!(Mi[edge[free_mode]], edge[contracted_mode])
+		end
+
+	end
+	sort!.(Mi)
+	return Mi
 end
 
 """------------------------------------------------------------------------------
@@ -142,7 +237,7 @@ end
 	* 'best_x'- (Array{Float,2})
 	  Returns the components to the iteration which matched the most triangles. 
 	  Reshapes the iterate x into a matrix. 
-	* 'best_triangle_count' - (Int)
+	* 'best_motif_count' - (Int)
 	  The maximum number of triangles matched. 
 	* 'best_matching' - (Dict{Int,Int})
 	  The matching computed between the two graphs, maps the vertices of A to the
@@ -157,8 +252,7 @@ function TAME(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor,β::F, max_iter::In
 	A_Ti, B_Ti = setup_tame_data(A,B)
 
 	best_x = Array{Float64,2}(undef,A.n,B.n)
-    best_triangle_count = -1
-	best_index = -1
+    best_motif_count = -1
 	best_matching = Dict{Int,Int}()
 
     x0 = reshape(W,A.n*B.n)
@@ -189,16 +283,16 @@ function TAME(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor,β::F, max_iter::In
 		if !no_matching
 
 			X = reshape(x_k_1,A.n,B.n)
-			triangles, gaped_triangles, matching =  TAME_score(A,B,X;kwargs...)
+			triangles, missed_motifs, matching =  TAME_score(A,B,X;kwargs...)
 
 			if update_user != -1 && i % update_user == 0
-				println("finished iterate $(i):tris:$triangles -- gaped_t:$gaped_triangles")
+				println("finished iterate $(i):tris:$triangles -- gaped_t:$missed_motifs")
 			end
 
-			if triangles > best_triangle_count
+			if triangles > best_motif_count
 				best_matching = matching
 				best_x = copy(x_k_1)
-				best_triangle_count = triangles
+				best_motif_count = triangles
 				best_iterate = i
 			end
 
@@ -210,9 +304,80 @@ function TAME(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor,β::F, max_iter::In
 
 
         if abs(new_lambda - lambda) < tol || i >= max_iter
-  			return reshape(best_x,A.n,B.n), best_triangle_count, best_matching
+  			return reshape(best_x,A.n,B.n), best_motif_count, best_matching
         else
             x_k = copy(x_k_1)
+            lambda = new_lambda
+            i += 1
+        end
+
+    end
+
+
+end
+
+function TAME(A::SymTensorUnweighted{M}, B::SymTensorUnweighted{M}, β::F, max_iter::Int,
+	                   tol::F,α::F;update_user::Int=-1,W::Array{F,2} = ones(A.n,B.n),
+					   no_matching::Bool=false,kwargs...) where {F <:AbstractFloat, M <: Motif}
+
+ 
+	A_Mi, B_Mi = setup_tame_data(A,B)
+
+	best_X = Array{Float64,2}(undef,A.n,B.n)
+    best_motif_count::Int = -1
+	best_matching = Dict{Int,Int}()
+
+    X_k = copy(W)
+	X_k ./=norm(X_k)
+
+	if α != 1.0 
+		X_0_with_alpha = copy(X_k)*(1-α)
+	end
+
+
+    i = 1
+    lambda = Inf
+
+    while true
+
+		X_k_1 = impTTVnodesym(A.n, B.n, size(A.indices,1), X_k, A_Mi, B_Mi)
+
+        new_lambda = dot(X_k_1,X_k)
+
+        if β != 0.0
+            X_k_1 .+= β * X_k
+        end
+
+        if α != 1.0
+            X_k_1 .*=  α
+			X_k_1 .+= X_0_with_alpha
+        end
+
+        X_k_1 ./= norm(X_k_1)
+
+		if !no_matching
+
+			matched_motifs, missed_motifs, matching = TAME_score(A,B,X_k_1;kwargs...)
+			
+			if update_user != -1 && i % update_user == 0
+				println("finished iterate $(i): matched motifs:$(matched_motifs) -- missed motifs:$(missed_motifs)")
+			end
+
+			if matched_motifs > best_motif_count
+				best_matching = matching
+				best_X = copy(X_k_1)
+				best_motif_count = matched_motifs
+			end
+		end
+
+		if update_user != -1 && i % update_user == 0
+			println("λ_$i: $(new_lambda)")
+		end
+
+        if abs(new_lambda - lambda) < tol || i >= max_iter
+   			return best_X, best_motif_count, best_matching
+        else
+            X_k = copy(X_k_1)
             lambda = new_lambda
             i += 1
         end
@@ -254,7 +419,7 @@ end
     * 'best_x'- (Array{Float,2})
       Returns the components to the iteration which matched the most triangles. 
       Reshapes the iterate x into a matrix.  
-	* 'best_triangle_count' - (Int)
+	* 'best_motif_count' - (Int)
 	  The maximum number of triangles matched. 
 	* 'best_matching' - (Dict{Int,Int})
 	  The matching computed between the two graphs, maps the vertices of A to the
@@ -292,7 +457,7 @@ function TAME_profiled(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor, β::F, ma
 	A_Ti, B_Ti = setup_tame_data(A,B)
 
 	best_x = Array{Float64,2}(undef,A.n,B.n)
-    best_triangle_count::Int = -1
+    best_motif_count::Int = -1
 	best_index = -1
 	best_matching = Dict{Int,Int}()
 
@@ -335,22 +500,22 @@ function TAME_profiled(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor, β::F, ma
 
 		if !no_matching
 
-			triangles, gaped_triangles, matching, matching_time, scoring_time = TAME_score(A,B,reshape(x_k_1,A.n,B.n);return_timings=returnTimings(),kwargs...)
+			triangles, missed_motifs, matching, matching_time, scoring_time = TAME_score(A,B,reshape(x_k_1,A.n,B.n);return_timings=returnTimings(),kwargs...)
 			
 			push!(experiment_profile["matching_timings"],matching_time)
 			push!(experiment_profile["scoring_timings"],scoring_time)
 			push!(experiment_profile["matched triangles"],float(triangles))
-			push!(experiment_profile["gaped triangles"],float(gaped_triangles))
+			push!(experiment_profile["gaped triangles"],float(missed_motifs))
 
 
 			if update_user != -1 && i % update_user == 0
-				println("finished iterate $(i):tris:$(triangles) -- gaped_t:$(gaped_triangles)")
+				println("finished iterate $(i):tris:$(triangles) -- gaped_t:$(missed_motifs)")
 			end
 
-			if triangles > best_triangle_count
+			if triangles > best_motif_count
 				best_matching = matching
 				best_x = copy(x_k_1)
-				best_triangle_count = triangles
+				best_motif_count = triangles
 				best_iterate = i
 			end
 		end
@@ -360,9 +525,117 @@ function TAME_profiled(A::ThirdOrderSymTensor, B::ThirdOrderSymTensor, β::F, ma
 		end
 
         if abs(new_lambda - lambda) < tol || i >= max_iter
-   			return reshape(best_x,A.n,B.n), best_triangle_count, best_matching, experiment_profile
+   			return reshape(best_x,A.n,B.n), best_motif_count, best_matching, experiment_profile
         else
             x_k = copy(x_k_1)
+            lambda = new_lambda
+            i += 1
+        end
+
+    end
+
+
+end
+
+
+
+# currently using types on A and B to alert user against passing Vector{SymTensorUnweighted{M}} in. 
+function TAME_profiled(A::SymTensorUnweighted{M}, B::SymTensorUnweighted{M}, β::F, max_iter::Int,
+	                   tol::F,α::F;update_user::Int=-1,W::Array{F,2} = ones(A.n,B.n),
+					   no_matching::Bool=false,kwargs...) where {F <:AbstractFloat, M <: Motif}
+
+    dimension = minimum((A.n,B.n))
+
+    experiment_profile = Dict{String,Union{Array{F,1},Array{Array{F,1}}}}(
+		"contraction_timings"=>Array{F,1}(undef,0),
+		"matching_timings"=>Array{F,1}(undef,0),
+		"scoring_timings"=>Array{F,1}(undef,0),
+		"svd_timings"=>Array{F,1}(undef,0),
+		"matched motifs"=>Array{F,1}(undef,0),
+		"missed motifs"=>Array{F,1}(undef,0),
+		"sing_vals"=>Array{Array{F,1},1}(undef,0),
+		"ranks"=>Array{F,1}(undef,0)
+	)
+
+
+	A_Mi, B_Mi = setup_tame_data(A,B)
+
+	best_X = Array{Float64,2}(undef,A.n,B.n)
+    best_motif_count::Int = -1
+	best_index = -1
+	best_matching = Dict{Int,Int}()
+
+    X_k = copy(W)
+	X_k ./=norm(X_k)
+
+	if α != 1.0 
+		X_0_with_alpha = copy(X_k)*(1-α)
+	end
+
+
+    i = 1
+    lambda = Inf
+
+    while true
+
+		X_k_1,t = @timed impTTVnodesym(A.n, B.n, size(A.indices,1), X_k, A_Mi, B_Mi)
+		push!(experiment_profile["contraction_timings"],t)
+
+        new_lambda = dot(X_k_1,X_k)
+
+        if β != 0.0
+            X_k_1 .+= β * X_k
+        end
+
+        if α != 1.0
+            X_k_1 .*=  α
+			X_k_1 += X_0_with_alpha
+        end
+
+        X_k_1 ./= norm(X_k_1)
+
+		S,t = @timed svdvals(X_k_1)
+		push!(experiment_profile["svd_timings"],t)
+
+		rank = 0.0
+		for i in 1:length(S)
+			if S[i] > S[1]*eps(Float64)*dimension
+				rank = rank + 1
+			end
+		end
+
+		push!(experiment_profile["sing_vals"],S)
+		push!(experiment_profile["ranks"],rank)
+
+		if !no_matching
+
+			matched_motifs, missed_motifs, matching, matching_time, scoring_time = TAME_score(A,B,X_k_1;return_timings=returnTimings(),kwargs...)
+			
+			push!(experiment_profile["matching_timings"],matching_time)
+			push!(experiment_profile["scoring_timings"],scoring_time)
+			push!(experiment_profile["matched motifs"],float(matched_motifs))
+			push!(experiment_profile["missed motifs"],float(missed_motifs))
+
+
+			if update_user != -1 && i % update_user == 0
+				println("finished iterate $(i):tris:$(matched_motifs) -- gaped_t:$(missed_motifs)")
+			end
+
+			if matched_motifs > best_motif_count
+				best_matching = matching
+				best_X = copy(X_k_1)
+				best_motif_count = matched_motifs
+			end
+		end
+
+		if update_user != -1 && i % update_user == 0
+			println("λ_$i: $(new_lambda)")
+		end
+
+        if abs(new_lambda - lambda) < tol || i >= max_iter
+   			return best_X, best_motif_count, best_matching, experiment_profile
+        else
+            X_k = copy(X_k_1)
             lambda = new_lambda
             i += 1
         end

@@ -788,7 +788,7 @@ function LowRankTAME_profiled(A::SymTensorUnweighted{M}, B::SymTensorUnweighted{
 
 			#use accumulation parameter version if too much memory will be used
 
-			X_k_1,t = @timed get_kron_contract_comps(A_ten,B_ten,U_k,V_k)
+			X_k_1,t = @timed get_kron_contract_comps_with_accumulation_param(A,B,U_k,V_k)
 			push!(experiment_profile["contraction_timings"],t)
 
 			lambda_k_1 = tr((U_k'*X_k_1)*V_k)  

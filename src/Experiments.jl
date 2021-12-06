@@ -179,7 +179,7 @@ function distributed_pairwise_smat_alignment(files::Array{String,1},dirpath::Str
             if profile
                 profiling_results = alignmentOutput.profile
 			end
-        elseif method === ΛTAME_MultiMotif_M() || method === LowRankTAME_MultiMotif_M()
+        elseif method === ΛTAME_MultiMotif_M() || method === LowRankTAME_MultiMotif_M() || method === TAME_MultiMotif_M()
             if kwargs[:postProcessing] === noPostProcessing()
                 A_motifDistribution, B_motifDistribution,alignmentOutput = fetch(future)
             else
@@ -199,7 +199,7 @@ function distributed_pairwise_smat_alignment(files::Array{String,1},dirpath::Str
         push!(data_to_save,files[i])
         push!(data_to_save,files[j])
         
-        if method === ΛTAME_MultiMotif_M() || method === LowRankTAME_MultiMotif_M()
+        if method === ΛTAME_MultiMotif_M() || method === LowRankTAME_MultiMotif_M() || method === TAME_MultiMotif_M()
             push!(data_to_save,alignmentOutput.matchScore)
             push!(data_to_save,alignmentOutput.motifCounts[1])
             push!(data_to_save,alignmentOutput.motifCounts[2])
@@ -378,7 +378,7 @@ function distributed_random_trials(trial_count::Int,noise_model::ErdosRenyiNoise
             if profile 
                 profiling_results = alignmentOutput.profile
             end
-        elseif method === ΛTAME_MultiMotif_M() || method === LowRankTAME_MultiMotif_M()
+        elseif method === ΛTAME_MultiMotif_M() || method === LowRankTAME_MultiMotif_M() || method === TAME_MultiMotif_M()
             if kwargs[:postProcessing] === noPostProcessing()
                 d_A, d_B, perm, (A_motifDistribution, B_motifDistribution, output) = fetch(future)
             else
@@ -409,7 +409,7 @@ function distributed_random_trials(trial_count::Int,noise_model::ErdosRenyiNoise
         push!(data_to_save,n)
         push!(data_to_save,accuracy)
         push!(data_to_save, degree_weighted_accuracy)
-        if method === ΛTAME_MultiMotif_M() || method === LowRankTAME_MultiMotif_M()
+        if method === ΛTAME_MultiMotif_M() || method === LowRankTAME_MultiMotif_M() || method === TAME_MultiMotif_M()
             push!(data_to_save,best_matching_score)
             push!(data_to_save,A_motifCounts)
             push!(data_to_save,B_motifCounts)
@@ -541,7 +541,7 @@ function distributed_random_trials(trial_count::Int,noise_model::DuplicationNois
             if profile 
                 profiling_results = alignmentOutput.profile
             end
-        elseif method === ΛTAME_MultiMotif_M() || method === LowRankTAME_MultiMotif_M()
+        elseif method === ΛTAME_MultiMotif_M() || method === LowRankTAME_MultiMotif_M() || method === TAME_MultiMotif_M()
             if kwargs[:postProcessing] === noPostProcessing()
                 perm, dup_vertices, (A_motifDistribution, B_motifDistribution, alignmentOutput) = fetch(future)
             else
@@ -574,7 +574,7 @@ function distributed_random_trials(trial_count::Int,noise_model::DuplicationNois
         push!(data_to_save,accuracy)
         push!(data_to_save, dup_vertex_tolerant_accuracy)
         
-        if method === ΛTAME_MultiMotif_M() || method === LowRankTAME_MultiMotif_M()
+        if method === ΛTAME_MultiMotif_M() || method === LowRankTAME_MultiMotif_M() || method === TAME_MultiMotif_M()
             push!(data_to_save,alignmentOutput.matchScore)
             push!(data_to_save,alignmentOutput.motifCounts[1])
             push!(data_to_save,alignmentOutput.motifCounts[2])

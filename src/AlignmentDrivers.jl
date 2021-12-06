@@ -4,6 +4,7 @@ struct ΛTAME_MultiMotif_M <: AlignmentMethod end
 struct LowRankTAME_M <: AlignmentMethod end
 struct LowRankTAME_MultiMotif_M <: AlignmentMethod end
 struct TAME_M <: AlignmentMethod end
+struct TAME_MultiMotif_M <: AlignmentMethod end
 struct EigenAlign_M <: AlignmentMethod end
 struct LowRankEigenAlign_M <: AlignmentMethod end
 struct LowRankEigenAlignOnlyEdges_M <: AlignmentMethod end
@@ -66,7 +67,7 @@ function align_matrices(A::SparseMatrixCSC{T,Int},B::SparseMatrixCSC{S,Int};
         end
         return size(A_ten.indices,1), size(B_ten.indices,1), alignment_output
 
-    elseif method === ΛTAME_MultiMotif_M || method == LowRankTAME_MultiMotif_M
+    elseif method === ΛTAME_MultiMotif_M || method == LowRankTAME_MultiMotif_M || method == TAME_MultiMotif_M
 
         A_tensors = tensors_from_graph(A,kwargs[:orders],kwargs[:samples],motif)        
         B_tensors = tensors_from_graph(B,kwargs[:orders],kwargs[:samples],motif)
@@ -252,7 +253,7 @@ function post_process_alignment(A::SparseMatrixCSC{T,Int},B::SparseMatrixCSC{S,I
     # B_ten = graph_to_ThirdOrderTensor(B)
     method = typeof(alignment_output)
 
-    if method <: ΛTAME_Return || method <: LowRankTAME_Return || method <: ΛTAME_MultiMotif_Return
+    if method <: ΛTAME_Return || method <: LowRankTAME_Return || method <: ΛTAME_MultiMotif_Return 
 
         best_U, best_V = alignment_output.embedding
         best_matching = alignment_output.matching
@@ -372,8 +373,13 @@ function align_tensors_profiled(A::Union{ThirdOrderSymTensor,SymTensorUnweighted
 		return LowRankTAME_param_search_profiled(A,B;no_matching,kwargs...)
 	elseif typeof(method) === TAME_M
 		return TAME_param_search_profiled(A,B;no_matching,kwargs...)
+    elseif typeof(method) == TAME_MultiMotif_M
+        if length(A) > 1
+            @warn "multi motifs are not actually supported, only one motif at a time currently"
+        end
+        return TAME_param_search_profiled(A[end],B[end];no_matching,kwargs...)
 	else
-		throw(ArgumentError("method must be one of 'LambdaTAME', ΛTAME_MultiMotif_M, 'LowRankTAME', or 'TAME'."))
+		throw(ArgumentError("method must be one of 'LambdaTAME', ΛTAME_MultiMotif_M, 'LowRankTAME','LowRankTAME_MultiMotif_M','TAME_MultiMotif_M', or 'TAME'."))
 	end
 end
 
@@ -420,6 +426,11 @@ function align_tensors(A::Union{ThirdOrderSymTensor,SymTensorUnweighted{S},Vecto
 		return LowRankTAME_param_search(A,B;no_matching,kwargs...)
 	elseif typeof(method) === TAME_M
 		return TAME_param_search(A,B;no_matching,kwargs...)
+    elseif typeof(method) == TAME_MultiMotif_M
+        if length(A) > 1
+            @warn "multi motifs are not actually supported, only one motif at a time currently"
+        end
+        return TAME_param_search(A[end],B[end];no_matching,kwargs...)
 	else
 		throw(ArgumentError("method must be one of LambdaTAME_M, ΛTAME_MultiMotif_M, LowRankTAME_M, or TAME_M."))
 	end

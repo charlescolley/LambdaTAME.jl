@@ -1,16 +1,16 @@
 using LambdaTAME: LowRankTAME_param_search_profiled,  LowRankTAME_param_search
 using LambdaTAME: LowRankTAME, LowRankTAME_profiled, TAME
 
-
+import MatrixNetworks: readSMAT
 
 @testset "LowRankTAME" begin 
     # shared 
-    β = 0.0
+    β = 1.0
     α = 1.0 
     tol = 1e-6
     max_iter = 15
     
-    d = 5
+    d = 1
     U = rand(A_TOST.n,d)
     V = rand(B_TOST.n,d)
     X = U*V'
@@ -33,21 +33,47 @@ using LambdaTAME: LowRankTAME, LowRankTAME_profiled, TAME
     
 
     @testset "LowRankTAME_TOST === LowRankTAME_UST" begin
-        TOST_V, TOST_U, TOST_triangle_count, _ = LowRankTAME(A_TOST, B_TOST, U,V, β, max_iter, tol, α)
-        UST_V,UST_U, UST_triangle_count, _ = LowRankTAME(A_UST, B_UST, U,V, β, max_iter, tol, α)
+        TOST_U, TOST_V, TOST_triangle_count, _ = LowRankTAME(A_TOST, B_TOST, U,V, β, max_iter, tol, α)
+        UST_U,UST_V, UST_triangle_count, _ = LowRankTAME(A_UST, B_UST, U,V, β, max_iter, tol, α)
 
-        @test_broken norm(TOST_V - UST_V)/norm(TOST_V) < NORM_CHECK_TOL
+        @test norm(TOST_V - UST_V)/norm(TOST_V) < NORM_CHECK_TOL
         @test norm(TOST_U - UST_U)/norm(TOST_U) < NORM_CHECK_TOL
 
     end
 
     @testset "LowRankTAME === TAME" begin
 
-        @suppress_out begin
-            LRTAME_V, LRTAME_U, LRTAME_triangle_count, LRTAME_mapping = LowRankTAME(A_TOST, B_TOST, U,V, β, max_iter, tol, α)
-            TAME_X, TAME_triangle_count, TAME_mapping = TAME(A_TOST, B_TOST, β, max_iter, tol, α;W=X)
-            @test norm(LRTAME_V*LRTAME_U' - TAME_X)/norm(TAME_X) < NORM_CHECK_TOL
+        @testset "TOST based methods" begin
+            @suppress_out begin
+                LRTAME_U, LRTAME_V, LRTAME_triangle_count, LRTAME_mapping = LowRankTAME(A_TOST, B_TOST, U,V, β, max_iter, tol, α)
+                TAME_X, TAME_triangle_count, TAME_mapping = TAME(A_TOST, B_TOST, β, max_iter, tol, α;W=X)
+                @test TAME_mapping == LRTAME_mapping && LRTAME_triangle_count == TAME_triangle_count
+                @test norm(LRTAME_U*LRTAME_V' - TAME_X)/norm(TAME_X) < NORM_CHECK_TOL
+            end
         end
 
+        @testset "UST based methods" begin
+            A = readSMAT(matrix_A_file)
+            B = readSMAT(matrix_B_file)
+
+            
+            U = rand(size(A,1),d)
+            V = rand(size(B,1),d)
+            X = U*V'
+                #test mats are bigger than A_TOST tensors
+            for k = 4:7
+                A_ten = tensor_from_graph(A,k,Clique())
+                B_ten = tensor_from_graph(B,k,Clique())
+
+                @suppress_out begin
+                    LRTAME_U, LRTAME_V, LRTAME_triangle_count, LRTAME_mapping = LowRankTAME(A_ten, B_ten, U,V, β, max_iter, tol, α)
+                    TAME_X, TAME_triangle_count, TAME_mapping = TAME(A_ten, B_ten, β, max_iter, tol, α;W=X)
+
+                    @test TAME_mapping == LRTAME_mapping && LRTAME_triangle_count == TAME_triangle_count
+                    @test_broken norm(LRTAME_U*LRTAME_V' - TAME_X)/norm(TAME_X) < NORM_CHECK_TOL
+                end 
+
+            end 
+        end
     end
 end

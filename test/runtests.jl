@@ -23,7 +23,7 @@ import Random: seed!
 #seed 
 seed!(54321)
 
-NORM_CHECK_TOL = 1e-15
+NORM_CHECK_TOL = 1e-14
 
 tensor_A_file="test_tensors/test_tensorB.ssten"
 tensor_B_file="test_tensors/test_tensorA.ssten"
