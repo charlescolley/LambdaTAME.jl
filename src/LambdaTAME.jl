@@ -47,6 +47,7 @@ abstract type returnType end
 #LOWRANK_EIGENALIGN_PATH = "/Users/charlie/Documents/Code/lowrank_spectral_v1_julia/all_code/include_all.jl" #local
 #LOWRANK_EIGENALIGN_PATH = "/homes/ccolley/Documents/Software/lowrank_spectral_v1_julia/all_code/include_all.jl"#nilpotent
 #include(LOWRANK_EIGENALIGN_PATH)
+include("../include/lowrank_spectral/align_networks_eigenalign.jl")
 #TODO: fix 'WARNING: Method definition' messages
 
 

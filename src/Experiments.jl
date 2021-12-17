@@ -189,7 +189,20 @@ function distributed_pairwise_smat_alignment(files::Array{String,1},dirpath::Str
             if profile
                 profiling_results = alignmentOutput.profile
 			end
-        elseif method === EigenAlign_M() || method === Degree_M() || method === Random_M() || method === LowRankEigenAlign_M()
+        elseif method === LowRankEigenAlign_M()
+
+            if kwargs[:postProcessing] === noPostProcessing()
+                alignmentOutput = fetch(future)
+            else
+                alignmentOutput,postProcessingOutput = fetch(future)
+            end
+
+            matched_tris = alignmentOutput.matchScore
+            A_tens,B_tens = alignmentOutput.motifCounts
+            max_tris = min(alignmentOutput.motifCounts...)
+            best_matching = alignmentOutput.matching
+
+        elseif method === EigenAlign_M() || method === Degree_M() || method === Random_M() 
             A_tens, B_tens, matched_tris, best_matching, profiling_results = fetch(future)
             max_tris = min(A_tens, B_tens)
             profile = true
@@ -391,7 +404,20 @@ function distributed_random_trials(trial_count::Int,noise_model::ErdosRenyiNoise
             best_matching = output.matching
             A_tris = -1
             B_tris = -1
-        elseif method === EigenAlign_M() || method == Degree_M() || method === Random_M() || method === LowRankEigenAlign_M() || method === LowRankEigenAlignOnlyEdges_M()
+        elseif method === LowRankEigenAlign_M()
+
+            if kwargs[:postProcessing] === noPostProcessing()
+                alignmentOutput = fetch(future)
+            else
+                alignmentOutput,postProcessingOutput = fetch(future)
+            end
+
+            matched_tris = alignmentOutput.matchScore
+            A_tris,B_tris = alignmentOutput.motifCounts
+            max_tris = min(alignmentOutput.motifCounts...)
+            best_matching = alignmentOutput.matching
+
+        elseif method === EigenAlign_M() || method == Degree_M() || method === Random_M() || method === LowRankEigenAlignOnlyEdges_M()
             d_A, d_B, perm, (A_tris, B_tris, matched_tris, best_matching, _) = fetch(future)
             max_tris = minimum((A_tris,B_tris))
         end
@@ -554,7 +580,20 @@ function distributed_random_trials(trial_count::Int,noise_model::DuplicationNois
             best_matching = alignmentOutput.matching
             A_tris = -1
             B_tris = -1
-        elseif method === EigenAlign_M() || method == Degree_M() || method === Random_M() || method === LowRankEigenAlign_M() || method === LowRankEigenAlignOnlyEdges_M()
+        elseif method === LowRankEigenAlign_M()
+            
+            if kwargs[:postProcessing] === noPostProcessing()
+                perm, dup_vertices, alignmentOutput = fetch(future)
+            else
+                perm, dup_vertices, (alignmentOutput,postProcessingOutput) = fetch(future)
+            end
+
+            matched_tris = alignmentOutput.matchScore
+            A_tris,B_tris = alignmentOutput.motifCounts
+            max_tris = min(alignmentOutput.motifCounts...)
+            best_matching = alignmentOutput.matching
+
+        elseif method === EigenAlign_M() || method == Degree_M() || method === Random_M() || method === LowRankEigenAlignOnlyEdges_M()
             perm, dup_vertices, (A_tris, B_tris, matched_tris, best_matching, _) = fetch(future)
             max_tris = minimum((A_tris,B_tris))
         end

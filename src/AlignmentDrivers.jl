@@ -89,13 +89,26 @@ function align_matrices(A::SparseMatrixCSC{T,Int},B::SparseMatrixCSC{S,Int};
         else
             return A_motifDistribution, B_motifDistribution, alignment_output, post_process_alignment(A,B,A_tensors,B_tensors,alignment_output,postProcessing;profile,subkwargs...)
         end
-    elseif method === EigenAlign_M || method === Degree_M || method === Random_M || method === LowRankEigenAlign_M || method === LowRankEigenAlignOnlyEdges_M
-        
-        if method === LowRankEigenAlign_M
+    elseif method === LowRankEigenAlign_M
             iters = 10
-            (ma,mb,_,_),t = @timed align_networks_eigenalign(A,B,iters,"lowrank_svd_union",3)
+            (U,V, ma,mb,_,_),t = @timed align_networks_eigenalign(A,B,iters,"lowrank_svd_union",3)
             matching = Dict{Int,Int}([i=>j for (i,j) in zip(ma,mb)]) 
-        elseif method === LowRankEigenAlignOnlyEdges_M
+            triangle_count, _  = TAME_score(A_ten,B_ten,matching) 
+            alignment_output = LowRankEigenAlign_Return(triangle_count,
+                                                        (size(A_ten.indices,1), size(B_ten.indices,1)),
+                                                        matching,(U,V),t)
+
+            if typeof(postProcessing) === noPostProcessing
+                return alignment_output
+            else
+                return alignment_output, post_process_alignment(A,B,A_ten,B_ten,alignment_output,postProcessing;profile,kwargs...)
+            end
+
+    elseif method === EigenAlign_M || method === Degree_M || method === Random_M || method === LowRankEigenAlignOnlyEdges_M
+        
+       
+
+        if method === LowRankEigenAlignOnlyEdges_M
             matching,t = @timed lowRankEigenAlignEdgesOnly(A,B) 
         elseif method === EigenAlign_M
             (ma,mb),t = @timed NetworkAlignment.EigenAlign(A,B)
@@ -110,7 +123,7 @@ function align_matrices(A::SparseMatrixCSC{T,Int},B::SparseMatrixCSC{S,Int};
         else
             error("Invalid input, must be ")
         end
-        triangle_count, gaped_triangles  = TAME_score(A_ten,B_ten,matching) 
+
         return size(A_ten.indices,1), size(B_ten.indices,1), triangle_count, matching, t 
     else
         throw(ArgumentError("method must be of type ΛTAME_M, LowRankTAME_M, TAME_M, EigenAlign_M, LowRankEigenAlign_M, LowRankEigenAlignEdgesOnly_M, Degree_M, or Random_M."))
@@ -141,7 +154,7 @@ function post_process_alignment(A::SparseMatrixCSC{T,Int},B::SparseMatrixCSC{S,I
                                 profile=false,kwargs...) where {T,S}
 
     method = typeof(alignment_output)
-    if method <: ΛTAME_Return || method <: LowRankTAME_Return || method <: ΛTAME_MultiMotif_Return
+    if method <: ΛTAME_Return || method <: LowRankTAME_Return || method <: ΛTAME_MultiMotif_Return || method <: LowRankEigenAlign_Return
 
         best_U, best_V = alignment_output.embedding
         best_matching = alignment_output.matching
@@ -190,7 +203,7 @@ function post_process_alignment(A::SparseMatrixCSC{T,Int},B::SparseMatrixCSC{S,I
                             profile=false,kwargs...) where {T,S}
 
     method = typeof(alignment_output)
-    if method <: ΛTAME_Return || method <: LowRankTAME_Return || method <: ΛTAME_MultiMotif_Return
+    if method <: ΛTAME_Return || method <: LowRankTAME_Return || method <: ΛTAME_MultiMotif_Return || method <: LowRankEigenAlign_Return
 
         best_U, best_V = alignment_output.embedding
         best_matching = alignment_output.matching
@@ -253,7 +266,7 @@ function post_process_alignment(A::SparseMatrixCSC{T,Int},B::SparseMatrixCSC{S,I
     # B_ten = graph_to_ThirdOrderTensor(B)
     method = typeof(alignment_output)
 
-    if method <: ΛTAME_Return || method <: LowRankTAME_Return || method <: ΛTAME_MultiMotif_Return 
+    if method <: ΛTAME_Return || method <: LowRankTAME_Return || method <: ΛTAME_MultiMotif_Return || method <: LowRankEigenAlign_Return
 
         best_U, best_V = alignment_output.embedding
         best_matching = alignment_output.matching
