@@ -422,11 +422,16 @@ function distributed_random_trials(trial_count::Int,noise_model::ErdosRenyiNoise
             max_tris = minimum((A_tris,B_tris))
         end
 
-        accuracy = sum([1 for (i,j) in alignmentOutput.matching if get(perm,j,-1) == i])/n
+        if length(alignmentOutput.matching) > 0 
+            accuracy = sum([1 for (i,j) in alignmentOutput.matching if get(perm,j,-1) == i])/n
 
-        D_A = sum(d_A)
-        D_B = sum(d_B)
-        degree_weighted_accuracy = sum([(get(perm,j,-1) == i) ? ((d_A[i] + d_B[j])/(D_A+D_B)) : 0.0 for (i,j) in best_matching])
+            D_A = sum(d_A)
+            D_B = sum(d_B)
+            degree_weighted_accuracy = sum([(get(perm,j,-1) == i) ? ((d_A[i] + d_B[j])/(D_A+D_B)) : 0.0 for (i,j) in best_matching])
+        else
+            accuracy = -1.0
+            degree_weighted_accuracy = -1.0
+        end
 
         data_to_save = Array{Any,1}(undef,0)
     
@@ -443,9 +448,9 @@ function distributed_random_trials(trial_count::Int,noise_model::ErdosRenyiNoise
             push!(data_to_save,B_motifDistribution)
         else
             push!(data_to_save, matched_tris)
-            push!(data_to_save,A_tris)
-            push!(data_to_save,B_tris)
-            push!(data_to_save,max_tris)
+            push!(data_to_save, A_tris)
+            push!(data_to_save, B_tris)
+            push!(data_to_save, max_tris)
         end
 
         if profile 
@@ -598,12 +603,19 @@ function distributed_random_trials(trial_count::Int,noise_model::DuplicationNois
             max_tris = minimum((A_tris,B_tris))
         end
 
-        accuracy = sum([1 for (i,j) in alignmentOutput.matching if get(perm,i,-1) == j])/n
-                                                                    #align_matrices is called with B,A since B > A
-         
-        dup_tolerant_perm = replaced_duplications_with_originals(perm,n, dup_vertices)
-        dup_vertex_tolerant_accuracy = sum([1 for (j,i) in alignmentOutput.matching if get(dup_tolerant_perm,i,-1) == j])/n
 
+         
+        
+        if length(alignmentOutput.matching) > 0 
+            accuracy = sum([1 for (i,j) in alignmentOutput.matching if get(perm,i,-1) == j])/n
+            #align_matrices is called with B,A since B > A
+
+            dup_tolerant_perm = replaced_duplications_with_originals(perm,n, dup_vertices)
+            dup_vertex_tolerant_accuracy = sum([1 for (j,i) in alignmentOutput.matching if get(dup_tolerant_perm,i,-1) == j])/n
+        else
+            accuracy = -1.0
+            dup_vertex_tolerant_accuracy = -1.0
+        end
 
         data_to_save = Array{Any,1}(undef,0)
         push!(data_to_save,seed)
