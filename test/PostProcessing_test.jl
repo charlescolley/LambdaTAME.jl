@@ -1,6 +1,6 @@
 using SparseArrays, Distributions
 import LambdaTAME: spatial_network, duplication_perturbation_noise_model, netalignmr, knearest_sparsification, successive_netalignmr, successive_netalignmr_profiled
-import LambdaTAME: tabu_search_profiled, tabu_search
+import LambdaTAME: local_search_profiled, local_search
 @testset "Post Processing" begin
 
     m=10
@@ -42,16 +42,16 @@ import LambdaTAME: tabu_search_profiled, tabu_search
         @inferred knearest_sparsification(V,U,matching,5)
     end
 
-    @testset "Tabu Search" begin 
+    @testset "Local Search" begin 
 
         A_ten = DistributedTensorConstruction.tensor_from_graph(A,3,Clique())
         B_ten = DistributedTensorConstruction.tensor_from_graph(B,3,Clique())
 
         k = 15
-        @inferred tabu_search(A,B,A_ten,B_ten,U,V,Dict(matching),d)
-        @inferred tabu_search_profiled(A,B,A_ten,B_ten,U,V,Dict(matching),d)
-        @inferred tabu_search(A,B,A_ten,B_ten,U,V,Dict(matching),TabuSearch())
-        @inferred tabu_search_profiled(A,B,A_ten,B_ten,U,V,Dict(matching),TabuSearch())
+        @inferred local_search(A,B,A_ten,B_ten,U,V,Dict(matching),d)
+        @inferred local_search_profiled(A,B,A_ten,B_ten,U,V,Dict(matching),d)
+        @inferred local_search(A,B,A_ten,B_ten,U,V,Dict(matching),LocalSearch())
+        @inferred local_search_profiled(A,B,A_ten,B_ten,U,V,Dict(matching),LocalSearch())
 
         
 

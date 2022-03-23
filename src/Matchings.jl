@@ -966,7 +966,7 @@ end
 
 
 #
-# Tabu Search Methods
+# Local Search Methods
 # 
 
 function seq_similarity(U,V,matching)

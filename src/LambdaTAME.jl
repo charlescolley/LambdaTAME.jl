@@ -111,7 +111,7 @@ export random_graph_exp
 export load_ThirdOrderSymTensor, load_UnweightedThirdOrderSymTensor
 export graph_to_ThirdOrderTensor
 
-export KlauAlgo, noPostProcessing, SuccessiveKlauAlgo, TabuSearch
+export KlauAlgo, noPostProcessing, SuccessiveKlauAlgo, LocalSearch
 
 #  --  From Matchings.jl --  #
 #flag types

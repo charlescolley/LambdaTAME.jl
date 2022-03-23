@@ -10,7 +10,7 @@ import LambdaTAME: spatial_network
     betas=[0.0,1.0]
 
     @suppress_out begin
-        for postProcessing in [KlauAlgo(),SuccessiveKlauAlgo(),TabuSearch(verbose=false)]
+        for postProcessing in [KlauAlgo(),SuccessiveKlauAlgo(),LocalSearch(verbose=false)]
 
             #=
             # -- TAME method tests -- #

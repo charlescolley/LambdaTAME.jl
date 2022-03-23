@@ -27,6 +27,12 @@ struct edges_R <: SKUpdateRule end
     maximum_Klau_iters::Int=1000;
     successive_iter::Int=10;
     start_maxIter::Int = 100;
+
+
+@with_kw struct LocalSearch <: PostProcessingMethod 
+    k::Int = -1;
+	iterations::Int=10;
+	verbose::Bool = true;
 end
 
 
@@ -90,12 +96,6 @@ function b_matching(u::Array{Float64,1}, v::Array{Float64,1}, b::Int)
 
     return Matchings[1:(match_idx-1)]
 
-
-
-@with_kw struct TabuSearch <: PostProcessingMethod 
-    k::Int = -1;
-	iterations::Int=10;
-	verbose::Bool = true;
 end
 
 
@@ -635,22 +635,22 @@ function findEmbeddingLookalikes(X::Matrix{S},idx,k) where S
 end
 
 #
-#  Tabu Search Methods
+#  Local Search Methods
 #
 
 
 #=
-@with_kw struct TabuSearch <: PostProcessingMethod 
+@with_kw struct LocalSearch <: PostProcessingMethod 
     k::Int = -1;
 	iterations::Int=10;
 	verbose::Bool = true;
 end
 =#
 
-#function tabu_search_profiled(A, B, A_ten, B_ten, U, V ,matching,max_iters,k,method="new")
-function tabu_search_profiled(A::SparseMatrixCSC{T,Int},B::SparseMatrixCSC{T,Int},
+#function local_search_profiled(A, B, A_ten, B_ten, U, V ,matching,max_iters,k,method="new")
+function local_search_profiled(A::SparseMatrixCSC{T,Int},B::SparseMatrixCSC{T,Int},
 							  A_ten, B_ten, U::Matrix{T},V::Matrix{T},
-							  m0::Dict{Int,Int},  params::TabuSearch) where T
+							  m0::Dict{Int,Int},  params::LocalSearch) where T
 	#k = 15
 	
 	profile_results = Dict{String,Union{Vector{Tuple{Int64,Int64}},Vector{Float64}}}([
@@ -677,7 +677,7 @@ function tabu_search_profiled(A::SparseMatrixCSC{T,Int},B::SparseMatrixCSC{T,Int
 	cur_matching = copy(m0)
 	for i =1:params.iterations
 
-		(new_matching, seq_scoring_runtimes, top_scoring_runtimes),rt = @timed tabu_search_profiled(A,B,A_ten,B_ten,U,V,cur_matching,k)
+		(new_matching, seq_scoring_runtimes, top_scoring_runtimes),rt = @timed local_search_profiled(A,B,A_ten,B_ten,U,V,cur_matching,k)
 		
 		push!(profile_results["runtimes"],rt)
 		push!(profile_results["seq runtimes"],seq_scoring_runtimes)
@@ -698,9 +698,9 @@ function tabu_search_profiled(A::SparseMatrixCSC{T,Int},B::SparseMatrixCSC{T,Int
 	return cur_matching, profile_results
 end
 
-function tabu_search(A::SparseMatrixCSC{T,Int},B::SparseMatrixCSC{T,Int},
+function local_search(A::SparseMatrixCSC{T,Int},B::SparseMatrixCSC{T,Int},
 							  A_ten, B_ten, U::Matrix{T},V::Matrix{T},
-							  m0::Dict{Int,Int},  params::TabuSearch) where T
+							  m0::Dict{Int,Int},  params::LocalSearch) where T
 
 	if params.k == -1
 		k = 2*size(U,2)
@@ -717,7 +717,7 @@ function tabu_search(A::SparseMatrixCSC{T,Int},B::SparseMatrixCSC{T,Int},
 	cur_matching = copy(m0)
 	for i =1:params.iterations
 
-		new_matching = tabu_search(A,B,A_ten,B_ten,U,V,cur_matching,k)
+		new_matching = local_search(A,B,A_ten,B_ten,U,V,cur_matching,k)
 		
 		cur_matching = new_matching
 
@@ -768,7 +768,7 @@ end
 
 
 
-function tabu_search_profiled(A,B,A_ten,B_ten,U,V,matching,k)#,match_method="top_sim")
+function local_search_profiled(A,B,A_ten,B_ten,U,V,matching,k)#,match_method="top_sim")
 
 
 	m = size(A,1)
@@ -1038,7 +1038,7 @@ function tabu_search_profiled(A,B,A_ten,B_ten,U,V,matching,k)#,match_method="top
 end
 
 
-function tabu_search(A,B,A_ten,B_ten,U,V,matching,k)#,match_method="top_sim")
+function local_search(A,B,A_ten,B_ten,U,V,matching,k)#,match_method="top_sim")
 
 
 	m = size(A,1)

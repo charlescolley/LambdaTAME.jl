@@ -248,11 +248,11 @@ function distributed_pairwise_smat_alignment(files::Array{String,1},dirpath::Str
             if profile
                 push!(data_to_save,postProcessingOutput.profiling)
             end
-        elseif typeof(kwargs[:postProcessing]) <: TabuSearch
+        elseif typeof(kwargs[:postProcessing]) <: LocalSearch
 
             push!(data_to_save,postProcessingOutput.original_edges_matched)
-            push!(data_to_save,postProcessingOutput.tabu_edges_matched)
-            push!(data_to_save,postProcessingOutput.tabu_tris_matched)
+            push!(data_to_save,postProcessingOutput.localsearch_edges_matched)
+            push!(data_to_save,postProcessingOutput.localsearch_tris_matched)
             push!(data_to_save,postProcessingOutput.matching)
             if profile
                 push!(data_to_save,postProcessingOutput.profiling)
@@ -479,11 +479,11 @@ function distributed_random_trials(trial_count::Int,noise_model::ErdosRenyiNoise
             if profile
                 push!(data_to_save,postProcessingOutput.profiling)
             end
-        elseif typeof(kwargs[:postProcessing]) <: TabuSearch
+        elseif typeof(kwargs[:postProcessing]) <: LocalSearch
 
             push!(data_to_save,postProcessingOutput.original_edges_matched)
-            push!(data_to_save,postProcessingOutput.tabu_edges_matched)
-            push!(data_to_save,postProcessingOutput.tabu_tris_matched)
+            push!(data_to_save,postProcessingOutput.localsearch_edges_matched)
+            push!(data_to_save,postProcessingOutput.localsearch_tris_matched)
             push!(data_to_save,sum([1 for (i,j) in postProcessingOutput.matching if get(perm,j,-1) == i])/n)
             push!(data_to_save,postProcessingOutput.matching)
             if profile
@@ -664,11 +664,11 @@ function distributed_random_trials(trial_count::Int,noise_model::DuplicationNois
             if profile
                 push!(data_to_save,postProcessingOutput.profiling)
             end
-        elseif typeof(kwargs[:postProcessing]) <: TabuSearch
+        elseif typeof(kwargs[:postProcessing]) <: LocalSearch
 
             push!(data_to_save,postProcessingOutput.original_edges_matched)
-            push!(data_to_save,postProcessingOutput.tabu_edges_matched)
-            push!(data_to_save,postProcessingOutput.tabu_tris_matched)
+            push!(data_to_save,postProcessingOutput.localsearch_edges_matched)
+            push!(data_to_save,postProcessingOutput.localsearch_tris_matched)
             push!(data_to_save,sum([1 for (j,i) in postProcessingOutput.matching if get(perm,j,-1) == i])/n)
             push!(data_to_save,postProcessingOutput.matching)
             if profile

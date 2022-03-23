@@ -238,18 +238,18 @@ function post_process_alignment(A::SparseMatrixCSC{T,Int},B::SparseMatrixCSC{S,I
     end
 end
 
-struct TabuSearchPostProcessReturn <: returnType
+struct LocalSearchPostProcessReturn <: returnType
     original_edges_matched::Int
     matching::Union{Dict{Int,Int},Vector{Int}}
-    tabu_edges_matched::Int
-    tabu_tris_matched::Int
+    localsearch_edges_matched::Int
+    localsearch_tris_matched::Int
     full_runtime::Union{Nothing,Float64}
     profiling::Union{Nothing,Dict{String,Union{Vector{Tuple{Int64,Int64}},Vector{Float64}}}}
 end
 
 function post_process_alignment(A::SparseMatrixCSC{T,Int},B::SparseMatrixCSC{S,Int},
                                 A_ten, B_ten, alignment_output::returnType,
-                                postProcessing::TabuSearch; profile=false,
+                                postProcessing::LocalSearch; profile=false,
                                 kwargs...) where {T,S}
 
 
@@ -275,9 +275,9 @@ function post_process_alignment(A::SparseMatrixCSC{T,Int},B::SparseMatrixCSC{S,I
         if profile
             #(pp_matching,Klau_rt,L_sparsity,fvals),full_rt = @timed netalignmr(A,B,best_U, best_V, best_matching,k,postProcessing)
             #setup_rt = full_rt - Klau_rt
-            (pp_matching,profile_results),full_rt = @timed tabu_search_profiled(A,B,A_ten, B_ten, best_U, best_V, best_matching,  postProcessing)
+            (pp_matching,profile_results),full_rt = @timed local_search_profiled(A,B,A_ten, B_ten, best_U, best_V, best_matching,  postProcessing)
         else
-            pp_matching = tabu_search(A, B, A_ten, B_ten, best_U, best_V, best_matching,  postProcessing)
+            pp_matching = local_search(A, B, A_ten, B_ten, best_U, best_V, best_matching,  postProcessing)
         end
 
 
@@ -286,9 +286,9 @@ function post_process_alignment(A::SparseMatrixCSC{T,Int},B::SparseMatrixCSC{S,I
         original_matched_edges = edges_matched(A,B,alignment_output.matching)[1]/2
      
         if profile
-            return TabuSearchPostProcessReturn(original_matched_edges,pp_matching,pp_matched_edges,pp_matched_motif,full_rt, profile_results)
+            return LocalSearchPostProcessReturn(original_matched_edges,pp_matching,pp_matched_edges,pp_matched_motif,full_rt, profile_results)
         else
-            return TabuSearchPostProcessReturn(original_matched_edges,pp_matching,pp_matched_edges,pp_matched_motif,nothing, nothing,)
+            return LocalSearchPostProcessReturn(original_matched_edges,pp_matching,pp_matched_edges,pp_matched_motif,nothing, nothing,)
         end
 
     else
