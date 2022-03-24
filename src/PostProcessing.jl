@@ -27,6 +27,8 @@ struct edges_R <: SKUpdateRule end
     maximum_Klau_iters::Int=1000;
     successive_iter::Int=10;
     start_maxIter::Int = 100;
+	first_run_klau::KlauAlgo = KlauAlgo();
+end
 
 
 @with_kw struct LocalSearch <: PostProcessingMethod 
@@ -258,57 +260,15 @@ function netalignmr(A::SparseMatrixCSC{T1,Int},B::SparseMatrixCSC{T1,Int},L::Spa
     final_link_L = sparse(li,lj,xbest,size(A,1),size(B,1))
     dropzeros!(final_link_L)
 
-    matching = MatrixNetworks.edge_list(NetworkAlign.bipartite_matching(final_link_L))
+    matching = MatrixNetworks.edge_list(bipartite_matching_local(final_link_L))
 
     matching = Dict(zip(matching...))
 
 	return matching, t_netalignmr, nnz(L)/(size(A,1)*size(B,1)), status
 
-
 end
-#=
-function successive_netalignmr(A::SparseMatrixCSC{T,Int},B::SparseMatrixCSC{T,Int},
-                               U::Matrix{T},V::Matrix{T},
-                               matching::Union{Vector{NTuple{2,Int}},Dict{Int,Int}}
-                               ,params::successiveKlauAlgo) where T
-    
-    if typeof(matching) === Vector{NTuple{2,Int}}
-        matching = Dict(matching)
-    end
-
-	(prev_matching,_,sparsity),first_run = @timed netalignmr(A,B,U,V,matching_array_to_dict(matching),size(U,2),params)
-                                    #using size(U,2) as a stand in for rank(U)
-
-    timings = [first_run]
-    sparsities = [sparsity]
-	cur_maxiter = 50
-    maximum_iters=1000
-	prev_match_change = 0
-	for i = 1:10
-		(klau_matching,_,sparsity),t = @timed netalignmr(A,B,U,V,prev_matching,2*15,KlauAlgo(maxiter=cur_maxiter))
-        push!(timings,t)
-        push!(sparsities,sparsity)
-        match_change = length(intersect(Set(klau_matching),Set(prev_matching)))
-
-		println("matchings changed by $(match_change - prev_match_change)")
-		if cur_maxiter < maximum_iters
-			if match_change <= 15
-				cur_maxiter *= 2
-				println("new matching similar to previous one, upping Klau iterations to $cur_maxiter")
-			end
-		end
 
 
-		if klau_matching == match_change
-			println("matching didn't change")
-		end
-		
-		prev_match_change = match_change
-		prev_matching = copy(klau_matching)
-	end
-    return klau_matching, timings, sparsities
-end
-=#
 function successive_netalignmr_profiled(A::SparseMatrixCSC{T,Int},B::SparseMatrixCSC{T,Int},
                                         U::Matrix{T},V::Matrix{T},
                                         m0::Union{Vector{NTuple{2,Int}},Dict{Int,Int}},
@@ -330,14 +290,13 @@ function successive_netalignmr_profiled(A::SparseMatrixCSC{T,Int},B::SparseMatri
     kkn_rt += t
 
 	#run one call of Klau like normal
-	klau_params = KlauAlgo()
-	(old_matching,_,_,status),rt = @timed netalignmr(A,B,L0,klau_params)
+	(old_matching,_,_,status),rt = @timed netalignmr(A,B,L0,params.first_run_klau)
 	
 	matching_stats = Dict([
 		("edges_matched",[edge_match(old_matching)]),
 		("runtime",[rt]),
 		("kkn L runtime",[kkn_rt]),
-		("iters_used",[klau_params.maxiter]),
+		("iters_used",[params.first_run_klau.maxiter]),
 		("match_overlap",[-1]),
 		("status",[status])
 	])
@@ -357,7 +316,7 @@ function successive_netalignmr_profiled(A::SparseMatrixCSC{T,Int},B::SparseMatri
 
 		L,t = @timed knearest_sparsification(T_U,T_V,U,V,old_matching,size(U,2)) 
 		push!(matching_stats["kkn L runtime"],t)
-		(klau_matching,_,_,status),rt = @timed netalignmr(A,B,L,KlauAlgo(maxiter=cur_maxiter))
+		(klau_matching,_,_,status),rt = @timed netalignmr(A,B,L,KlauAlgo(maxiter=cur_maxiter,stepm=5))
 		
 		push!(matching_stats["runtime"],rt)
 		push!(matching_stats["match_overlap"],length(intersect(Set(klau_matching),Set(old_matching))))
@@ -466,7 +425,7 @@ function successive_netalignmr(A::SparseMatrixCSC{T,Int},B::SparseMatrixCSC{T,In
 	best_matching = Dict{Int,Int}()
 	for i = 1:params.successive_iter
 
-		L = knearest_sparsification(T_U,T_V,U,V,old_matching,size(U,2)) 
+		L = knearest_sparsification(T_U,T_V,U,V,old_matching,2*size(U,2)) 
 
 		klau_matching,_,_,status = netalignmr(A,B,L,KlauAlgo(maxiter=cur_maxiter))
         overlap = length(intersect(Set(klau_matching),Set(old_matching)))
@@ -537,11 +496,6 @@ function successive_netalignmr(A::SparseMatrixCSC{T,Int},B::SparseMatrixCSC{T,In
 		old_matching = copy(klau_matching)
 	end
 	return best_matching
-<<<<<<< HEAD
-=======
-=======
->>>>>>> 726ef929fb8db472e9b7d74714503910777264ba
->>>>>>> 46378117250e902d5572d97f4fcdb5ac35111ccc
 
 end
 
@@ -686,7 +640,7 @@ function local_search_profiled(A::SparseMatrixCSC{T,Int},B::SparseMatrixCSC{T,In
 		push!(profile_results["motif match"],LambdaTAME.TAME_score(A_ten,B_ten,new_matching)) 
 									#TAME_score wants most motifs in left arg
 		push!(profile_results["edge match"],LambdaTAME.edges_matched(A,B,new_matching))
-		cur_matching = new_matching
+		cur_matching = copy(new_matching)
 
 		if params.verbose
 			println("iter $i: edges_matched -- $(profile_results["edge match"][end])  motifs matched -- $(profile_results["motif match"][end])  rt -- $rt seq_rt:$seq_scoring_runtimes, top_rt:$top_scoring_runtimes")
@@ -719,14 +673,13 @@ function local_search(A::SparseMatrixCSC{T,Int},B::SparseMatrixCSC{T,Int},
 
 		new_matching = local_search(A,B,A_ten,B_ten,U,V,cur_matching,k)
 		
-		cur_matching = new_matching
-
+	
 		if params.verbose
 			edges_matched = LambdaTAME.edges_matched(A,B,new_matching)
 			motifs_matched = LambdaTAME.TAME_score(A_ten,B_ten,new_matching)
 			println("iter $i: edges_matched -- $edges_matched  motifs matched -- $motifs_matched")
 		end
-
+		cur_matching = copy(new_matching)
 	end
 
 
