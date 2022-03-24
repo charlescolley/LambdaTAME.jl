@@ -202,6 +202,10 @@ function distributed_pairwise_smat_alignment(files::Array{String,1},dirpath::Str
             max_tris = min(alignmentOutput.motifCounts...)
             best_matching = alignmentOutput.matching
 
+            if profile 
+                profiling_results = alignmentOutput.profile
+            end
+
         elseif method === EigenAlign_M() || method === Degree_M() || method === Random_M() 
             A_tens, B_tens, matched_tris, best_matching, profiling_results = fetch(future)
             max_tris = min(A_tens, B_tens)
@@ -417,6 +421,10 @@ function distributed_random_trials(trial_count::Int,noise_model::ErdosRenyiNoise
             max_tris = min(alignmentOutput.motifCounts...)
             best_matching = alignmentOutput.matching
 
+            if profile 
+                profiling_results = alignmentOutput.profile
+            end
+
         elseif method === EigenAlign_M() || method == Degree_M() || method === Random_M() || method === LowRankEigenAlignOnlyEdges_M()
             d_A, d_B, perm, (A_tris, B_tris, matched_tris, best_matching, _) = fetch(future)
             max_tris = minimum((A_tris,B_tris))
@@ -597,6 +605,10 @@ function distributed_random_trials(trial_count::Int,noise_model::DuplicationNois
             A_tris,B_tris = alignmentOutput.motifCounts
             max_tris = min(alignmentOutput.motifCounts...)
             best_matching = alignmentOutput.matching
+
+            if profile 
+                profiling_results = alignmentOutput.profile
+            end
 
         elseif method === EigenAlign_M() || method == Degree_M() || method === Random_M() || method === LowRankEigenAlignOnlyEdges_M()
             perm, dup_vertices, (A_tris, B_tris, matched_tris, best_matching, _) = fetch(future)
@@ -1086,7 +1098,7 @@ function random_graph_exp(file::String,perturbation_p::Float64;noise_model::Nois
     =#
 
     if typeof(noise_model) === ErdosRenyiNoise
-        p = nnz(A)
+        p = nnz(A)/size(A,1)^2
         p_add = (p*perturbation_p)/(1-p)
         #B = ER_noise_model(A,0.0,perturbation_p)#,p_add)
         B = ER_noise_model(A,perturbation_p,p_add)
