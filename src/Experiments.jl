@@ -159,9 +159,9 @@ function distributed_pairwise_smat_alignment(files::Array{String,1},dirpath::Str
 
         if method === ΛTAME_M() || method === LowRankTAME_M()
             if !haskey(kwargs,:postProcessing) || kwargs[:postProcessing] === noPostProcessing()
-                _,_,alignmentOutput = fetch(future)
+                alignmentOutput = fetch(future)
             else
-                _,_,alignmentOutput, postProcessingOutput = fetch(future)
+                alignmentOutput, postProcessingOutput = fetch(future)
             end
             matched_tris = alignmentOutput.matchScore
             max_tris = min(alignmentOutput.motifCounts...)
@@ -171,7 +171,7 @@ function distributed_pairwise_smat_alignment(files::Array{String,1},dirpath::Str
                 profiling_results = alignmentOutput.profile
 			end
         elseif method === TAME_M()
-            _,_,alignmentOutput = fetch(future)
+            alignmentOutput = fetch(future)
             matched_tris = alignmentOutput.matchScore
             max_tris = min(alignmentOutput.motifCounts...)
             best_matching = alignmentOutput.matching
@@ -378,20 +378,22 @@ function distributed_random_trials(trial_count::Int,noise_model::ErdosRenyiNoise
 
             if !haskey(kwargs,:postProcessing) || kwargs[:postProcessing] === noPostProcessing()
 
-                d_A, d_B, perm, (A_tris, B_tris, alignmentOutput) = fetch(future)
+                d_A, d_B, perm, alignmentOutput = fetch(future)
             else
-                d_A, d_B, perm, (A_tris, B_tris, alignmentOutput, postProcessingOutput) = fetch(future)
+                d_A, d_B, perm, (alignmentOutput, postProcessingOutput) = fetch(future)
             end
 
             matched_tris = alignmentOutput.matchScore
             max_tris = min(alignmentOutput.motifCounts...)
+            A_tris, B_tris = alignmentOutput.motifCounts
             best_matching = alignmentOutput.matching
             if profile 
                 profiling_results = alignmentOutput.profile
             end
         elseif method === TAME_M()
-            d_A, d_B, perm, (A_tris, B_tris, alignmentOutput) = fetch(future)
+            d_A, d_B, perm, alignmentOutput = fetch(future)
             matched_tris = alignmentOutput.matchScore
+            A_tris, B_tris = alignmentOutput.motifCounts
             max_tris = min(alignmentOutput.motifCounts...)
             best_matching = alignmentOutput.matching
             if profile 
@@ -413,13 +415,13 @@ function distributed_random_trials(trial_count::Int,noise_model::ErdosRenyiNoise
         elseif method === LowRankEigenAlign_M()
 
             if !haskey(kwargs,:postProcessing) || kwargs[:postProcessing] === noPostProcessing()
-                alignmentOutput = fetch(future)
+                d_A, d_B, perm, alignmentOutput = fetch(future)
             else
-                alignmentOutput,postProcessingOutput = fetch(future)
+                d_A, d_B, perm, (alignmentOutput,postProcessingOutput) = fetch(future)
             end
 
             matched_tris = alignmentOutput.matchScore
-            A_tris,B_tris = alignmentOutput.motifCounts
+            A_tris, B_tris = alignmentOutput.motifCounts
             max_tris = min(alignmentOutput.motifCounts...)
             best_matching = alignmentOutput.matching
 
@@ -564,12 +566,13 @@ function distributed_random_trials(trial_count::Int,noise_model::DuplicationNois
         if method === ΛTAME_M() || method === LowRankTAME_M()
 
             if !haskey(kwargs,:postProcessing) || kwargs[:postProcessing] === noPostProcessing()
-                perm, dup_vertices, (A_tris, B_tris, alignmentOutput) = fetch(future)
+                perm, dup_vertices, alignmentOutput = fetch(future)
             else
-                perm, dup_vertices, (A_tris, B_tris, alignmentOutput, postProcessingOutput) = fetch(future)
+                perm, dup_vertices, (alignmentOutput, postProcessingOutput) = fetch(future)
             end
 
             matched_tris = alignmentOutput.matchScore
+            A_tris,B_tris = alignmentOutput.motifCounts
             max_tris = min(alignmentOutput.motifCounts...)
             best_matching = alignmentOutput.matching
             if profile 
@@ -577,7 +580,8 @@ function distributed_random_trials(trial_count::Int,noise_model::DuplicationNois
             end
       
         elseif method === TAME_M()
-            perm, dup_vertices, (A_tris, B_tris, alignmentOutput) = fetch(future)
+            perm, dup_vertices, alignmentOutput = fetch(future)
+            A_tris,B_tris = alignmentOutput.motifCounts
             matched_tris = alignmentOutput.matchScore
             max_tris = min(alignmentOutput.motifCounts...)
             best_matching = alignmentOutput.matching
@@ -606,7 +610,7 @@ function distributed_random_trials(trial_count::Int,noise_model::DuplicationNois
             end
 
             matched_tris = alignmentOutput.matchScore
-            A_tris,B_tris = alignmentOutput.motifCounts
+            A_tris, B_tris = alignmentOutput.motifCounts
             max_tris = min(alignmentOutput.motifCounts...)
             best_matching = alignmentOutput.matching
 
@@ -616,11 +620,9 @@ function distributed_random_trials(trial_count::Int,noise_model::DuplicationNois
 
         elseif method === EigenAlign_M() || method == Degree_M() || method === Random_M() || method === LowRankEigenAlignOnlyEdges_M()
             perm, dup_vertices, (A_tris, B_tris, matched_tris, best_matching, _) = fetch(future)
-            max_tris = minimum((A_tris,B_tris))
+            max_tris = minimum((A_tris, B_tris))
         end
 
-
-         
         
         if length(alignmentOutput.matching) > 0 
             accuracy = sum([1 for (i,j) in alignmentOutput.matching if get(perm,i,-1) == j])/n

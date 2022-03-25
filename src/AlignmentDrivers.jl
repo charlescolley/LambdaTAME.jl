@@ -55,17 +55,19 @@ function align_matrices(A::SparseMatrixCSC{T,Int},B::SparseMatrixCSC{S,Int};
         end
 
         if typeof(postProcessing) === noPostProcessing
-            return size(A_ten.indices,1), size(B_ten.indices,1), alignment_output
+            return alignment_output
         else    
-            return size(A_ten.indices,1), size(B_ten.indices,1), alignment_output, post_process_alignment(A,B,A_ten,B_ten,alignment_output,postProcessing;profile,kwargs...)
+            return alignment_output, post_process_alignment(A,B,A_ten,B_ten,alignment_output,postProcessing;profile,kwargs...)
         end
     elseif method === TAME_M
+        
         if profile
             alignment_output = align_tensors_profiled(A_ten,B_ten;kwargs...)
         else
             alignment_output = align_tensors(A_ten,B_ten;kwargs...)
         end
-        return size(A_ten.indices,1), size(B_ten.indices,1), alignment_output
+
+        return alignment_output
 
     elseif method === ΛTAME_MultiMotif_M || method == LowRankTAME_MultiMotif_M || method == TAME_MultiMotif_M
 
