@@ -158,7 +158,7 @@ function distributed_pairwise_smat_alignment(files::Array{String,1},dirpath::Str
     for ((i,j), future) in futures
 
         if method === ΛTAME_M() || method === LowRankTAME_M()
-            if kwargs[:postProcessing] === noPostProcessing()
+            if !haskey(kwargs,:postProcessing) || kwargs[:postProcessing] === noPostProcessing()
                 _,_,alignmentOutput = fetch(future)
             else
                 _,_,alignmentOutput, postProcessingOutput = fetch(future)
@@ -180,7 +180,7 @@ function distributed_pairwise_smat_alignment(files::Array{String,1},dirpath::Str
                 profiling_results = alignmentOutput.profile
 			end
         elseif method === ΛTAME_MultiMotif_M() || method === LowRankTAME_MultiMotif_M() || method === TAME_MultiMotif_M()
-            if kwargs[:postProcessing] === noPostProcessing()
+            if !haskey(kwargs,:postProcessing) || kwargs[:postProcessing] === noPostProcessing()
                 A_motifDistribution, B_motifDistribution,alignmentOutput = fetch(future)
             else
                 A_motifDistribution, B_motifDistribution,alignmentOutput, postProcessingOutput = fetch(future)
@@ -191,7 +191,7 @@ function distributed_pairwise_smat_alignment(files::Array{String,1},dirpath::Str
 			end
         elseif method === LowRankEigenAlign_M()
 
-            if kwargs[:postProcessing] === noPostProcessing()
+            if !haskey(kwargs,:postProcessing) || kwargs[:postProcessing] === noPostProcessing()
                 alignmentOutput = fetch(future)
             else
                 alignmentOutput,postProcessingOutput = fetch(future)
@@ -232,37 +232,39 @@ function distributed_pairwise_smat_alignment(files::Array{String,1},dirpath::Str
             push!(data_to_save,profiling_results)
         end
 
-        if typeof(kwargs[:postProcessing]) <: KlauAlgo
-            push!(data_to_save,postProcessingOutput.original_edges_matched)
-            push!(data_to_save,postProcessingOutput.klau_edges_matched)
-            push!(data_to_save,postProcessingOutput.klau_tris_matched)
-            push!(data_to_save,postProcessingOutput.matching)
-            if profile
-                push!(data_to_save,postProcessingOutput.setup_rt)
-                push!(data_to_save,postProcessingOutput.klau_rt)
-            end
-            push!(data_to_save,postProcessingOutput.L_sparsity)
-            push!(data_to_save,postProcessingOutput.f_status)
-        elseif typeof(kwargs[:postProcessing]) <: SuccessiveKlauAlgo
+        if haskey(kwargs,:postProcessing)
+            if typeof(kwargs[:postProcessing]) <: KlauAlgo
+                push!(data_to_save,postProcessingOutput.original_edges_matched)
+                push!(data_to_save,postProcessingOutput.klau_edges_matched)
+                push!(data_to_save,postProcessingOutput.klau_tris_matched)
+                push!(data_to_save,postProcessingOutput.matching)
+                if profile
+                    push!(data_to_save,postProcessingOutput.setup_rt)
+                    push!(data_to_save,postProcessingOutput.klau_rt)
+                end
+                push!(data_to_save,postProcessingOutput.L_sparsity)
+                push!(data_to_save,postProcessingOutput.f_status)
+            elseif typeof(kwargs[:postProcessing]) <: SuccessiveKlauAlgo
 
-            push!(data_to_save,postProcessingOutput.original_edges_matched)
-            push!(data_to_save,postProcessingOutput.klau_edges_matched)
-            push!(data_to_save,postProcessingOutput.klau_tris_matched)
-            push!(data_to_save,postProcessingOutput.matching)
-            if profile
-                push!(data_to_save,postProcessingOutput.profiling)
-            end
-        elseif typeof(kwargs[:postProcessing]) <: LocalSearch
+                push!(data_to_save,postProcessingOutput.original_edges_matched)
+                push!(data_to_save,postProcessingOutput.klau_edges_matched)
+                push!(data_to_save,postProcessingOutput.klau_tris_matched)
+                push!(data_to_save,postProcessingOutput.matching)
+                if profile
+                    push!(data_to_save,postProcessingOutput.profiling)
+                end
+            elseif typeof(kwargs[:postProcessing]) <: LocalSearch
 
-            push!(data_to_save,postProcessingOutput.original_edges_matched)
-            push!(data_to_save,postProcessingOutput.localsearch_edges_matched)
-            push!(data_to_save,postProcessingOutput.localsearch_tris_matched)
-            push!(data_to_save,postProcessingOutput.matching)
-            if profile
-                push!(data_to_save,postProcessingOutput.profiling)
-                push!(data_to_save,postProcessingOutput.full_runtime)
-            end
+                push!(data_to_save,postProcessingOutput.original_edges_matched)
+                push!(data_to_save,postProcessingOutput.localsearch_edges_matched)
+                push!(data_to_save,postProcessingOutput.localsearch_tris_matched)
+                push!(data_to_save,postProcessingOutput.matching)
+                if profile
+                    push!(data_to_save,postProcessingOutput.profiling)
+                    push!(data_to_save,postProcessingOutput.full_runtime)
+                end
 
+            end
         end
 
         push!(exp_results,data_to_save)
@@ -374,7 +376,7 @@ function distributed_random_trials(trial_count::Int,noise_model::ErdosRenyiNoise
 
         if method === ΛTAME_M() || method === LowRankTAME_M()
 
-            if kwargs[:postProcessing] === noPostProcessing()
+            if !haskey(kwargs,:postProcessing) || kwargs[:postProcessing] === noPostProcessing()
 
                 d_A, d_B, perm, (A_tris, B_tris, alignmentOutput) = fetch(future)
             else
@@ -396,7 +398,7 @@ function distributed_random_trials(trial_count::Int,noise_model::ErdosRenyiNoise
                 profiling_results = alignmentOutput.profile
             end
         elseif method === ΛTAME_MultiMotif_M() || method === LowRankTAME_MultiMotif_M() || method === TAME_MultiMotif_M()
-            if kwargs[:postProcessing] === noPostProcessing()
+            if !haskey(kwargs,:postProcessing) || kwargs[:postProcessing] === noPostProcessing()
                 d_A, d_B, perm, (A_motifDistribution, B_motifDistribution, output) = fetch(future)
             else
                 d_A, d_B, perm, (A_motifDistribution, B_motifDistribution, output, postProcessingOutput) = fetch(future)
@@ -410,7 +412,7 @@ function distributed_random_trials(trial_count::Int,noise_model::ErdosRenyiNoise
             B_tris = -1
         elseif method === LowRankEigenAlign_M()
 
-            if kwargs[:postProcessing] === noPostProcessing()
+            if !haskey(kwargs,:postProcessing) || kwargs[:postProcessing] === noPostProcessing()
                 alignmentOutput = fetch(future)
             else
                 alignmentOutput,postProcessingOutput = fetch(future)
@@ -465,40 +467,42 @@ function distributed_random_trials(trial_count::Int,noise_model::ErdosRenyiNoise
             push!(data_to_save,profiling_results)
         end
 
-        if typeof(kwargs[:postProcessing]) <: KlauAlgo
-            push!(data_to_save,postProcessingOutput.original_edges_matched)
-            push!(data_to_save,postProcessingOutput.klau_edges_matched)
-            push!(data_to_save,postProcessingOutput.klau_tris_matched)
-            push!(data_to_save,sum([1 for (i,j) in postProcessingOutput.matching if get(perm,j,-1) == i])/n)
-            push!(data_to_save,postProcessingOutput.matching)
-            if profile
-                push!(data_to_save,postProcessingOutput.setup_rt)
-                push!(data_to_save,postProcessingOutput.klau_rt)
-            end
-            push!(data_to_save,postProcessingOutput.L_sparsity)
-            push!(data_to_save,postProcessingOutput.f_status)
-        elseif typeof(kwargs[:postProcessing]) <: SuccessiveKlauAlgo
+        if haskey(kwargs,:postProcessing)
+            if typeof(kwargs[:postProcessing]) <: KlauAlgo
+                push!(data_to_save,postProcessingOutput.original_edges_matched)
+                push!(data_to_save,postProcessingOutput.klau_edges_matched)
+                push!(data_to_save,postProcessingOutput.klau_tris_matched)
+                push!(data_to_save,sum([1 for (i,j) in postProcessingOutput.matching if get(perm,j,-1) == i])/n)
+                push!(data_to_save,postProcessingOutput.matching)
+                if profile
+                    push!(data_to_save,postProcessingOutput.setup_rt)
+                    push!(data_to_save,postProcessingOutput.klau_rt)
+                end
+                push!(data_to_save,postProcessingOutput.L_sparsity)
+                push!(data_to_save,postProcessingOutput.f_status)
+            elseif typeof(kwargs[:postProcessing]) <: SuccessiveKlauAlgo
 
-            push!(data_to_save,postProcessingOutput.original_edges_matched)
-            push!(data_to_save,postProcessingOutput.klau_edges_matched)
-            push!(data_to_save,postProcessingOutput.klau_tris_matched)
-            push!(data_to_save,sum([1 for (i,j) in postProcessingOutput.matching if get(perm,j,-1) == i])/n)
-            push!(data_to_save,postProcessingOutput.matching)
-            if profile
-                push!(data_to_save,postProcessingOutput.profiling)
-            end
-        elseif typeof(kwargs[:postProcessing]) <: LocalSearch
+                push!(data_to_save,postProcessingOutput.original_edges_matched)
+                push!(data_to_save,postProcessingOutput.klau_edges_matched)
+                push!(data_to_save,postProcessingOutput.klau_tris_matched)
+                push!(data_to_save,sum([1 for (i,j) in postProcessingOutput.matching if get(perm,j,-1) == i])/n)
+                push!(data_to_save,postProcessingOutput.matching)
+                if profile
+                    push!(data_to_save,postProcessingOutput.profiling)
+                end
+            elseif typeof(kwargs[:postProcessing]) <: LocalSearch
 
-            push!(data_to_save,postProcessingOutput.original_edges_matched)
-            push!(data_to_save,postProcessingOutput.localsearch_edges_matched)
-            push!(data_to_save,postProcessingOutput.localsearch_tris_matched)
-            push!(data_to_save,sum([1 for (i,j) in postProcessingOutput.matching if get(perm,j,-1) == i])/n)
-            push!(data_to_save,postProcessingOutput.matching)
-            if profile
-                push!(data_to_save,postProcessingOutput.profiling)
-                push!(data_to_save,postProcessingOutput.full_runtime)
-            end
+                push!(data_to_save,postProcessingOutput.original_edges_matched)
+                push!(data_to_save,postProcessingOutput.localsearch_edges_matched)
+                push!(data_to_save,postProcessingOutput.localsearch_tris_matched)
+                push!(data_to_save,sum([1 for (i,j) in postProcessingOutput.matching if get(perm,j,-1) == i])/n)
+                push!(data_to_save,postProcessingOutput.matching)
+                if profile
+                    push!(data_to_save,postProcessingOutput.profiling)
+                    push!(data_to_save,postProcessingOutput.full_runtime)
+                end
 
+            end
         end
         
 
@@ -559,7 +563,7 @@ function distributed_random_trials(trial_count::Int,noise_model::DuplicationNois
     for (seed,p,n,sp,future) in futures
         if method === ΛTAME_M() || method === LowRankTAME_M()
 
-            if kwargs[:postProcessing] === noPostProcessing()
+            if !haskey(kwargs,:postProcessing) || kwargs[:postProcessing] === noPostProcessing()
                 perm, dup_vertices, (A_tris, B_tris, alignmentOutput) = fetch(future)
             else
                 perm, dup_vertices, (A_tris, B_tris, alignmentOutput, postProcessingOutput) = fetch(future)
@@ -581,7 +585,7 @@ function distributed_random_trials(trial_count::Int,noise_model::DuplicationNois
                 profiling_results = alignmentOutput.profile
             end
         elseif method === ΛTAME_MultiMotif_M() || method === LowRankTAME_MultiMotif_M() || method === TAME_MultiMotif_M()
-            if kwargs[:postProcessing] === noPostProcessing()
+            if !haskey(kwargs,:postProcessing) || kwargs[:postProcessing] === noPostProcessing()
                 perm, dup_vertices, (A_motifDistribution, B_motifDistribution, alignmentOutput) = fetch(future)
             else
                 perm, dup_vertices, (A_motifDistribution, B_motifDistribution, alignmentOutput, postProcessingOutput) = fetch(future)
@@ -595,7 +599,7 @@ function distributed_random_trials(trial_count::Int,noise_model::DuplicationNois
             B_tris = -1
         elseif method === LowRankEigenAlign_M()
             
-            if kwargs[:postProcessing] === noPostProcessing()
+            if !haskey(kwargs,:postProcessing) || kwargs[:postProcessing] === noPostProcessing()
                 perm, dup_vertices, alignmentOutput = fetch(future)
             else
                 perm, dup_vertices, (alignmentOutput,postProcessingOutput) = fetch(future)
@@ -653,39 +657,40 @@ function distributed_random_trials(trial_count::Int,noise_model::DuplicationNois
         if profile 
             push!(data_to_save,profiling_results)
         end
+        if haskey(kwargs,:postProcessing)
+            if typeof(kwargs[:postProcessing]) <: KlauAlgo
+                push!(data_to_save,postProcessingOutput.original_edges_matched)
+                push!(data_to_save,postProcessingOutput.klau_edges_matched)
+                push!(data_to_save,postProcessingOutput.klau_tris_matched)
+                push!(data_to_save,sum([1 for (j,i) in postProcessingOutput.matching if get(perm,j,-1) == i])/n)
+                push!(data_to_save,postProcessingOutput.matching)
+                if profile
+                    push!(data_to_save,postProcessingOutput.setup_rt)
+                    push!(data_to_save,postProcessingOutput.klau_rt)
+                end
+                push!(data_to_save,postProcessingOutput.L_sparsity)
+                push!(data_to_save,postProcessingOutput.f_status)
+            elseif typeof(kwargs[:postProcessing]) <: SuccessiveKlauAlgo
 
-        if typeof(kwargs[:postProcessing]) <: KlauAlgo
-            push!(data_to_save,postProcessingOutput.original_edges_matched)
-            push!(data_to_save,postProcessingOutput.klau_edges_matched)
-            push!(data_to_save,postProcessingOutput.klau_tris_matched)
-            push!(data_to_save,sum([1 for (j,i) in postProcessingOutput.matching if get(perm,j,-1) == i])/n)
-            push!(data_to_save,postProcessingOutput.matching)
-            if profile
-                push!(data_to_save,postProcessingOutput.setup_rt)
-                push!(data_to_save,postProcessingOutput.klau_rt)
-            end
-            push!(data_to_save,postProcessingOutput.L_sparsity)
-            push!(data_to_save,postProcessingOutput.f_status)
-        elseif typeof(kwargs[:postProcessing]) <: SuccessiveKlauAlgo
+                push!(data_to_save,postProcessingOutput.original_edges_matched)
+                push!(data_to_save,postProcessingOutput.klau_edges_matched)
+                push!(data_to_save,postProcessingOutput.klau_tris_matched)
+                push!(data_to_save,sum([1 for (j,i) in postProcessingOutput.matching if get(perm,j,-1) == i])/n)
+                push!(data_to_save,postProcessingOutput.matching)
+                if profile
+                    push!(data_to_save,postProcessingOutput.profiling)
+                end
+            elseif typeof(kwargs[:postProcessing]) <: LocalSearch
 
-            push!(data_to_save,postProcessingOutput.original_edges_matched)
-            push!(data_to_save,postProcessingOutput.klau_edges_matched)
-            push!(data_to_save,postProcessingOutput.klau_tris_matched)
-            push!(data_to_save,sum([1 for (j,i) in postProcessingOutput.matching if get(perm,j,-1) == i])/n)
-            push!(data_to_save,postProcessingOutput.matching)
-            if profile
-                push!(data_to_save,postProcessingOutput.profiling)
-            end
-        elseif typeof(kwargs[:postProcessing]) <: LocalSearch
-
-            push!(data_to_save,postProcessingOutput.original_edges_matched)
-            push!(data_to_save,postProcessingOutput.localsearch_edges_matched)
-            push!(data_to_save,postProcessingOutput.localsearch_tris_matched)
-            push!(data_to_save,sum([1 for (j,i) in postProcessingOutput.matching if get(perm,j,-1) == i])/n)
-            push!(data_to_save,postProcessingOutput.matching)
-            if profile
-                push!(data_to_save,postProcessingOutput.profiling)
-                push!(data_to_save,postProcessingOutput.full_runtime)
+                push!(data_to_save,postProcessingOutput.original_edges_matched)
+                push!(data_to_save,postProcessingOutput.localsearch_edges_matched)
+                push!(data_to_save,postProcessingOutput.localsearch_tris_matched)
+                push!(data_to_save,sum([1 for (j,i) in postProcessingOutput.matching if get(perm,j,-1) == i])/n)
+                push!(data_to_save,postProcessingOutput.matching)
+                if profile
+                    push!(data_to_save,postProcessingOutput.profiling)
+                    push!(data_to_save,postProcessingOutput.full_runtime)
+                end
             end
         end
 

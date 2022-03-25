@@ -39,8 +39,8 @@ struct Random_M <: AlignmentMethod end
   addition to whatever is returned by 'align_tensors(_profiled)'.
 ------------------------------------------------------------------------------"""
 function align_matrices(A::SparseMatrixCSC{T,Int},B::SparseMatrixCSC{S,Int};
-                        postProcessing::PostProcessingMethod,profile=false,
-                        motif=Clique(),kwargs...) where {T,S}
+                        postProcessing::PostProcessingMethod=noPostProcessing(),
+                        profile=false,motif=Clique(),kwargs...) where {T,S}
 
     method = typeof(kwargs[:method])
 
