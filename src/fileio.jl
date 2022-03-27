@@ -96,7 +96,7 @@ function load_ThirdOrderSymTensor(filepath;enforceFormatting = true)
 			[parse(Int,elem) for elem in split(chomp(readline(file)),'\t')]
         @assert order == 3
 
-		indices = Array{Int,2}(undef,m,order)
+		indices = Array{Int,2}(undef,order,m)
 		values = Array{Float64,1}(undef,m)
 
 
@@ -104,9 +104,9 @@ function load_ThirdOrderSymTensor(filepath;enforceFormatting = true)
 		@inbounds for line in eachline(file)
 			entries = split(chomp(line),'\t')
 
-			indices[i,:] = [parse(Int,elem) for elem in entries[1:end-1]]
+			indices[:,i] = [parse(Int,elem) for elem in entries[1:end-1]]
 			if enforceFormatting
-				sort!(indices[i,:])
+				sort!(indices[:,i])
 			end
 			values[i] = parse(Float64,entries[end])
 			i += 1
@@ -116,7 +116,7 @@ function load_ThirdOrderSymTensor(filepath;enforceFormatting = true)
 		zero_indexed = false
 
 		@inbounds for i in 1:m
-		    if indices[i,1] == 0
+		    if indices[1,i] == 0
     			zero_indexed = true
 				break
 			end

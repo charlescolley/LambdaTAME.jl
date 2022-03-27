@@ -97,7 +97,7 @@ function align_matrices(A::SparseMatrixCSC{T,Int},B::SparseMatrixCSC{S,Int};
             matching = Dict{Int,Int}([i=>j for (i,j) in zip(ma,mb)]) 
             triangle_count, _  = TAME_score(A_ten,B_ten,matching) 
             alignment_output = LowRankEigenAlign_Return(triangle_count,
-                                                        (size(A_ten.indices,1), size(B_ten.indices,1)),
+                                                        (size(A_ten.indices,2), size(B_ten.indices,2)),
                                                         matching,(U,V),t)
 
             if typeof(postProcessing) === noPostProcessing
@@ -322,11 +322,13 @@ function graph_to_ThirdOrderTensor(A;use_lcc=false)
     nnz = length(tris)
 
 
-    indices = Array{Int,2}(undef,nnz,3)
+    indices = Array{Int,2}(undef,3,nnz)
+                                # julia uses col-major 
+                                # formatting.
     for i =1:nnz
-        indices[i,1]= tris[i][1]
-        indices[i,2]= tris[i][2]
-        indices[i,3]= tris[i][3]
+        indices[1,i]= tris[i][1]
+        indices[2,i]= tris[i][2]
+        indices[3,i]= tris[i][3]
     end
 
     vals = ones(nnz)

@@ -686,7 +686,7 @@ function local_search(A::SparseMatrixCSC{T,Int},B::SparseMatrixCSC{T,Int},
 	return cur_matching
 end
 
-function create_edge_idx_map(A_ten::SymTensorUnweighted{Clique})
+function create_edge_idx_map(A_ten::Union{SymTensorUnweighted{Clique},ThirdOrderSymTensor})
 
 	node_to_edge_indices = Vector{Vector{Int}}(undef,A_ten.n)
 	for i in 1:A_ten.n
@@ -702,26 +702,8 @@ function create_edge_idx_map(A_ten::SymTensorUnweighted{Clique})
 	return node_to_edge_indices
 end
 
-function create_edge_idx_map(A_ten::ThirdOrderSymTensor)
 
-	node_to_edge_indices = Vector{Vector{Int}}(undef,A_ten.n)
-	for i in 1:A_ten.n
-		node_to_edge_indices[i] = Vector{Int}(undef,0)
-	end
-
-	for edge_idx in 1:size(A_ten.indices,1)
-		for i in 1:size(A_ten.indices,2)
-			ip = A_ten.indices[edge_idx,i]
-			push!(node_to_edge_indices[ip],edge_idx)
-		end
-	end
-	return node_to_edge_indices
-end
-
-
-
-
-function local_search_profiled(A,B,A_ten,B_ten,U,V,matching,k)#,match_method="top_sim")
+function local_search_profiled(A,B,A_ten,B_ten,U,V,matching,k)
 
 
 	m = size(A,1)
@@ -732,14 +714,8 @@ function local_search_profiled(A,B,A_ten,B_ten,U,V,matching,k)#,match_method="to
 
 	B_motifs = Set{Vector{Int}}()
 
-	if typeof(B_ten) === ThirdOrderSymTensor
-		for idx = 1:size(B_ten.indices,1)
-			push!(B_motifs,B_ten.indices[idx,:])
-		end
-	else
-		for idx = 1:size(B_ten.indices,2)
-			push!(B_motifs,B_ten.indices[:,idx])
-		end
+	for idx = 1:size(B_ten.indices,2)
+		push!(B_motifs,B_ten.indices[:,idx])
 	end
 
 	A_node_edge_indices = create_edge_idx_map(A_ten)
@@ -749,19 +725,11 @@ function local_search_profiled(A,B,A_ten,B_ten,U,V,matching,k)#,match_method="to
 
 	matched_matches = [m for m in matching if (m[1] != -1) && (m[2] != -1)]
 
-	#println(length(unmatched_matches))
 
 	cur_seq_sim = seq_similarity(U,V,matched_matches)
-	#cur_top_sim, cur_motif_matched = top_similarity(B_motifs, A_ten,V,U,matching)
-	if typeof(B_ten) === ThirdOrderSymTensor
-		mode = 1
-	else
-		mode = 2
-	end
-	cur_motif_matched = TAME_score(B_motifs,A_ten,Set(size(A_ten.indices,mode):-1:1), matching)
+	cur_motif_matched = TAME_score(B_motifs,A_ten,Set(size(A_ten.indices,2):-1:1), matching)
 		#TODO: check if this can be done with a TAME_score function
 
-	#is it faster to precomputer X = UV'?
 	unprocessed_matches = sort(matched_matches,by=match->dot(U[match[1],:],V[match[2],:]),rev=true)
 
 	prev_matching = copy(matching)
@@ -1002,33 +970,17 @@ function local_search(A,B,A_ten,B_ten,U,V,matching,k)#,match_method="top_sim")
 
 	B_motifs = Set{Vector{Int}}()
 
-	if typeof(B_ten) == ThirdOrderSymTensor
-		for idx = 1:size(B_ten.indices,1)
-			push!(B_motifs,B_ten.indices[idx,:])
-		end
-	else
-		for idx = 1:size(B_ten.indices,2)
-			push!(B_motifs,B_ten.indices[:,idx])
-		end
+	for idx = 1:size(B_ten.indices,2)
+		push!(B_motifs,B_ten.indices[:,idx])
 	end
 
 	A_node_edge_indices = create_edge_idx_map(A_ten)
 
-	#seq_scoring_runtimes = 0.0
-	#top_scoring_runtimes = 0.0
-
 	matched_matches = [m for m in matching if (m[1] != -1) && (m[2] != -1)]
 
-	#println(length(unmatched_matches))
 
 	cur_seq_sim = seq_similarity(U,V,matched_matches)
-
-	if typeof(B_ten) === ThirdOrderSymTensor
-		mode = 1
-	else
-		mode = 2
-	end
-	cur_motif_matched = TAME_score(B_motifs, A_ten, Set(size(A_ten.indices,mode):-1:1),matching)
+	cur_motif_matched = TAME_score(B_motifs, A_ten, Set(size(A_ten.indices,2):-1:1),matching)
 													#matching doesn't reorient using this orientation
 	
 	#is it faster to precomputer X = UV'?
@@ -1113,13 +1065,6 @@ function local_search(A,B,A_ten,B_ten,U,V,matching,k)#,match_method="top_sim")
 		
 			motif_match_change = (end_motif_count - start_motif_count)
 			
-			#=
-			if match_method == "top_sim"
-				check_val = top_sim_change
-			elseif match_method == "motif_count"
-				check_val = motif_match_change
-			end
-			=#
 			check_val = motif_match_change
 
 			if check_val > 0 ||  (check_val == 0.0 && seq_sim_change > 0)

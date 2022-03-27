@@ -9,9 +9,9 @@ function tensor_vector_contraction(A::ThirdOrderSymTensor, x::Array{Float64,1})
     @assert length(x) == A.n
 
     y = zeros(Float64,A.n)
-    edge_count = size(A.indices,1)
+
 	j =1
-    @inbounds for (i_1,i_2,i_3) in eachrow(A.indices)
+    @inbounds for (i_1,i_2,i_3) in eachcol(A.indices)
 
         y[i_1] += 2 * x[i_2]*x[i_3]*A.values[j]
         y[i_2] += 2 * x[i_1]*x[i_3]*A.values[j]
@@ -23,12 +23,13 @@ function tensor_vector_contraction(A::ThirdOrderSymTensor, x::Array{Float64,1})
     return y
 end
 
+
 function tensor_vector_contraction(A::UnweightedThirdOrderSymTensor, x::Array{Float64,1})
     @assert length(x) == A.n
 
     y = zeros(Float64,A.n)
 
-    @inbounds for (i_1,i_2,i_3) in eachrow(A.indices)
+    @inbounds for (i_1,i_2,i_3) in eachcol(A.indices)
 
         y[i_1] += 2 * x[i_2]*x[i_3]
         y[i_2] += 2 * x[i_1]*x[i_3]
@@ -49,14 +50,14 @@ end
 function tri_sub_tensor(A::ThirdOrderSymTensor,x::Array{Float64,1})
 
 	index = 0
-	nnzs = size(A.indices,1)
+	nnzs = size(A.indices,2)
 	I = zeros(Int64,6*nnzs)
 	J = zeros(Int64,6*nnzs)
 	V = zeros(Float64,6*nnzs)
 
     @inbounds for nnz_index = 1:nnzs
 		index += 6
-		i,j,k = A.indices[nnz_index,:]
+		i,j,k = A.indices[:,nnz_index]
 		val = A.values[nnz_index]
 
 		I[index-5] = i
@@ -93,10 +94,10 @@ function tri_sub_tensor(A::ThirdOrderSymTensor,x::Array{Float64,1},
     					I::Array{Int64,1},J::Array{Int64,1},V::Array{Float64,1})
 
 	index = 0
-	nnzs = size(A.indices,1)
+	nnzs = size(A.indices,2)
     for nnz_index = 1:nnzs
 		index += 6
-		i,j,k = A.indices[nnz_index,:]
+		i,j,k = A.indices[:,nnz_index]
 		val = A.values[nnz_index]
 
 		I[index-5] = i
@@ -180,7 +181,7 @@ function kron_contract(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor,
 
 
 	#preallocate memory used for building sparse matrices
-	A_nnzs = size(A.indices,1)
+	A_nnzs = size(A.indices,2)
 	A_I = zeros(Int64,6*A_nnzs)
 	A_J = zeros(Int64,6*A_nnzs)
 	A_V = zeros(Float64,6*A_nnzs)
@@ -237,13 +238,13 @@ function get_kron_contract_comps(A::Union{ThirdOrderSymTensor,UnweightedThirdOrd
 	B_comps = zeros(m,max_rank)
 	index = 1
 
-	A_nnzs = size(A.indices,1)
+	A_nnzs = size(A.indices,2)
 	A_I = zeros(Int64,6*A_nnzs)
 	A_J = zeros(Int64,6*A_nnzs)
 	A_V = zeros(Float64,6*A_nnzs)
 
 
-	B_nnzs = size(B.indices,1)
+	B_nnzs = size(B.indices,2)
 	B_I = zeros(Int64,6*B_nnzs)
 	B_J = zeros(Int64,6*B_nnzs)
 	B_V = zeros(Float64,6*B_nnzs)
@@ -425,13 +426,13 @@ function implicit_contraction(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor,x::A
     #ileave = (i,j) -> i + m*(j-1)
 	i = 1
 	j = 1
-    @inbounds for (i_1,i_2,i_3) in eachrow(A.indices)
+    @inbounds for (i_1,i_2,i_3) in eachcol(A.indices)
 
 		A_val = A.values[i]
 		i += 1
 		j = 1
 #        for (i_1,i_2,i_3) in permutations(A.indices[i,:])
-		for (j_1,j_2,j_3) in eachrow(B.indices)
+		for (j_1,j_2,j_3) in eachcol(B.indices)
 
 
 			#i_1,i_2,i_3

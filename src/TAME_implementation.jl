@@ -18,10 +18,10 @@ function TAME_param_search(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor;
                            iter::Int = 15,tol::Float64=1e-6, alphas::Array{F,1}=[.5,1.0],
 						   betas::Array{F,1} =[1000.0,100.0,10.0,1.0,0.0,0.1,0.01,0.001],
 						   kwargs...) where {F <: AbstractFloat}
-	A_motifs = size(A.indices,1)
-	B_motifs = size(B.indices,1)
+	A_motifs = size(A.indices,2)
+	B_motifs = size(B.indices,2)
 	max_triangle_match = min(A_motifs,B_motifs)
-    total_triangles = size(A.indices,1) + size(B.indices,1)
+    total_triangles = size(A.indices,2) + size(B.indices,2)
 	best_TAME_PP_tris::Int = -1
 	best_matching = Dict{Int,Int}()
 
@@ -55,10 +55,10 @@ function TAME_param_search_profiled(A::ThirdOrderSymTensor,B::ThirdOrderSymTenso
 						            betas::Array{F,1} =[1000.0,100.0,10.0,1.0,0.0,0.1,0.01,0.001],
 						            profile::Bool=false,profile_aggregation="all",
 						            kwargs...) where {F <: AbstractFloat}
-	A_motifs = size(A.indices,1)
-	B_motifs = size(B.indices,1)
+	A_motifs = size(A.indices,2)
+	B_motifs = size(B.indices,2)
 	max_triangle_match = min(A_motifs,B_motifs)
-    total_triangles = size(A.indices,1) + size(B.indices,1)
+    total_triangles = size(A.indices,2) + size(B.indices,2)
 	best_TAME_PP_tris = -1
 	best_matching = Dict{Int,Int}()
 
@@ -132,7 +132,7 @@ function TAME_param_search_profiled(A::SymTensorUnweighted{M},B::SymTensorUnweig
 	A_motifs = size(A.indices,2)
 	B_motifs = size(B.indices,2)
 	max_motif_match = min(A_motifs,B_motifs)
-    total_motif = size(A.indices,1) + size(B.indices,1)
+    total_motif = size(A.indices,2) + size(B.indices,2)
 	best_TAME_PP_motif = -1
 	best_matching = Dict{Int,Int}()
 
@@ -180,7 +180,7 @@ end
 function _index_triangles_nodesym(n,Tris::Array{Int,2})
 
 	Ti = [ Vector{Tuple{Int,Int}}(undef, 0) for i in 1:n ]
-	for (ti,tj,tk) in eachrow(Tris)
+	for (ti,tj,tk) in eachcol(Tris)
 		push!(Ti[ti], (tj,tk))
 		push!(Ti[tj], (ti,tk))
 		push!(Ti[tk], (ti,tj))
@@ -340,7 +340,7 @@ function TAME(A::SymTensorUnweighted{M}, B::SymTensorUnweighted{M}, β::F, max_i
 
     while true
 
-		X_k_1 = impTTVnodesym(A.n, B.n, size(A.indices,1), X_k, A_Mi, B_Mi)
+		X_k_1 = impTTVnodesym(A.n, B.n, size(A.indices,2), X_k, A_Mi, B_Mi)
 
         new_lambda = dot(X_k_1,X_k)
 
@@ -578,7 +578,7 @@ function TAME_profiled(A::SymTensorUnweighted{M}, B::SymTensorUnweighted{M}, β:
 
     while true
 
-		X_k_1,t = @timed impTTVnodesym(A.n, B.n, size(A.indices,1), X_k, A_Mi, B_Mi)
+		X_k_1,t = @timed impTTVnodesym(A.n, B.n, size(A.indices,2), X_k, A_Mi, B_Mi)
 		push!(experiment_profile["contraction_timings"],t)
 
         new_lambda = dot(X_k_1,X_k)

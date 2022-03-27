@@ -35,14 +35,10 @@ function ΛTAME_param_search(A,B;#duck type tensor inputs
 							alphas::Array{F,1}=[.5,1.0],
 							betas::Array{F,1} =[1000.0,100.0,10.0,1.0,0.0,0.1,0.01,0.001],
 							matchingMethod::MatchingMethod=ΛTAME_rankOneMatching(),kwargs...) where {F <: AbstractFloat}
-	if typeof(A) === ThirdOrderSymTensor 
-		motifA = size(A.indices,1)
-		motifB = size(B.indices,1)
-	else
-		motifA = size(A.indices,2)
-		motifB = size(B.indices,2)
 
-	end
+	motifA = size(A.indices,2)
+	motifB = size(B.indices,2)
+
 	max_triangle_match = min(motifA ,motifB)
     #max_triangle_match = min(size(A.indices,1),size(B.indices,1))
     total_triangles = size(A.indices,1) + size(B.indices,1)
@@ -168,14 +164,9 @@ function ΛTAME_param_search_profiled(A,B;
 									 betas::Array{F,1} =[1000.0,100.0,10.0,1.0,0.0,0.1,0.01,0.001],
 									 matchingMethod::MatchingMethod=ΛTAME_rankOneMatching(),kwargs...) where {F <: AbstractFloat}
 
-	if typeof(A) === ThirdOrderSymTensor 
-		motifA = size(A.indices,1)
-		motifB = size(B.indices,1)
-	else
-		motifA = size(A.indices,2)
-		motifB = size(B.indices,2)
+	motifA = size(A.indices,2)
+	motifB = size(B.indices,2)
 
-	end
 	max_motif_match = min(motifA ,motifB)
     best_matched_motifs = -1
     best_i  = -1

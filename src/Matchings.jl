@@ -101,12 +101,12 @@ function search_Krylov_space(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor,U::Ar
 
     if A_unique_nnz > B_unique_nnz
         for i in 1:A_unique_nnz
-            Triangle_check[A.indices[i,:]] = 1
+            Triangle_check[A.indices[:,i]] = 1
         end
         Input_tensor = B
     else
         for i in 1:B_unique_nnz
-            Triangle_check[B.indices[i,:]] = 1
+            Triangle_check[B.indices[:,i]] = 1
         end
         Input_tensor = A
     end
@@ -443,17 +443,17 @@ function TAME_score(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor,Match_mapping:
     gaped_triangles = 0
     triangle_count = 0
 
-    if size(A.indices,1) > size(B.indices,1)
+    if size(A.indices,2) > size(B.indices,2)
 
-        for i in 1:size(A.indices,1)
-            Triangle_check[A.indices[i,:]] = 1
+        for i in 1:size(A.indices,2)
+            Triangle_check[A.indices[:,i]] = 1
         end
 
         #invert to map V_B indices to V_A
         Match_mapping = Dict(value => key for (key, value) in Match_mapping)
 
-        for i in 1:size(B.indices,1)
-            v_i,v_j,v_k = B.indices[i,:]
+        for i in 1:size(B.indices,2)
+            v_i,v_j,v_k = B.indices[:,i]
 
             matched_triangle =
               sort([get(Match_mapping,v_i,-1),get(Match_mapping,v_j,-1),get(Match_mapping,v_k,-1)])
@@ -466,12 +466,12 @@ function TAME_score(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor,Match_mapping:
         end
 
     else
-        for i in 1:size(B.indices,1)
-            Triangle_check[B.indices[i,:]] = 1
+        for i in 1:size(B.indices,2)
+            Triangle_check[B.indices[:,i]] = 1
         end
 
-        for i in 1:size(A.indices,1)
-            v_i,v_j,v_k = A.indices[i,:]
+        for i in 1:size(A.indices,2)
+            v_i,v_j,v_k = A.indices[:,i]
             matched_triangle =
                sort([get(Match_mapping,v_i,-1), get(Match_mapping,v_j,-1),get(Match_mapping,v_k,-1)])
 
@@ -672,7 +672,7 @@ function TAME_score(Triangle_Dict::Dict{Array{Int,1},Int},Input_tensor::ThirdOrd
     gaped_triangles = 0
 
     for i in 1:length(Input_tensor.values)
-        v_i,v_j,v_k = Input_tensor.indices[i,:]
+        v_i,v_j,v_k = Input_tensor.indices[:,i]
 
         matched_triangle =
           sort([get(Match_mapping,v_i,-1),get(Match_mapping,v_j,-1),get(Match_mapping,v_k,-1)])
@@ -1047,7 +1047,7 @@ function TAME_score(A_motifs::Set{Vector{Int}},B::ThirdOrderSymTensor,
 
     for idx in B_edge_mask
 		
-        edge = B.indices[idx,:]
+        edge = B.indices[:,idx]
 		
         new_edge = [get(mapping,i,-1) for i in edge]
         sort!(new_edge)

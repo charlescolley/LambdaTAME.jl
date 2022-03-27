@@ -17,11 +17,11 @@ function LowRankTAME_param_search(A::ThirdOrderSymTensor,B::ThirdOrderSymTensor;
 						          alphas::Array{F,1}=[.5,1.0],
 						          betas::Array{F,1} =[1000.0,100.0,10.0,1.0,0.0,0.1,0.01,0.001],
 						          kwargs...) where {F <: AbstractFloat}
-	A_motifs = size(A.indices,1)
-	B_motifs = size(B.indices,1)
+	A_motifs = size(A.indices,2)
+	B_motifs = size(B.indices,2)
     max_triangle_match = min(A_motifs,B_motifs)
 
-    total_triangles = size(A.indices,1) + size(B.indices,1)
+    total_triangles = size(A.indices,2) + size(B.indices,2)
     best_TAME_PP_tris = -1
 	best_matching = Dict{Int,Int}()
 
@@ -60,11 +60,11 @@ function LowRankTAME_param_search_profiled(A::ThirdOrderSymTensor,B::ThirdOrderS
 						   alphas::Array{F,1}=[.5,1.0],
 						   betas::Array{F,1} =[1000.0,100.0,10.0,1.0,0.0,0.1,0.01,0.001],
 						   kwargs...) where {F <: AbstractFloat}
-	A_motifs = size(A.indices,1)
-	B_motifs = size(B.indices,1)
+	A_motifs = size(A.indices,2)
+	B_motifs = size(B.indices,2)
     max_triangle_match = min(A_motifs,B_motifs)
 
-    total_triangles = size(A.indices,1) + size(B.indices,1)
+    total_triangles = size(A.indices,2) + size(B.indices,2)
 	best_TAME_PP_tris = -1
 	best_matching = Dict{Int,Int}()
 

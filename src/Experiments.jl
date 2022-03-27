@@ -750,14 +750,8 @@ function ΛTAME_matching_exp(A::Union{ThirdOrderSymTensor,SymTensorUnweighted{S}
                             betas::Array{Float64,1}=[0.0,1.0,10.0,100.0]) where {S <:Motif}
 
     tol = 1e-16 # we want to track how triangles change over iterations
-
-    if typeof(A) == ThirdOrderSymTensor
-        A_motifs = size(A.indices,1)
-        B_motifs = size(B.indices,1)
-    else
-        A_motifs= size(A.indices,2)
-        B_motifs= size(B.indices,2)
-    end
+    A_motifs= size(A.indices,2)
+    B_motifs= size(B.indices,2)
 
     results = []
     for α in alphas

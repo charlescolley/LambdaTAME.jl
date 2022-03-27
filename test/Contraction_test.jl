@@ -29,7 +29,7 @@ using LambdaTAME: impTTVnodesym, get_kron_contract_comps
         A_Ti,B_Ti = LambdaTAME.setup_tame_data(A_TOST,B_TOST)
         A_Mi,B_Mi = LambdaTAME.setup_tame_data(A_UST,B_UST)
 
-        TOST_Y = impTTVnodesym(A_TOST.n,B_TOST.n,size(A_TOST.indices,2),X,A_Ti,B_Ti)
+        TOST_Y = impTTVnodesym(A_TOST.n,B_TOST.n,size(A_TOST.indices,1),X,A_Ti,B_Ti)
         UST_Y = impTTVnodesym(A_UST.n,B_UST.n,size(A_UST.indices,1),X,A_Mi,B_Mi)
 
         @test norm(TOST_Y - UST_Y)/norm(UST_Y) < NORM_CHECK_TOL
