@@ -44,11 +44,11 @@ using LambdaTAME: ΛTAME_param_search_profiled, ΛTAME_param_search,  ΛTAME
             U_UST,   V_UST    = ΛTAME(A_UST,   B_UST ,β,max_iter,tol,α)
             U_UST_MM,V_UST_MM = ΛTAME([A_UST],[B_UST],β,max_iter,tol,α) #multimotif routines
 
-            @test norm(U_TOST - U_UST)/norm(U_UST) < NORM_CHECK_TOL
-            @test norm(U_UST_MM - U_UST)/norm(U_UST_MM) < NORM_CHECK_TOL
+            @test norm(U_TOST - U_UST)/norm(U_UST) < round_off_bound(U_TOST)
+            @test norm(U_UST_MM - U_UST)/norm(U_UST_MM) < round_off_bound(U_UST_MM)
             
-            @test norm(V_TOST - V_UST)/norm(V_UST) < NORM_CHECK_TOL
-            @test norm(V_UST_MM - V_UST)/norm(V_UST_MM)< NORM_CHECK_TOL
+            @test norm(V_TOST - V_UST)/norm(V_UST) < round_off_bound(V_TOST)
+            @test norm(V_UST_MM - V_UST)/norm(V_UST_MM)< round_off_bound(V_UST_MM)
             
             #shifts
             β = 1.0
@@ -57,11 +57,11 @@ using LambdaTAME: ΛTAME_param_search_profiled, ΛTAME_param_search,  ΛTAME
             U_UST,   V_UST    = ΛTAME(A_UST,   B_UST ,β,max_iter,tol,α)
             U_UST_MM,V_UST_MM = ΛTAME([A_UST],[B_UST],β,max_iter,tol,α) #multimotif routines
 
-            @test norm(U_TOST - U_UST)/norm(U_UST) < NORM_CHECK_TOL
-            @test norm(U_UST_MM - U_UST)/norm(U_UST_MM) < NORM_CHECK_TOL
+            @test norm(U_TOST - U_UST)/norm(U_UST) < round_off_bound(U_TOST)
+            @test norm(U_UST_MM - U_UST)/norm(U_UST_MM) < round_off_bound(U_UST_MM)
             
-            @test norm(V_TOST - V_UST)/norm(V_UST) < NORM_CHECK_TOL
-            @test norm(V_UST_MM - V_UST)/norm(V_UST_MM)< NORM_CHECK_TOL
+            @test norm(V_TOST - V_UST)/norm(V_UST) < round_off_bound(V_TOST)
+            @test norm(V_UST_MM - V_UST)/norm(V_UST_MM)< round_off_bound(V_UST_MM)
 
         end
     end

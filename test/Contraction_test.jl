@@ -3,7 +3,6 @@ using LambdaTAME: impTTVnodesym, get_kron_contract_comps
 @testset "Contraction" begin
 
     d = 5
-    tol = 1e-15
 
     U = rand(A_TOST.n,d)
     V = rand(B_TOST.n,d)
@@ -13,15 +12,16 @@ using LambdaTAME: impTTVnodesym, get_kron_contract_comps
         UTOST_y = impTTVnodesym(A_UTOST,B_UTOST,reshape(X,A_TOST.n*B_TOST.n))
         #TOST_y = implicit_contraction(A_TOST,B_TOST,reshape(X,A_TOST.n*B_TOST.n))   #TODO: known problem with code, unused in experiment
         TOST_U, TOST_V = get_kron_contract_comps(A_TOST,B_TOST,U,V)
-        LR_TOST_y = reshape(TOST_U*TOST_V',A_TOST.n*B_TOST.n)
+        TOST_X = TOST_U*TOST_V'
+        LR_TOST_y = reshape(TOST_X,A_TOST.n*B_TOST.n)
         UST_U, UST_V = get_kron_contract_comps(A_UST,B_UST,U,V)
-        
-        #ensure all vectors are pairwise equal
-        #@test norm(UTOST_y   - TOST_y)/norm(TOST_y) < tol
-        #@test norm(LR_TOST_y - TOST_y)/norm(TOST_y) < tol
-        @test norm(LR_TOST_y - UTOST_y)/norm(UTOST_y) < tol
-        @test_broken norm(TOST_U - UST_U)/norm(TOST_U) < tol
-        @test_broken norm(TOST_V - UST_V)/norm(TOST_V) < tol
+        UST_X = UST_U*UST_V'
+            # UST based embeddings put factors on one
+            # embedding rather than using a sqrt
+
+        @test norm(LR_TOST_y - UTOST_y)/norm(UTOST_y) < round_off_bound(UTOST_y)           
+        @test norm(TOST_X - UST_X)/norm(UST_X) < round_off_bound(UST_X)
+
     end
 
     @testset "TAME contraction methods" begin 
@@ -32,7 +32,7 @@ using LambdaTAME: impTTVnodesym, get_kron_contract_comps
         TOST_Y = impTTVnodesym(A_TOST.n,B_TOST.n,size(A_TOST.indices,1),X,A_Ti,B_Ti)
         UST_Y = impTTVnodesym(A_UST.n,B_UST.n,size(A_UST.indices,1),X,A_Mi,B_Mi)
 
-        @test norm(TOST_Y - UST_Y)/norm(UST_Y) < NORM_CHECK_TOL
+        @test norm(TOST_Y - UST_Y)/norm(UST_Y) < round_off_bound(UST_Y)
     end
 
     

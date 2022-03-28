@@ -23,7 +23,17 @@ import Random: seed!
 #seed 
 seed!(54321)
 
-NORM_CHECK_TOL = 1e-14
+NORM_CHECK_TOL = 1e-15
+    # norm checks may be scaled by n*m to account for round off error
+    #    please see 2.7.6 of 4th edition 
+    #    of Matrix Computations for more. 
+function round_off_bound(X::Matrix{T}) where T
+    return size(X,1)*size(X,2)*NORM_CHECK_TOL
+end
+function round_off_bound(x::Vector{T}) where T
+    return length(x)*NORM_CHECK_TOL
+end
+
 
 tensor_A_file="test_tensors/test_tensorB.ssten"
 tensor_B_file="test_tensors/test_tensorA.ssten"

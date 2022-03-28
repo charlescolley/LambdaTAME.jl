@@ -36,8 +36,8 @@ import MatrixNetworks: readSMAT
         TOST_U, TOST_V, TOST_triangle_count, _ = LowRankTAME(A_TOST, B_TOST, U,V, β, max_iter, tol, α)
         UST_U,UST_V, UST_triangle_count, _ = LowRankTAME(A_UST, B_UST, U,V, β, max_iter, tol, α)
 
-        @test norm(TOST_V - UST_V)/norm(TOST_V) < NORM_CHECK_TOL
-        @test norm(TOST_U - UST_U)/norm(TOST_U) < NORM_CHECK_TOL
+        @test norm(TOST_V - UST_V)/norm(TOST_V) < round_off_bound(TOST_V)
+        @test norm(TOST_U - UST_U)/norm(TOST_U) < round_off_bound(TOST_U)
 
     end
 
@@ -48,14 +48,14 @@ import MatrixNetworks: readSMAT
                 LRTAME_U, LRTAME_V, LRTAME_triangle_count, LRTAME_mapping = LowRankTAME(A_TOST, B_TOST, U,V, β, max_iter, tol, α)
                 TAME_X, TAME_triangle_count, TAME_mapping = TAME(A_TOST, B_TOST, β, max_iter, tol, α;W=X)
                 @test TAME_mapping == LRTAME_mapping && LRTAME_triangle_count == TAME_triangle_count
-                @test norm(LRTAME_U*LRTAME_V' - TAME_X)/norm(TAME_X) < NORM_CHECK_TOL
+                @test norm(LRTAME_U*LRTAME_V' - TAME_X)/norm(TAME_X) < round_off_bound(TAME_X)
             end
         end
+
 
         @testset "UST based methods" begin
             A = readSMAT(matrix_A_file)
             B = readSMAT(matrix_B_file)
-
             
             U = rand(size(A,1),d)
             V = rand(size(B,1),d)
@@ -70,7 +70,8 @@ import MatrixNetworks: readSMAT
                     TAME_X, TAME_triangle_count, TAME_mapping = TAME(A_ten, B_ten, β, max_iter, tol, α;W=X)
 
                     @test TAME_mapping == LRTAME_mapping && LRTAME_triangle_count == TAME_triangle_count
-                    @test_broken norm(LRTAME_U*LRTAME_V' - TAME_X)/norm(TAME_X) < NORM_CHECK_TOL
+                    @test norm(LRTAME_U*LRTAME_V' - TAME_X)/norm(TAME_X) < round_off_bound(TAME_X)
+                    
                 end 
 
             end 
