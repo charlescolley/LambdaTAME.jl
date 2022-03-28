@@ -1,7 +1,7 @@
 
 import LambdaTAME: spatial_network
 
-@testset "Post Processing" begin
+@testset "Alignment Drivers" begin
 
     A = spatial_network(20,2)
     B = spatial_network(25,2)  #different sizes is good for catching errors

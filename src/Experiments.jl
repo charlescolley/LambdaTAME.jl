@@ -401,15 +401,16 @@ function distributed_random_trials(trial_count::Int,noise_model::ErdosRenyiNoise
             end
         elseif method === ΛTAME_MultiMotif_M() || method === LowRankTAME_MultiMotif_M() || method === TAME_MultiMotif_M()
             if !haskey(kwargs,:postProcessing) || kwargs[:postProcessing] === noPostProcessing()
-                d_A, d_B, perm, (A_motifDistribution, B_motifDistribution, output) = fetch(future)
+                d_A, d_B, perm, (A_motifDistribution, B_motifDistribution, alignmentOutput) = fetch(future)
             else
-                d_A, d_B, perm, (A_motifDistribution, B_motifDistribution, output, postProcessingOutput) = fetch(future)
+                d_A, d_B, perm, (A_motifDistribution, B_motifDistribution, alignmentOutput, postProcessingOutput) = fetch(future)
             end
             if profile 
                 profiling_results = alignmentOutput.profile
             end
-            best_matching_score = output.matchScore
-            best_matching = output.matching
+            A_motifCounts, B_motifCounts = alignmentOutput.motifCounts
+            best_matching_score = alignmentOutput.matchScore
+            best_matching = alignmentOutput.matching
             A_tris = -1
             B_tris = -1
         elseif method === LowRankEigenAlign_M()

@@ -126,7 +126,7 @@ using LambdaTAME: search_Krylov_space, TAME_score
                         n = B.n
                     end
                     A_to_B_array = collect(1:m)
-                    B_to_A_array = -ones(n)
+                    B_to_A_array = -ones(Int,n)
 
                     A_to_B_dict = Dict([(i,i) for i in A_to_B_array]) #using an identity map
 
@@ -160,7 +160,8 @@ using LambdaTAME: search_Krylov_space, TAME_score
                         else
                             A_to_B_matchedMotifs,A_to_B_gapedMotifs = TAME_score(A,B,A_to_B)
                             B_to_A_matchedMotifs,B_to_A_gapedMotifs = TAME_score(B,A,B_to_A)
-                            @test (A_to_B_matchedMotifs == B_to_A_matchedMotifs)&&(A_to_B_gapedMotifs == B_to_A_gapedMotifs)
+
+                            @test (A_to_B_matchedMotifs == B_to_A_matchedMotifs)
                         end
                     end
                 end

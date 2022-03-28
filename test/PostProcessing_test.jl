@@ -48,12 +48,13 @@ import LambdaTAME: local_search_profiled, local_search
         B_ten = DistributedTensorConstruction.tensor_from_graph(B,3,Clique())
 
         k = 15
-        @inferred local_search(A,B,A_ten,B_ten,U,V,Dict(matching),d)
-        @inferred local_search_profiled(A,B,A_ten,B_ten,U,V,Dict(matching),d)
-        @inferred local_search(A,B,A_ten,B_ten,U,V,Dict(matching),LocalSearch())
-        @inferred local_search_profiled(A,B,A_ten,B_ten,U,V,Dict(matching),LocalSearch())
-
-        
+        @suppress_out begin   
+            @inferred local_search(A,B,A_ten,B_ten,U,V,Dict(matching),d)
+            @inferred local_search_profiled(A,B,A_ten,B_ten,U,V,Dict(matching),d)
+            @inferred local_search(A,B,A_ten,B_ten,U,V,Dict(matching),LocalSearch())
+            @inferred local_search_profiled(A,B,A_ten,B_ten,U,V,Dict(matching),LocalSearch())
+        end
+            
 
     end
 

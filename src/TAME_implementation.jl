@@ -340,7 +340,7 @@ function TAME(A::SymTensorUnweighted{M}, B::SymTensorUnweighted{M}, β::F, max_i
 
     while true
 
-		X_k_1 = impTTVnodesym(A.n, B.n, size(A.indices,2), X_k, A_Mi, B_Mi)
+		X_k_1 = impTTVnodesym(A.n, B.n, size(A.indices,1), X_k, A_Mi, B_Mi)
 
         new_lambda = dot(X_k_1,X_k)
 
@@ -578,7 +578,7 @@ function TAME_profiled(A::SymTensorUnweighted{M}, B::SymTensorUnweighted{M}, β:
 
     while true
 
-		X_k_1,t = @timed impTTVnodesym(A.n, B.n, size(A.indices,2), X_k, A_Mi, B_Mi)
+		X_k_1,t = @timed impTTVnodesym(A.n, B.n, size(A.indices,1), X_k, A_Mi, B_Mi)
 		push!(experiment_profile["contraction_timings"],t)
 
         new_lambda = dot(X_k_1,X_k)

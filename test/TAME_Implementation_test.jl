@@ -42,6 +42,12 @@ using LambdaTAME: setup_tame_data
             @test match_UST == match_TOST && tri_match == motif_match
             
 
+            x_TOST, tri_match, match_TOST,_   = TAME_profiled(A_TOST, B_TOST, β, max_iter,tol,α)
+            x_UST, motif_match, match_UST,_ = TAME_profiled(A_UST, B_UST, β, max_iter,tol,α)
+
+            @test norm(x_TOST - x_UST)/norm(x_UST) < round_off_bound(x_TOST)
+            @test match_UST == match_TOST && tri_match == motif_match
+
         end 
 
     end 
